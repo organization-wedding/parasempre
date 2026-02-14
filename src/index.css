@@ -1,0 +1,257 @@
+@import "../styles/globals.css";
+
+/* ========================================
+   PARA SEMPRE — Minimal CSS
+   Only styles that can't be expressed as
+   Tailwind: complex backgrounds, 3D
+   transforms, animations, pseudo-elements.
+   ======================================== */
+
+/* ===== Base ===== */
+:root {
+  --font-body: "Cormorant Garamond", serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: 18px;
+  color: theme(--color-dark-warm);
+  background-color: theme(--color-parchment);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========================================
+   DECORATIVE BACKGROUNDS (reusable)
+   ======================================== */
+.dot-pattern {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle at 50% 50%,
+    theme(--color-gold) 1px,
+    transparent 1px
+  );
+  background-size: 48px 48px;
+  pointer-events: none;
+}
+
+.noise-texture {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px;
+  pointer-events: none;
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 20%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  pointer-events: none;
+}
+
+/* ========================================
+   MAP SECTION — Complex backgrounds
+   ======================================== */
+.map-section {
+  position: relative;
+  background-color: theme(--color-parchment);
+  background-image:
+    radial-gradient(
+      ellipse at 15% 20%,
+      rgba(139, 105, 20, 0.06) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 85% 75%,
+      rgba(139, 105, 20, 0.05) 0%,
+      transparent 45%
+    ),
+    radial-gradient(
+      ellipse at 50% 50%,
+      rgba(107, 29, 29, 0.02) 0%,
+      transparent 60%
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 79px,
+      rgba(139, 105, 20, 0.06) 79px,
+      rgba(139, 105, 20, 0.06) 80px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 79px,
+      rgba(139, 105, 20, 0.06) 79px,
+      rgba(139, 105, 20, 0.06) 80px
+    );
+  overflow: hidden;
+}
+
+.map-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    theme(--color-gold-muted) 25%,
+    theme(--color-gold) 50%,
+    theme(--color-gold-muted) 75%,
+    transparent 100%
+  );
+  opacity: 0.6;
+  z-index: 2;
+}
+
+.map-section::after {
+  content: "";
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  width: 120px;
+  height: 120px;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200' fill='none'%3E%3Ccircle cx='100' cy='100' r='90' stroke='%238B6914' stroke-width='1.5'/%3E%3Ccircle cx='100' cy='100' r='70' stroke='%238B6914' stroke-width='0.8'/%3E%3Ccircle cx='100' cy='100' r='4' fill='%238B6914'/%3E%3Cpolygon points='100,10 93,80 100,70 107,80' fill='%238B6914'/%3E%3Cpolygon points='100,190 107,120 100,130 93,120' fill='%238B6914' opacity='0.5'/%3E%3Cpolygon points='190,100 120,93 130,100 120,107' fill='%238B6914' opacity='0.5'/%3E%3Cpolygon points='10,100 80,107 70,100 80,93' fill='%238B6914' opacity='0.5'/%3E%3Cline x1='136' y1='36' x2='126' y2='46' stroke='%238B6914' stroke-width='1.2'/%3E%3Cline x1='164' y1='64' x2='154' y2='74' stroke='%238B6914' stroke-width='1.2'/%3E%3Cline x1='36' y1='164' x2='46' y2='154' stroke='%238B6914' stroke-width='1.2'/%3E%3Cline x1='64' y1='136' x2='74' y2='126' stroke='%238B6914' stroke-width='1.2'/%3E%3Ctext x='100' y='8' text-anchor='middle' font-family='Cinzel,serif' font-size='14' font-weight='700' fill='%238B6914'%3EN%3C/text%3E%3Ctext x='100' y='199' text-anchor='middle' font-family='Cinzel,serif' font-size='14' font-weight='700' fill='%238B6914'%3ES%3C/text%3E%3Ctext x='197' y='104' text-anchor='middle' font-family='Cinzel,serif' font-size='14' font-weight='700' fill='%238B6914'%3EL%3C/text%3E%3Ctext x='4' y='104' text-anchor='middle' font-family='Cinzel,serif' font-size='14' font-weight='700' fill='%238B6914'%3EO%3C/text%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+@media (min-width: 768px) {
+  .map-section::after {
+    width: 160px;
+    height: 160px;
+    bottom: 32px;
+    right: 32px;
+  }
+}
+
+/* ========================================
+   FLIP CARD — 3D Transforms
+   ======================================== */
+.map-card-container {
+  position: relative;
+  perspective: 1200px;
+  height: 400px;
+}
+
+@media (min-width: 768px) {
+  .map-card-container {
+    height: 500px;
+  }
+}
+
+.map-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.map-card--flipped {
+  transform: rotateY(180deg);
+}
+
+.map-card__face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border: 2px solid theme(--color-gold-muted);
+  padding: 5px;
+  background: theme(--color-ivory);
+  box-shadow:
+    0 2px 8px rgba(28, 20, 16, 0.06),
+    0 12px 40px rgba(28, 20, 16, 0.1);
+}
+
+.map-card__face::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border: 1px solid rgba(201, 168, 76, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.map-card__back {
+  transform: rotateY(180deg);
+}
+
+/* ========================================
+   ANIMATIONS
+   ======================================== */
+.anim-fade-in {
+  opacity: 0;
+  animation: fadeIn 1s ease-out forwards;
+}
+
+.anim-fade-in-slow {
+  opacity: 0;
+  animation: fadeIn 1.2s ease-out forwards;
+}
+
+.anim-fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.anim-fade-in-frame {
+  animation: fadeInFrame 1.5s ease-out;
+}
+
+.anim-slide-down {
+  animation: slideDown 0.3s ease-out;
+}
+
+.anim-bounce {
+  animation: gentleBounce 2.5s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInFrame {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gentleBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
