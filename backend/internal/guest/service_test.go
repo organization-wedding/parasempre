@@ -9,43 +9,54 @@ import (
 
 // mockRepository implements Repository with function fields for easy stubbing.
 type mockRepository struct {
-	listFn   func(ctx context.Context) ([]Guest, error)
-	getByID  func(ctx context.Context, id string) (*Guest, error)
-	createFn func(ctx context.Context, input CreateGuestInput) (*Guest, error)
-	updateFn func(ctx context.Context, id string, input UpdateGuestInput) (*Guest, error)
-	deleteFn func(ctx context.Context, id string) error
+	listFn     func(ctx context.Context) ([]Guest, error)
+	getByID    func(ctx context.Context, id int64) (*Guest, error)
+	getByPhone func(ctx context.Context, phone string) (*Guest, error)
+	createFn   func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
+	updateFn   func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
+	deleteFn   func(ctx context.Context, id int64) error
 }
 
 func (m *mockRepository) List(ctx context.Context) ([]Guest, error) {
 	return m.listFn(ctx)
 }
 
-func (m *mockRepository) GetByID(ctx context.Context, id string) (*Guest, error) {
+func (m *mockRepository) GetByID(ctx context.Context, id int64) (*Guest, error) {
 	return m.getByID(ctx, id)
 }
 
-func (m *mockRepository) Create(ctx context.Context, input CreateGuestInput) (*Guest, error) {
-	return m.createFn(ctx, input)
+func (m *mockRepository) GetByPhone(ctx context.Context, phone string) (*Guest, error) {
+	return m.getByPhone(ctx, phone)
 }
 
-func (m *mockRepository) Update(ctx context.Context, id string, input UpdateGuestInput) (*Guest, error) {
-	return m.updateFn(ctx, id, input)
+func (m *mockRepository) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+	return m.createFn(ctx, input, userRACF)
 }
 
-func (m *mockRepository) Delete(ctx context.Context, id string) error {
+func (m *mockRepository) Update(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error) {
+	return m.updateFn(ctx, id, input, userRACF)
+}
+
+func (m *mockRepository) Delete(ctx context.Context, id int64) error {
 	return m.deleteFn(ctx, id)
 }
 
+func strPtr(s string) *string { return &s }
+
 func sampleGuest() Guest {
+	phone := "11999999999"
 	return Guest{
-		ID:             "abc-123",
-		Nome:           "João",
-		Sobrenome:      "Silva",
-		Telefone:       "11999999999",
-		Relacionamento: "noivo",
-		Confirmacao:    false,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		ID:           1,
+		FirstName:    "João",
+		LastName:     "Silva",
+		Phone:        &phone,
+		Relationship: "P",
+		Confirmed:    false,
+		FamilyGroup:  0,
+		CreatedBy:    "TST01",
+		UpdatedBy:    "TST01",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 }
 
@@ -102,22 +113,22 @@ func TestServiceList(t *testing.T) {
 func TestServiceGetByID(t *testing.T) {
 	tests := []struct {
 		name    string
-		id      string
-		mockFn  func(ctx context.Context, id string) (*Guest, error)
+		id      int64
+		mockFn  func(ctx context.Context, id int64) (*Guest, error)
 		wantErr bool
 	}{
 		{
 			name: "returns guest",
-			id:   "abc-123",
-			mockFn: func(ctx context.Context, id string) (*Guest, error) {
+			id:   1,
+			mockFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
 				return &g, nil
 			},
 		},
 		{
 			name: "not found",
-			id:   "not-exist",
-			mockFn: func(ctx context.Context, id string) (*Guest, error) {
+			id:   999,
+			mockFn: func(ctx context.Context, id int64) (*Guest, error) {
 				return nil, ErrNotFound
 			},
 			wantErr: true,
@@ -151,72 +162,91 @@ func TestServiceCreate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "valid input",
+			name: "valid input with phone",
 			input: CreateGuestInput{
-				Nome:           "Maria",
-				Sobrenome:      "Santos",
-				Telefone:       "11888888888",
-				Relacionamento: "noiva",
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Phone:        "11988888888",
+				Relationship: "R",
 			},
 		},
 		{
-			name: "missing nome",
+			name: "valid input without phone",
 			input: CreateGuestInput{
-				Sobrenome:      "Santos",
-				Telefone:       "11888888888",
-				Relacionamento: "noiva",
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Relationship: "P",
 			},
-			wantErr: "nome is required",
 		},
 		{
-			name: "missing sobrenome",
+			name: "missing first_name",
 			input: CreateGuestInput{
-				Nome:           "Maria",
-				Telefone:       "11888888888",
-				Relacionamento: "noiva",
+				LastName:     "Santos",
+				Phone:        "11988888888",
+				Relationship: "R",
 			},
-			wantErr: "sobrenome is required",
+			wantErr: "first_name is required",
 		},
 		{
-			name: "missing telefone",
+			name: "missing last_name",
 			input: CreateGuestInput{
-				Nome:           "Maria",
-				Sobrenome:      "Santos",
-				Relacionamento: "noiva",
+				FirstName:    "Maria",
+				Phone:        "11988888888",
+				Relationship: "R",
 			},
-			wantErr: "telefone is required",
+			wantErr: "last_name is required",
 		},
 		{
-			name: "invalid relacionamento",
+			name: "invalid phone format",
 			input: CreateGuestInput{
-				Nome:           "Maria",
-				Sobrenome:      "Santos",
-				Telefone:       "11888888888",
-				Relacionamento: "amigo",
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Phone:        "1188888888",
+				Relationship: "R",
 			},
-			wantErr: "relacionamento must be 'noivo' or 'noiva'",
+			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
 		},
 		{
-			name: "missing relacionamento",
+			name: "phone without leading 9",
 			input: CreateGuestInput{
-				Nome:      "Maria",
-				Sobrenome: "Santos",
-				Telefone:  "11888888888",
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Phone:        "11888888888",
+				Relationship: "R",
 			},
-			wantErr: "relacionamento must be 'noivo' or 'noiva'",
+			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
+		},
+		{
+			name: "invalid relationship",
+			input: CreateGuestInput{
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Phone:        "11988888888",
+				Relationship: "X",
+			},
+			wantErr: "relationship must be 'P' or 'R'",
+		},
+		{
+			name: "missing relationship",
+			input: CreateGuestInput{
+				FirstName: "Maria",
+				LastName:  "Santos",
+				Phone:     "11988888888",
+			},
+			wantErr: "relationship must be 'P' or 'R'",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockRepository{
-				createFn: func(ctx context.Context, input CreateGuestInput) (*Guest, error) {
+				createFn: func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
 					g := sampleGuest()
 					return &g, nil
 				},
 			}
 			svc := NewService(repo)
-			_, err := svc.Create(context.Background(), tt.input)
+			_, err := svc.Create(context.Background(), tt.input, "TST01")
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -234,8 +264,9 @@ func TestServiceCreate(t *testing.T) {
 }
 
 func TestServiceUpdate(t *testing.T) {
-	noivo := "noivo"
-	invalid := "amigo"
+	relP := "P"
+	invalid := "X"
+	badPhone := "1188888888"
 
 	tests := []struct {
 		name    string
@@ -244,29 +275,34 @@ func TestServiceUpdate(t *testing.T) {
 	}{
 		{
 			name:  "valid partial update",
-			input: UpdateGuestInput{Relacionamento: &noivo},
+			input: UpdateGuestInput{Relationship: &relP},
 		},
 		{
 			name:  "empty update is valid",
 			input: UpdateGuestInput{},
 		},
 		{
-			name:    "invalid relacionamento",
-			input:   UpdateGuestInput{Relacionamento: &invalid},
-			wantErr: "relacionamento must be 'noivo' or 'noiva'",
+			name:    "invalid relationship",
+			input:   UpdateGuestInput{Relationship: &invalid},
+			wantErr: "relationship must be 'P' or 'R'",
+		},
+		{
+			name:    "invalid phone format",
+			input:   UpdateGuestInput{Phone: &badPhone},
+			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockRepository{
-				updateFn: func(ctx context.Context, id string, input UpdateGuestInput) (*Guest, error) {
+				updateFn: func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error) {
 					g := sampleGuest()
 					return &g, nil
 				},
 			}
 			svc := NewService(repo)
-			_, err := svc.Update(context.Background(), "abc-123", tt.input)
+			_, err := svc.Update(context.Background(), 1, tt.input, "TST01")
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -286,18 +322,18 @@ func TestServiceUpdate(t *testing.T) {
 func TestServiceDelete(t *testing.T) {
 	tests := []struct {
 		name    string
-		mockFn  func(ctx context.Context, id string) error
+		mockFn  func(ctx context.Context, id int64) error
 		wantErr bool
 	}{
 		{
 			name: "success",
-			mockFn: func(ctx context.Context, id string) error {
+			mockFn: func(ctx context.Context, id int64) error {
 				return nil
 			},
 		},
 		{
 			name: "not found",
-			mockFn: func(ctx context.Context, id string) error {
+			mockFn: func(ctx context.Context, id int64) error {
 				return ErrNotFound
 			},
 			wantErr: true,
@@ -307,7 +343,7 @@ func TestServiceDelete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewService(&mockRepository{deleteFn: tt.mockFn})
-			err := svc.Delete(context.Background(), "abc-123")
+			err := svc.Delete(context.Background(), 1)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")

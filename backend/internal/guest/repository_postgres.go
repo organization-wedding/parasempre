@@ -18,7 +18,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Guest, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, nome, sobrenome, telefone, relacionamento, confirmacao, created_at, updated_at
+		`SELECT id, first_name, last_name, phone, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at
 		 FROM guests ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Guest, error) {
 	var guests []Guest
 	for rows.Next() {
 		var g Guest
-		if err := rows.Scan(&g.ID, &g.Nome, &g.Sobrenome, &g.Telefone, &g.Relacionamento, &g.Confirmacao, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Phone, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			return nil, err
 		}
 		guests = append(guests, g)
@@ -41,12 +41,12 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Guest, error) {
 	return guests, rows.Err()
 }
 
-func (r *PostgresRepository) GetByID(ctx context.Context, id string) (*Guest, error) {
+func (r *PostgresRepository) GetByID(ctx context.Context, id int64) (*Guest, error) {
 	var g Guest
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, nome, sobrenome, telefone, relacionamento, confirmacao, created_at, updated_at
+		`SELECT id, first_name, last_name, phone, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at
 		 FROM guests WHERE id = $1`, id).
-		Scan(&g.ID, &g.Nome, &g.Sobrenome, &g.Telefone, &g.Relacionamento, &g.Confirmacao, &g.CreatedAt, &g.UpdatedAt)
+		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Phone, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -56,35 +56,56 @@ func (r *PostgresRepository) GetByID(ctx context.Context, id string) (*Guest, er
 	return &g, nil
 }
 
-func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput) (*Guest, error) {
+func (r *PostgresRepository) GetByPhone(ctx context.Context, phone string) (*Guest, error) {
 	var g Guest
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO guests (nome, sobrenome, telefone, relacionamento)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, nome, sobrenome, telefone, relacionamento, confirmacao, created_at, updated_at`,
-		input.Nome, input.Sobrenome, input.Telefone, input.Relacionamento).
-		Scan(&g.ID, &g.Nome, &g.Sobrenome, &g.Telefone, &g.Relacionamento, &g.Confirmacao, &g.CreatedAt, &g.UpdatedAt)
+		`SELECT id, first_name, last_name, phone, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at
+		 FROM guests WHERE phone = $1`, phone).
+		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Phone, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &g, nil
+}
+
+func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+	var phone *string
+	if input.Phone != "" {
+		phone = &input.Phone
+	}
+
+	var g Guest
+	err := r.pool.QueryRow(ctx,
+		`INSERT INTO guests (first_name, last_name, phone, relationship, family_group, created_by, updated_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING id, first_name, last_name, phone, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`,
+		input.FirstName, input.LastName, phone, input.Relationship, input.FamilyGroup, userRACF, userRACF).
+		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Phone, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &g, nil
 }
 
-func (r *PostgresRepository) Update(ctx context.Context, id string, input UpdateGuestInput) (*Guest, error) {
-	// Build dynamic update query using COALESCE pattern.
+func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error) {
 	var g Guest
 	err := r.pool.QueryRow(ctx,
 		`UPDATE guests SET
-			nome = COALESCE($1, nome),
-			sobrenome = COALESCE($2, sobrenome),
-			telefone = COALESCE($3, telefone),
-			relacionamento = COALESCE($4, relacionamento),
-			confirmacao = COALESCE($5, confirmacao),
+			first_name = COALESCE($1, first_name),
+			last_name = COALESCE($2, last_name),
+			phone = COALESCE($3, phone),
+			relationship = COALESCE($4, relationship),
+			confirmed = COALESCE($5, confirmed),
+			family_group = COALESCE($6, family_group),
+			updated_by = $7,
 			updated_at = now()
-		 WHERE id = $6
-		 RETURNING id, nome, sobrenome, telefone, relacionamento, confirmacao, created_at, updated_at`,
-		input.Nome, input.Sobrenome, input.Telefone, input.Relacionamento, input.Confirmacao, id).
-		Scan(&g.ID, &g.Nome, &g.Sobrenome, &g.Telefone, &g.Relacionamento, &g.Confirmacao, &g.CreatedAt, &g.UpdatedAt)
+		 WHERE id = $8
+		 RETURNING id, first_name, last_name, phone, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`,
+		input.FirstName, input.LastName, input.Phone, input.Relationship, input.Confirmed, input.FamilyGroup, userRACF, id).
+		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Phone, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -94,7 +115,7 @@ func (r *PostgresRepository) Update(ctx context.Context, id string, input Update
 	return &g, nil
 }
 
-func (r *PostgresRepository) Delete(ctx context.Context, id string) error {
+func (r *PostgresRepository) Delete(ctx context.Context, id int64) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM guests WHERE id = $1`, id)
 	if err != nil {
 		return err

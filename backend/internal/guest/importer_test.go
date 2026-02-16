@@ -14,23 +14,23 @@ func TestParseCSV(t *testing.T) {
 	}{
 		{
 			name: "valid CSV with header",
-			csv:  "nome,sobrenome,telefone,relacionamento\nJoão,Silva,11999999999,noivo\nMaria,Santos,11888888888,noiva\n",
+			csv:  "first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\nMaria,Santos,11888888888,R\n",
 			want: 2,
 		},
 		{
 			name: "valid CSV with extra whitespace",
-			csv:  "nome,sobrenome,telefone,relacionamento\n João , Silva , 11999999999 , noivo \n",
+			csv:  "first_name,last_name,phone,relationship\n João , Silva , 11999999999 , P \n",
 			want: 1,
 		},
 		{
 			name:    "empty CSV (header only)",
-			csv:     "nome,sobrenome,telefone,relacionamento\n",
+			csv:     "first_name,last_name,phone,relationship\n",
 			want:    0,
 			wantErr: false,
 		},
 		{
 			name:    "missing columns",
-			csv:     "nome,sobrenome\nJoão,Silva\n",
+			csv:     "first_name,last_name\nJoão,Silva\n",
 			wantErr: true,
 		},
 		{
@@ -60,7 +60,7 @@ func TestParseCSV(t *testing.T) {
 }
 
 func TestParseCSVFieldMapping(t *testing.T) {
-	csv := "nome,sobrenome,telefone,relacionamento\nJoão,Silva,11999999999,noivo\n"
+	csv := "first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\n"
 	guests, err := ParseCSV(strings.NewReader(csv))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -69,17 +69,17 @@ func TestParseCSVFieldMapping(t *testing.T) {
 		t.Fatalf("expected 1 guest, got %d", len(guests))
 	}
 	g := guests[0]
-	if g.Nome != "João" {
-		t.Errorf("expected nome 'João', got %q", g.Nome)
+	if g.FirstName != "João" {
+		t.Errorf("expected first_name 'João', got %q", g.FirstName)
 	}
-	if g.Sobrenome != "Silva" {
-		t.Errorf("expected sobrenome 'Silva', got %q", g.Sobrenome)
+	if g.LastName != "Silva" {
+		t.Errorf("expected last_name 'Silva', got %q", g.LastName)
 	}
-	if g.Telefone != "11999999999" {
-		t.Errorf("expected telefone '11999999999', got %q", g.Telefone)
+	if g.Phone != "11999999999" {
+		t.Errorf("expected phone '11999999999', got %q", g.Phone)
 	}
-	if g.Relacionamento != "noivo" {
-		t.Errorf("expected relacionamento 'noivo', got %q", g.Relacionamento)
+	if g.Relationship != "P" {
+		t.Errorf("expected relationship 'P', got %q", g.Relationship)
 	}
 }
 

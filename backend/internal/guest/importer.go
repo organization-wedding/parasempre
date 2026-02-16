@@ -10,10 +10,10 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-var requiredColumns = []string{"nome", "sobrenome", "telefone", "relacionamento"}
+var requiredColumns = []string{"first_name", "last_name", "phone", "relationship"}
 
 // ParseCSV reads CSV data and returns a slice of CreateGuestInput.
-// Expects a header row with columns: nome, sobrenome, telefone, relacionamento.
+// Expects a header row with columns: first_name, last_name, phone, relationship.
 func ParseCSV(r io.Reader) ([]CreateGuestInput, error) {
 	reader := csv.NewReader(r)
 
@@ -38,10 +38,10 @@ func ParseCSV(r io.Reader) ([]CreateGuestInput, error) {
 		}
 
 		guests = append(guests, CreateGuestInput{
-			Nome:           strings.TrimSpace(record[colIndex["nome"]]),
-			Sobrenome:      strings.TrimSpace(record[colIndex["sobrenome"]]),
-			Telefone:       strings.TrimSpace(record[colIndex["telefone"]]),
-			Relacionamento: strings.TrimSpace(record[colIndex["relacionamento"]]),
+			FirstName:    strings.TrimSpace(record[colIndex["first_name"]]),
+			LastName:     strings.TrimSpace(record[colIndex["last_name"]]),
+			Phone:        strings.TrimSpace(record[colIndex["phone"]]),
+			Relationship: strings.TrimSpace(record[colIndex["relationship"]]),
 		})
 	}
 
@@ -49,7 +49,7 @@ func ParseCSV(r io.Reader) ([]CreateGuestInput, error) {
 }
 
 // ParseXLSX reads XLSX data and returns a slice of CreateGuestInput.
-// Reads the first sheet; expects a header row with columns: nome, sobrenome, telefone, relacionamento.
+// Reads the first sheet; expects a header row with columns: first_name, last_name, phone, relationship.
 func ParseXLSX(r io.Reader) ([]CreateGuestInput, error) {
 	f, err := excelize.OpenReader(r)
 	if err != nil {
@@ -86,10 +86,10 @@ func ParseXLSX(r io.Reader) ([]CreateGuestInput, error) {
 		}
 
 		guests = append(guests, CreateGuestInput{
-			Nome:           strings.TrimSpace(row[colIndex["nome"]]),
-			Sobrenome:      strings.TrimSpace(row[colIndex["sobrenome"]]),
-			Telefone:       strings.TrimSpace(row[colIndex["telefone"]]),
-			Relacionamento: strings.TrimSpace(row[colIndex["relacionamento"]]),
+			FirstName:    strings.TrimSpace(row[colIndex["first_name"]]),
+			LastName:     strings.TrimSpace(row[colIndex["last_name"]]),
+			Phone:        strings.TrimSpace(row[colIndex["phone"]]),
+			Relationship: strings.TrimSpace(row[colIndex["relationship"]]),
 		})
 	}
 

@@ -21,8 +21,6 @@ func Connect(ctx context.Context, dbCfg config.DBConfig) (*pgxpool.Pool, error) 
 		return nil, fmt.Errorf("unable to parse database config: %w", err)
 	}
 
-	// Supabase has connection limits (~60 direct on free tier).
-	// Keep pool small to leave room for dashboard, migrations, etc.
 	pgxCfg.MaxConns = 10
 	pgxCfg.MinConns = 2
 	pgxCfg.MaxConnLifetime = 30 * time.Minute

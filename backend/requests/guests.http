@@ -1,26 +1,28 @@
 ### List all guests
 GET http://localhost:8080/api/guests
 
-### Create guest (noivo side)
+### Create guest (groom side)
 POST http://localhost:8080/api/guests
 Content-Type: application/json
+user-racf: myuser
 
 {
-  "nome": "João",
-  "sobrenome": "Silva",
-  "telefone": "11999999999",
-  "relacionamento": "noivo"
+  "first_name": "João",
+  "last_name": "Silva",
+  "phone": "11999999999",
+  "relationship": "groom"
 }
 
-### Create guest (noiva side)
+### Create guest (bride side)
 POST http://localhost:8080/api/guests
 Content-Type: application/json
+user-racf: myuser
 
 {
-  "nome": "Maria",
-  "sobrenome": "Santos",
-  "telefone": "11888888888",
-  "relacionamento": "noiva"
+  "first_name": "Maria",
+  "last_name": "Santos",
+  "phone": "11888888888",
+  "relationship": "bride"
 }
 
 ### Get guest by ID (replace with a real ID from the list response)
@@ -29,32 +31,36 @@ GET http://localhost:8080/api/guests/REPLACE-WITH-UUID
 ### Update guest — confirm attendance
 PUT http://localhost:8080/api/guests/REPLACE-WITH-UUID
 Content-Type: application/json
+user-racf: myuser
 
 {
-  "confirmacao": true
+  "confirmed": true
 }
 
 ### Update guest — change phone
 PUT http://localhost:8080/api/guests/REPLACE-WITH-UUID
 Content-Type: application/json
+user-racf: myuser
 
 {
-  "telefone": "11777777777"
+  "phone": "11777777777"
 }
 
 ### Delete guest
 DELETE http://localhost:8080/api/guests/REPLACE-WITH-UUID
+user-racf: myuser
 
 ### Import CSV
 POST http://localhost:8080/api/guests/import
 Content-Type: multipart/form-data; boundary=----boundary
+user-racf: PAMC7
 
 ------boundary
 Content-Disposition: form-data; name="file"; filename="guests.csv"
 Content-Type: text/csv
 
-nome,sobrenome,telefone,relacionamento
-Carlos,Oliveira,11666666666,noivo
-Ana,Pereira,11555555555,noiva
-Pedro,Costa,11444444444,noivo
+first_name,last_name,phone,relationship
+Carlos,Oliveira,11966666666,P
+Ana,Pereira,11955555555,R
+Pedro,Costa,11944444444,P
 ------boundary--

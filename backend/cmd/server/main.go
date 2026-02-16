@@ -12,6 +12,7 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/config"
 	"github.com/ferjunior7/parasempre/backend/internal/database"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
+	"github.com/ferjunior7/parasempre/backend/internal/user"
 )
 
 func main() {
@@ -33,12 +34,22 @@ func main() {
 	defer pool.Close()
 	slog.Info("connected to database")
 
-	repo := guest.NewPostgresRepository(pool)
-	svc := guest.NewService(repo)
-	handler := guest.NewHandler(svc)
+	guestRepo := guest.NewPostgresRepository(pool)
+	guestSvc := guest.NewService(guestRepo)
+	guestHandler := guest.NewHandler(guestSvc)
+
+	userRepo := user.NewPostgresRepository(pool)
+	userSvc := user.NewService(userRepo, guestRepo)
+	userHandler := user.NewHandler(userSvc)
+
+	userSvc.SeedCouple(ctx,
+		user.CoupleData{URACF: cfg.Couple.Groom.URACF},
+		user.CoupleData{URACF: cfg.Couple.Bride.URACF},
+	)
 
 	mux := http.NewServeMux()
-	handler.RegisterRoutes(mux)
+	guestHandler.RegisterRoutes(mux)
+	userHandler.RegisterRoutes(mux)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
