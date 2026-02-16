@@ -44,7 +44,7 @@ export function Hero() {
               &
             </span>
             <span>
-              <span className="text-gold">R</span>afaela{" "}
+              <span className="text-gold">R</span>afaella{" "}
               <span className="text-gold">A</span>raujo
             </span>
           </h1>

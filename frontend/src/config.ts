@@ -1,6 +1,6 @@
 export const WEDDING_DATE = new Date("2026-10-12T16:00:00");
 
-export const COUPLE = { name1: "Pedro Arthur", name2: "Rafaela Araujo" };
+export const COUPLE = { name1: "Pedro Arthur", name2: "Rafaella Araujo" };
 
 export const VENUE = {
   name: "Chácara Fênix",
