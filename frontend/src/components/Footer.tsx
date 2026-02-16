@@ -11,7 +11,7 @@ export function Footer() {
 
       <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-10 px-6 py-12 md:grid-cols-[1.8fr_1fr_1fr] md:py-14">
         <div className="flex flex-col gap-1">
-          <CoatOfArms className="w-22 h-auto mb-2" />
+          <CoatOfArms className="w-11 h-auto mb-2" />
           <span className="font-display text-[1.35rem] font-bold text-gold">
             Para Sempre
           </span>

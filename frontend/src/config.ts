@@ -14,7 +14,7 @@ export const VENUE = {
 export const CONTACT = {
   phone: "(43) 99607-0599",
   phoneHref: "tel:+5543996070599",
-  email: "pedroarthur1906@gmail.com",
+  email: "pedroarthur1906@hotmail.com",
 };
 
 export const NAV_LINKS = [

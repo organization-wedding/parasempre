@@ -1,9 +1,9 @@
-import brazaoImg from "./brasao-sem-fundo.svg";
+import brasaoImg from "../assets/brasao-sem-fundo-padrao.png";
 
 export function CoatOfArms({ className = "" }: { className?: string }) {
   return (
     <img
-      src={brazaoImg}
+      src={brasaoImg}
       alt="Brasão Para Sempre"
       className={className}
       width={120}
