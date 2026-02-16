@@ -11,13 +11,13 @@ export function Hero() {
       <div className="vignette z-1" aria-hidden="true" />
 
       <div className="relative z-2 w-full max-w-[700px] p-6 pt-20 text-center">
-        <div className="anim-fade-in-frame relative border border-[rgba(201,168,76,0.25)] p-6 sm:p-10 md:p-14">
+        <div className="anim-fade-in-frame relative border border-[rgba(196,169,109,0.25)] p-6 sm:p-10 md:p-14">
           {/* Frame corners */}
           <span className="absolute -top-px -left-px w-7 h-7 border-t-[2.5px] border-l-[2.5px] border-gold pointer-events-none" aria-hidden="true" />
           <span className="absolute -top-px -right-px w-7 h-7 border-t-[2.5px] border-r-[2.5px] border-gold pointer-events-none" aria-hidden="true" />
           <span className="absolute -bottom-px -left-px w-7 h-7 border-b-[2.5px] border-l-[2.5px] border-gold pointer-events-none" aria-hidden="true" />
           <span className="absolute -bottom-px -right-px w-7 h-7 border-b-[2.5px] border-r-[2.5px] border-gold pointer-events-none" aria-hidden="true" />
-          <div className="absolute inset-2 border border-[rgba(201,168,76,0.1)] pointer-events-none" aria-hidden="true" />
+          <div className="absolute inset-2 border border-[rgba(196,169,109,0.1)] pointer-events-none" aria-hidden="true" />
 
           <CoatOfArms
             className="anim-fade-in mx-auto mb-5 w-[72px] md:w-[88px] h-auto"

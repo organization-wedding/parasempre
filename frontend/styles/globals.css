@@ -40,19 +40,19 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* Wedding theme */
-  --color-burgundy: #6B1D1D;
-  --color-burgundy-deep: #4A1111;
-  --color-gold: #C9A84C;
-  --color-gold-dark: #8B6914;
-  --color-gold-light: #E8D5A0;
-  --color-gold-muted: #B8A878;
-  --color-parchment: #F5F0E8;
-  --color-parchment-dark: #E8DFD0;
-  --color-ivory: #FAF6EF;
-  --color-dark: #1C1410;
-  --color-dark-warm: #2C1810;
-  --color-hint: #8B7355;
+  /* Wedding theme — Olive green palette */
+  --color-burgundy: #989F5B;
+  --color-burgundy-deep: #616A2F;
+  --color-gold: #C4A96D;
+  --color-gold-dark: #8B7A40;
+  --color-gold-light: #EDE5CC;
+  --color-gold-muted: #B0A580;
+  --color-parchment: #F4F2E8;
+  --color-parchment-dark: #E5E2D2;
+  --color-ivory: #F9F7EF;
+  --color-dark: #1C1E14;
+  --color-dark-warm: #2C2E1E;
+  --color-hint: #7D7A58;
 
   --font-display: 'Cinzel Decorative', serif;
   --font-heading: 'Cinzel', serif;

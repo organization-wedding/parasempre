@@ -20,7 +20,7 @@ function HourglassSVG({ className = "" }: { className?: string }) {
       {/* Top glass bulb */}
       <path
         d="M36 26 L36 85 Q36 120 80 130 Q124 120 124 85 L124 26"
-        fill="rgba(201, 168, 76, 0.06)"
+        fill="rgba(196, 169, 109, 0.06)"
         stroke="var(--color-gold)"
         strokeWidth="1.5"
         opacity="0.7"
@@ -38,7 +38,7 @@ function HourglassSVG({ className = "" }: { className?: string }) {
       {/* Bottom glass bulb */}
       <path
         d="M36 214 L36 155 Q36 120 80 110 Q124 120 124 155 L124 214"
-        fill="rgba(201, 168, 76, 0.06)"
+        fill="rgba(196, 169, 109, 0.06)"
         stroke="var(--color-gold)"
         strokeWidth="1.5"
         opacity="0.7"
@@ -90,7 +90,7 @@ export function UnderConstruction() {
 
         <a
           href="/"
-          className="inline-flex items-center gap-2 font-heading text-[0.75rem] font-semibold tracking-[0.1em] uppercase text-gold no-underline py-[0.65rem] px-6 border border-[rgba(201,168,76,0.35)] transition-all duration-300 hover:bg-[rgba(201,168,76,0.1)] hover:border-gold"
+          className="inline-flex items-center gap-2 font-heading text-[0.75rem] font-semibold tracking-[0.1em] uppercase text-gold no-underline py-[0.65rem] px-6 border border-[rgba(196,169,109,0.35)] transition-all duration-300 hover:bg-[rgba(196,169,109,0.1)] hover:border-gold"
         >
           <ArrowLeft size={16} />
           Voltar ao Início

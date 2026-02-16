@@ -34,7 +34,7 @@ export function Countdown() {
     >
       {UNITS.map((unit) => (
         <div key={unit.key} className="flex flex-col items-center gap-2">
-          <span className="font-heading text-[1.6rem] sm:text-[2rem] md:text-[2.5rem] font-bold text-ivory bg-[rgba(201,168,76,0.08)] border border-[rgba(201,168,76,0.2)] w-14 h-14 sm:w-[68px] sm:h-[68px] md:w-[84px] md:h-[84px] flex items-center justify-center leading-none">
+          <span className="font-heading text-[1.6rem] sm:text-[2rem] md:text-[2.5rem] font-bold text-ivory bg-[rgba(196,169,109,0.08)] border border-[rgba(196,169,109,0.2)] w-14 h-14 sm:w-[68px] sm:h-[68px] md:w-[84px] md:h-[84px] flex items-center justify-center leading-none">
             {String(timeLeft[unit.key]).padStart(2, "0")}
           </span>
           <span className="font-heading text-[0.55rem] sm:text-[0.6rem] md:text-[0.65rem] font-semibold tracking-[0.18em] uppercase text-gold-muted">
