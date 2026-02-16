@@ -20,7 +20,7 @@ export function Hero() {
           <div className="absolute inset-2 border border-[rgba(196,169,109,0.1)] pointer-events-none" aria-hidden="true" />
 
           <CoatOfArms
-            className="anim-fade-in mx-auto mb-5 w-[72px] md:w-[88px] h-auto"
+            className="anim-fade-in mx-auto mb-6 w-[110px] md:w-[150px] h-auto"
           />
 
           <p
