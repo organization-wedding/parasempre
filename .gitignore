@@ -1,4 +1,4 @@
-.DS_STORE
-node_modules/
-dist/
-.claude/
+/frontend/.DS_STORE
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.claude/
