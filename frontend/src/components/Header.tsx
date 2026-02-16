@@ -10,7 +10,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-100 border-b border-gold-muted backdrop-blur-[12px] bg-[rgba(250,246,239,0.95)]">
+    <header className="fixed inset-x-0 top-0 z-100 border-b border-gold-muted backdrop-blur-[12px] bg-[rgba(249,247,239,0.95)]">
       <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-2.5">
         <a href="/" className="flex shrink-0 items-center gap-3 no-underline text-burgundy">
           <CoatOfArms className="w-[38px] h-auto" />
@@ -42,7 +42,7 @@ export function Header() {
           </a>
           <a
             href="/comprar-presente"
-            className="inline-flex items-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(107,29,29,0.35)] hover:-translate-y-px"
+            className="inline-flex items-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px"
           >
             <Gift size={15} />
             Comprar Presente
@@ -81,7 +81,7 @@ export function Header() {
             </a>
             <a
               href="/comprar-presente"
-              className="inline-flex items-center justify-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(107,29,29,0.35)] hover:-translate-y-px w-full"
+              className="inline-flex items-center justify-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px w-full"
             >
               <Gift size={15} />
               Comprar Presente

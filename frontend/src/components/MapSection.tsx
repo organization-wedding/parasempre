@@ -36,7 +36,7 @@ export function MapSection() {
                 {VENUE.address}
               </p>
               <button
-                className="inline-flex items-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.1em] uppercase text-gold-light bg-burgundy border border-burgundy py-[0.65rem] px-6 cursor-pointer transition-all duration-300 mt-2 hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(107,29,29,0.35)] hover:-translate-y-px"
+                className="inline-flex items-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.1em] uppercase text-gold-light bg-burgundy border border-burgundy py-[0.65rem] px-6 cursor-pointer transition-all duration-300 mt-2 hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px"
                 onClick={() => setMapFlipped(true)}
               >
                 <MapPin size={15} />
@@ -47,7 +47,7 @@ export function MapSection() {
             {/* Back face — Google Maps iframe */}
             <div className="map-card__face map-card__back">
               <button
-                className="absolute top-3.5 right-3.5 z-2 inline-flex items-center gap-1.5 font-heading text-[0.65rem] font-semibold tracking-[0.08em] uppercase text-dark-warm bg-[rgba(250,246,239,0.92)] backdrop-blur-[4px] border border-gold-muted py-1.5 px-3.5 cursor-pointer transition-all duration-300 hover:bg-ivory hover:border-gold"
+                className="absolute top-3.5 right-3.5 z-2 inline-flex items-center gap-1.5 font-heading text-[0.65rem] font-semibold tracking-[0.08em] uppercase text-dark-warm bg-[rgba(249,247,239,0.92)] backdrop-blur-[4px] border border-gold-muted py-1.5 px-3.5 cursor-pointer transition-all duration-300 hover:bg-ivory hover:border-gold"
                 onClick={() => setMapFlipped(false)}
               >
                 Voltar
