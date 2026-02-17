@@ -33,6 +33,7 @@ type mockGuestRepo struct {
 	listFn     func(ctx context.Context) ([]guest.Guest, error)
 	getByID    func(ctx context.Context, id int64) (*guest.Guest, error)
 	getByPhone func(ctx context.Context, phone string) (*guest.Guest, error)
+	getByName  func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
 	createFn   func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
 	updateFn   func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
 	deleteFn   func(ctx context.Context, id int64) error
@@ -48,6 +49,13 @@ func (m *mockGuestRepo) GetByID(ctx context.Context, id int64) (*guest.Guest, er
 
 func (m *mockGuestRepo) GetByPhone(ctx context.Context, phone string) (*guest.Guest, error) {
 	return m.getByPhone(ctx, phone)
+}
+
+func (m *mockGuestRepo) GetByName(ctx context.Context, firstName, lastName string) (*guest.Guest, error) {
+	if m.getByName != nil {
+		return m.getByName(ctx, firstName, lastName)
+	}
+	return nil, nil
 }
 
 func (m *mockGuestRepo) Create(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error) {

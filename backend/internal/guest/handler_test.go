@@ -13,8 +13,12 @@ import (
 )
 
 func newTestHandler() (*Handler, *mockRepository) {
-	repo := &mockRepository{}
-	svc := NewService(repo)
+	repo := &mockRepository{
+		getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
+			return nil, nil
+		},
+	}
+	svc := NewService(repo, alwaysExistsChecker())
 	return NewHandler(svc), repo
 }
 
@@ -118,6 +122,7 @@ func TestHandlerCreateGuest(t *testing.T) {
 			LastName:     input.LastName,
 			Phone:        &phone,
 			Relationship: input.Relationship,
+			FamilyGroup:  *input.FamilyGroup,
 			CreatedBy:    userRACF,
 			UpdatedBy:    userRACF,
 			CreatedAt:    time.Now(),
@@ -125,7 +130,7 @@ func TestHandlerCreateGuest(t *testing.T) {
 		}, nil
 	}
 
-	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R"}`
+	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("user-racf", "TST01")
@@ -140,7 +145,7 @@ func TestHandlerCreateGuest(t *testing.T) {
 func TestHandlerCreateGuestMissingRACF(t *testing.T) {
 	h, _ := newTestHandler()
 
-	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R"}`
+	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -154,7 +159,7 @@ func TestHandlerCreateGuestMissingRACF(t *testing.T) {
 func TestHandlerCreateGuestInvalidRACF(t *testing.T) {
 	h, _ := newTestHandler()
 
-	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R"}`
+	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("user-racf", "toolong1")
@@ -169,7 +174,7 @@ func TestHandlerCreateGuestInvalidRACF(t *testing.T) {
 func TestHandlerCreateGuestValidationError(t *testing.T) {
 	h, _ := newTestHandler()
 
-	body := `{"first_name":"","last_name":"Santos","phone":"11988888888","relationship":"R"}`
+	body := `{"first_name":"","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("user-racf", "TST01")
@@ -178,6 +183,28 @@ func TestHandlerCreateGuestValidationError(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandlerCreateGuestMissingFamilyGroup(t *testing.T) {
+	h, _ := newTestHandler()
+
+	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("user-racf", "TST01")
+	w := httptest.NewRecorder()
+	h.handleCreate(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+	expected := "family_group is required and must be greater than 0"
+	if resp["error"] != expected {
+		t.Fatalf("expected error %q, got %q", expected, resp["error"])
 	}
 }
 
@@ -285,7 +312,7 @@ func TestHandlerImportCSV(t *testing.T) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, _ := writer.CreateFormFile("file", "guests.csv")
-	part.Write([]byte("first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\nMaria,Santos,11988888888,R\n"))
+	part.Write([]byte("first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\nMaria,Santos,11988888888,R,2\n"))
 	writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", &buf)
@@ -302,13 +329,36 @@ func TestHandlerImportCSV(t *testing.T) {
 	}
 }
 
+func TestHandlerImportCSVWithErrors(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.createFn = func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+		return nil, errors.New("duplicate name")
+	}
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, _ := writer.CreateFormFile("file", "guests.csv")
+	part.Write([]byte("first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\n"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("user-racf", "TST01")
+	w := httptest.NewRecorder()
+	h.handleImport(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestHandlerImportMissingRACF(t *testing.T) {
 	h, _ := newTestHandler()
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, _ := writer.CreateFormFile("file", "guests.csv")
-	part.Write([]byte("first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\n"))
+	part.Write([]byte("first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\n"))
 	writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", &buf)

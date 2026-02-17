@@ -35,10 +35,11 @@ func main() {
 	slog.Info("connected to database")
 
 	guestRepo := guest.NewPostgresRepository(pool)
-	guestSvc := guest.NewService(guestRepo)
+	userRepo := user.NewPostgresRepository(pool)
+
+	guestSvc := guest.NewService(guestRepo, &userCheckerAdapter{repo: userRepo})
 	guestHandler := guest.NewHandler(guestSvc)
 
-	userRepo := user.NewPostgresRepository(pool)
 	userSvc := user.NewService(userRepo, guestRepo)
 	userHandler := user.NewHandler(userSvc)
 
@@ -81,6 +82,18 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 	slog.Info("server stopped")
+}
+
+type userCheckerAdapter struct {
+	repo user.Repository
+}
+
+func (a *userCheckerAdapter) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
+	u, err := a.repo.GetByURACF(ctx, uracf)
+	if err != nil {
+		return false, err
+	}
+	return u != nil, nil
 }
 
 func corsMiddleware(origin string) func(http.Handler) http.Handler {

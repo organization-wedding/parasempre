@@ -21,7 +21,7 @@ type CreateGuestInput struct {
 	LastName     string `json:"last_name"`
 	Phone        string `json:"phone"`
 	Relationship string `json:"relationship"`
-	FamilyGroup  int64  `json:"family_group"`
+	FamilyGroup  *int64 `json:"family_group"`
 }
 
 type UpdateGuestInput struct {

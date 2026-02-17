@@ -71,6 +71,21 @@ func (r *PostgresRepository) GetByPhone(ctx context.Context, phone string) (*Gue
 	return &g, nil
 }
 
+func (r *PostgresRepository) GetByName(ctx context.Context, firstName, lastName string) (*Guest, error) {
+	var g Guest
+	err := r.pool.QueryRow(ctx,
+		`SELECT id, first_name, last_name, phone, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at
+		 FROM guests WHERE first_name = $1 AND last_name = $2`, firstName, lastName).
+		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Phone, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &g, nil
+}
+
 func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
 	var phone *string
 	if input.Phone != "" {
@@ -82,7 +97,7 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput,
 		`INSERT INTO guests (first_name, last_name, phone, relationship, family_group, created_by, updated_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING id, first_name, last_name, phone, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`,
-		input.FirstName, input.LastName, phone, input.Relationship, input.FamilyGroup, userRACF, userRACF).
+		input.FirstName, input.LastName, phone, input.Relationship, *input.FamilyGroup, userRACF, userRACF).
 		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Phone, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		return nil, err

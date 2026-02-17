@@ -14,17 +14,17 @@ func TestParseCSV(t *testing.T) {
 	}{
 		{
 			name: "valid CSV with header",
-			csv:  "first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\nMaria,Santos,11888888888,R\n",
+			csv:  "first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\nMaria,Santos,11888888888,R,2\n",
 			want: 2,
 		},
 		{
 			name: "valid CSV with extra whitespace",
-			csv:  "first_name,last_name,phone,relationship\n João , Silva , 11999999999 , P \n",
+			csv:  "first_name,last_name,phone,relationship,family_group\n João , Silva , 11999999999 , P , 1 \n",
 			want: 1,
 		},
 		{
 			name:    "empty CSV (header only)",
-			csv:     "first_name,last_name,phone,relationship\n",
+			csv:     "first_name,last_name,phone,relationship,family_group\n",
 			want:    0,
 			wantErr: false,
 		},
@@ -34,8 +34,18 @@ func TestParseCSV(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "missing family_group column",
+			csv:     "first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\n",
+			wantErr: true,
+		},
+		{
 			name:    "empty input",
 			csv:     "",
+			wantErr: true,
+		},
+		{
+			name:    "invalid family_group value",
+			csv:     "first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,abc\n",
 			wantErr: true,
 		},
 	}
@@ -60,7 +70,7 @@ func TestParseCSV(t *testing.T) {
 }
 
 func TestParseCSVFieldMapping(t *testing.T) {
-	csv := "first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\n"
+	csv := "first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,5\n"
 	guests, err := ParseCSV(strings.NewReader(csv))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -80,6 +90,9 @@ func TestParseCSVFieldMapping(t *testing.T) {
 	}
 	if g.Relationship != "P" {
 		t.Errorf("expected relationship 'P', got %q", g.Relationship)
+	}
+	if g.FamilyGroup == nil || *g.FamilyGroup != 5 {
+		t.Errorf("expected family_group 5, got %v", g.FamilyGroup)
 	}
 }
 

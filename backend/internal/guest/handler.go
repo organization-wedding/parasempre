@@ -195,7 +195,12 @@ func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
 		created++
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	status := http.StatusOK
+	if len(errs) > 0 {
+		status = http.StatusBadRequest
+	}
+
+	writeJSON(w, status, map[string]any{
 		"imported": created,
 		"errors":   errs,
 		"total":    len(guests),
