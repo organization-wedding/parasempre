@@ -9,12 +9,13 @@ import (
 
 // mockRepository implements Repository with function fields for easy stubbing.
 type mockRepository struct {
-	listFn     func(ctx context.Context) ([]Guest, error)
-	getByID    func(ctx context.Context, id int64) (*Guest, error)
-	getByPhone func(ctx context.Context, phone string) (*Guest, error)
-	createFn   func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
-	updateFn   func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
-	deleteFn   func(ctx context.Context, id int64) error
+	listFn      func(ctx context.Context) ([]Guest, error)
+	getByID     func(ctx context.Context, id int64) (*Guest, error)
+	getByPhone  func(ctx context.Context, phone string) (*Guest, error)
+	getByNameFn func(ctx context.Context, firstName, lastName string) (*Guest, error)
+	createFn    func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
+	updateFn    func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
+	deleteFn    func(ctx context.Context, id int64) error
 }
 
 func (m *mockRepository) List(ctx context.Context) ([]Guest, error) {
@@ -29,6 +30,13 @@ func (m *mockRepository) GetByPhone(ctx context.Context, phone string) (*Guest, 
 	return m.getByPhone(ctx, phone)
 }
 
+func (m *mockRepository) GetByName(ctx context.Context, firstName, lastName string) (*Guest, error) {
+	if m.getByNameFn != nil {
+		return m.getByNameFn(ctx, firstName, lastName)
+	}
+	return nil, nil
+}
+
 func (m *mockRepository) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
 	return m.createFn(ctx, input, userRACF)
 }
@@ -41,7 +49,21 @@ func (m *mockRepository) Delete(ctx context.Context, id int64) error {
 	return m.deleteFn(ctx, id)
 }
 
+// mockUserChecker implements UserChecker for tests.
+type mockUserChecker struct {
+	existsFn func(ctx context.Context, uracf string) (bool, error)
+}
+
+func (m *mockUserChecker) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
+	if m.existsFn != nil {
+		return m.existsFn(ctx, uracf)
+	}
+	return true, nil
+}
+
 func strPtr(s string) *string { return &s }
+
+func int64Ptr(v int64) *int64 { return &v }
 
 func sampleGuest() Guest {
 	phone := "11999999999"
@@ -52,12 +74,19 @@ func sampleGuest() Guest {
 		Phone:        &phone,
 		Relationship: "P",
 		Confirmed:    false,
-		FamilyGroup:  0,
+		FamilyGroup:  1,
 		CreatedBy:    "TST01",
 		UpdatedBy:    "TST01",
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
+}
+
+// alwaysExistsChecker returns a UserChecker that always reports the user exists.
+func alwaysExistsChecker() *mockUserChecker {
+	return &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
+		return true, nil
+	}}
 }
 
 func TestServiceList(t *testing.T) {
@@ -92,7 +121,7 @@ func TestServiceList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(&mockRepository{listFn: tt.mockFn})
+			svc := NewService(&mockRepository{listFn: tt.mockFn}, alwaysExistsChecker())
 			guests, err := svc.List(context.Background())
 			if tt.wantErr {
 				if err == nil {
@@ -137,7 +166,7 @@ func TestServiceGetByID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(&mockRepository{getByID: tt.mockFn})
+			svc := NewService(&mockRepository{getByID: tt.mockFn}, alwaysExistsChecker())
 			guest, err := svc.GetByID(context.Background(), tt.id)
 			if tt.wantErr {
 				if err == nil {
@@ -168,6 +197,7 @@ func TestServiceCreate(t *testing.T) {
 				LastName:     "Santos",
 				Phone:        "11988888888",
 				Relationship: "R",
+				FamilyGroup:  int64Ptr(1),
 			},
 		},
 		{
@@ -176,6 +206,7 @@ func TestServiceCreate(t *testing.T) {
 				FirstName:    "Maria",
 				LastName:     "Santos",
 				Relationship: "P",
+				FamilyGroup:  int64Ptr(1),
 			},
 		},
 		{
@@ -184,6 +215,7 @@ func TestServiceCreate(t *testing.T) {
 				LastName:     "Santos",
 				Phone:        "11988888888",
 				Relationship: "R",
+				FamilyGroup:  int64Ptr(1),
 			},
 			wantErr: "first_name is required",
 		},
@@ -193,6 +225,7 @@ func TestServiceCreate(t *testing.T) {
 				FirstName:    "Maria",
 				Phone:        "11988888888",
 				Relationship: "R",
+				FamilyGroup:  int64Ptr(1),
 			},
 			wantErr: "last_name is required",
 		},
@@ -203,6 +236,7 @@ func TestServiceCreate(t *testing.T) {
 				LastName:     "Santos",
 				Phone:        "1188888888",
 				Relationship: "R",
+				FamilyGroup:  int64Ptr(1),
 			},
 			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
 		},
@@ -213,6 +247,7 @@ func TestServiceCreate(t *testing.T) {
 				LastName:     "Santos",
 				Phone:        "11888888888",
 				Relationship: "R",
+				FamilyGroup:  int64Ptr(1),
 			},
 			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
 		},
@@ -223,17 +258,51 @@ func TestServiceCreate(t *testing.T) {
 				LastName:     "Santos",
 				Phone:        "11988888888",
 				Relationship: "X",
+				FamilyGroup:  int64Ptr(1),
 			},
 			wantErr: "relationship must be 'P' or 'R'",
 		},
 		{
 			name: "missing relationship",
 			input: CreateGuestInput{
-				FirstName: "Maria",
-				LastName:  "Santos",
-				Phone:     "11988888888",
+				FirstName:   "Maria",
+				LastName:    "Santos",
+				Phone:       "11988888888",
+				FamilyGroup: int64Ptr(1),
 			},
 			wantErr: "relationship must be 'P' or 'R'",
+		},
+		{
+			name: "missing family_group",
+			input: CreateGuestInput{
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Phone:        "11988888888",
+				Relationship: "R",
+			},
+			wantErr: "family_group is required and must be greater than 0",
+		},
+		{
+			name: "family_group zero",
+			input: CreateGuestInput{
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Phone:        "11988888888",
+				Relationship: "R",
+				FamilyGroup:  int64Ptr(0),
+			},
+			wantErr: "family_group is required and must be greater than 0",
+		},
+		{
+			name: "family_group negative",
+			input: CreateGuestInput{
+				FirstName:    "Maria",
+				LastName:     "Santos",
+				Phone:        "11988888888",
+				Relationship: "R",
+				FamilyGroup:  int64Ptr(-1),
+			},
+			wantErr: "family_group is required and must be greater than 0",
 		},
 	}
 
@@ -244,8 +313,11 @@ func TestServiceCreate(t *testing.T) {
 					g := sampleGuest()
 					return &g, nil
 				},
+				getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
+					return nil, nil
+				},
 			}
-			svc := NewService(repo)
+			svc := NewService(repo, alwaysExistsChecker())
 			_, err := svc.Create(context.Background(), tt.input, "TST01")
 			if tt.wantErr != "" {
 				if err == nil {
@@ -260,6 +332,84 @@ func TestServiceCreate(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestServiceCreateDuplicateName(t *testing.T) {
+	repo := &mockRepository{
+		getByNameFn: func(ctx context.Context, firstName, lastName string) (*Guest, error) {
+			g := sampleGuest()
+			return &g, nil
+		},
+		getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
+			return nil, nil
+		},
+	}
+	svc := NewService(repo, alwaysExistsChecker())
+
+	_, err := svc.Create(context.Background(), CreateGuestInput{
+		FirstName:    "João",
+		LastName:     "Silva",
+		Phone:        "11988888888",
+		Relationship: "P",
+		FamilyGroup:  int64Ptr(1),
+	}, "TST01")
+
+	if err == nil {
+		t.Fatal("expected duplicate name error, got nil")
+	}
+	if err.Error() != "a guest named 'João Silva' already exists" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestServiceCreateDuplicatePhone(t *testing.T) {
+	repo := &mockRepository{
+		getByNameFn: func(ctx context.Context, firstName, lastName string) (*Guest, error) {
+			return nil, nil
+		},
+		getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
+			g := sampleGuest()
+			return &g, nil
+		},
+	}
+	svc := NewService(repo, alwaysExistsChecker())
+
+	_, err := svc.Create(context.Background(), CreateGuestInput{
+		FirstName:    "Maria",
+		LastName:     "Santos",
+		Phone:        "11999999999",
+		Relationship: "R",
+		FamilyGroup:  int64Ptr(1),
+	}, "TST01")
+
+	if err == nil {
+		t.Fatal("expected duplicate phone error, got nil")
+	}
+	if err.Error() != "a guest with phone '11999999999' already exists" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestServiceCreateUserRACFNotFound(t *testing.T) {
+	repo := &mockRepository{}
+	checker := &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
+		return false, nil
+	}}
+	svc := NewService(repo, checker)
+
+	_, err := svc.Create(context.Background(), CreateGuestInput{
+		FirstName:    "Maria",
+		LastName:     "Santos",
+		Relationship: "R",
+		FamilyGroup:  int64Ptr(1),
+	}, "TST01")
+
+	if err == nil {
+		t.Fatal("expected user not found error, got nil")
+	}
+	if err.Error() != "user-racf does not match any registered user" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -300,8 +450,15 @@ func TestServiceUpdate(t *testing.T) {
 					g := sampleGuest()
 					return &g, nil
 				},
+				getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
+					return nil, nil
+				},
+				getByID: func(ctx context.Context, id int64) (*Guest, error) {
+					g := sampleGuest()
+					return &g, nil
+				},
 			}
-			svc := NewService(repo)
+			svc := NewService(repo, alwaysExistsChecker())
 			_, err := svc.Update(context.Background(), 1, tt.input, "TST01")
 			if tt.wantErr != "" {
 				if err == nil {
@@ -316,6 +473,24 @@ func TestServiceUpdate(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestServiceUpdateUserRACFNotFound(t *testing.T) {
+	repo := &mockRepository{}
+	checker := &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
+		return false, nil
+	}}
+	svc := NewService(repo, checker)
+
+	relP := "P"
+	_, err := svc.Update(context.Background(), 1, UpdateGuestInput{Relationship: &relP}, "TST01")
+
+	if err == nil {
+		t.Fatal("expected user not found error, got nil")
+	}
+	if err.Error() != "user-racf does not match any registered user" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -342,7 +517,7 @@ func TestServiceDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(&mockRepository{deleteFn: tt.mockFn})
+			svc := NewService(&mockRepository{deleteFn: tt.mockFn}, alwaysExistsChecker())
 			err := svc.Delete(context.Background(), 1)
 			if tt.wantErr {
 				if err == nil {
