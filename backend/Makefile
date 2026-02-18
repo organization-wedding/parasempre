@@ -1,4 +1,4 @@
--include .env
+-include ../.env .env
 export
 
 .PHONY: run test build clean migrate
