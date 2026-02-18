@@ -1,4 +1,4 @@
-# ParaSempre - Backend
+# Backend - ParaSempre
 
 Wedding guest management API built in Go.
 
@@ -11,7 +11,7 @@ Wedding guest management API built in Go.
 
 ## Architecture
 
-Three-layer domain-oriented structure: **Handler → Service → Repository**.
+Three-layer domain-oriented structure: **Handler -> Service -> Repository**.
 
 ```
 backend/
@@ -97,7 +97,7 @@ See `.env.example` — the Makefile loads `.env` automatically via `include`.
 
 ## User Fields
 
-`id` (BIGINT), `guest_id` (BIGINT nullable FK → guests), `role` ("guest" | "groom" | "bride"), `uracf` (TEXT UNIQUE, 5 uppercase alphanumeric chars), `created_at`, `updated_at`
+`id` (BIGINT), `guest_id` (BIGINT nullable FK -> guests), `role` ("guest" | "groom" | "bride"), `uracf` (TEXT UNIQUE, 5 uppercase alphanumeric chars), `created_at`, `updated_at`
 
 ## Domain Validation Rules
 

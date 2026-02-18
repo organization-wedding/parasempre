@@ -1,12 +1,10 @@
+.agents/settings.local.json
 .DS_STORE
-.claude/
+.idea/
 
 /backend/.env
-/backend/.claude
 /backend/bin/
 /backend/requests/
 
-/frontend/.DS_STORE
 /frontend/node_modules/
 /frontend/dist/
-/frontend/.claude/
