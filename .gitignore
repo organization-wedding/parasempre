@@ -1,7 +1,7 @@
 .DS_STORE
 .claude/
+.env
 
-/backend/.env
 /backend/.claude
 /backend/bin/
 /backend/requests/
