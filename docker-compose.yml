@@ -1,0 +1,34 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_SSLMODE=${DB_SSLMODE}
+      - PORT=8080
+      - CORS_ORIGIN=http://localhost:${FRONTEND_PORT:-3000}
+      - GROOM_FIRST_NAME=${GROOM_FIRST_NAME}
+      - GROOM_LAST_NAME=${GROOM_LAST_NAME}
+      - GROOM_PHONE=${GROOM_PHONE}
+      - GROOM_URACF=${GROOM_URACF}
+      - BRIDE_FIRST_NAME=${BRIDE_FIRST_NAME}
+      - BRIDE_LAST_NAME=${BRIDE_LAST_NAME}
+      - BRIDE_PHONE=${BRIDE_PHONE}
+      - BRIDE_URACF=${BRIDE_URACF}
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - BACKEND_PORT=${BACKEND_PORT:-8080}
+    depends_on:
+      - backend
+    restart: unless-stopped
