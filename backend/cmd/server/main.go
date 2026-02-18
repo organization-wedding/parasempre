@@ -88,13 +88,13 @@ type userCheckerAdapter struct {
 	repo user.Repository
 }
 
-func (a *userCheckerAdapter) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
-	u, err := a.repo.GetByURACF(ctx, uracf)
-	if err != nil {
-		return false, err
-	}
-	return u != nil, nil
-}
+//func (a *userCheckerAdapter) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
+//	u, err := a.repo.GetByURACF(ctx, uracf)
+//	if err != nil {
+//		return false, err
+//	}
+//	return u != nil, nil
+//}
 
 func corsMiddleware(origin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
