@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import Menu from "lucide-react/dist/esm/icons/menu";
 import X from "lucide-react/dist/esm/icons/x";
 import Gift from "lucide-react/dist/esm/icons/gift";
@@ -12,23 +13,27 @@ export function Header() {
   return (
     <header className="fixed inset-x-0 top-0 z-100 border-b border-gold-muted backdrop-blur-[12px] bg-[rgba(249,247,239,0.95)]">
       <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-2.5">
-        <a href="/" className="flex shrink-0 items-center gap-3 no-underline text-burgundy">
+        <Link
+          to="/"
+          className="flex shrink-0 items-center gap-3 no-underline text-burgundy"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <CoatOfArms className="w-[42px] h-auto" />
           <span className="font-display text-lg font-bold tracking-wider text-burgundy">
             Para Sempre
           </span>
-        </a>
+        </Link>
 
         <nav className="hidden nav:flex gap-9">
           {NAV_LINKS.map((link) => (
-            <a
+            <Link
               key={link.href}
-              href={link.href}
+              to={link.href}
               className="group relative font-heading text-[0.72rem] font-semibold tracking-[0.12em] uppercase text-dark-warm no-underline py-1 transition-colors duration-300 hover:text-burgundy"
             >
               {link.label}
               <span className="absolute -bottom-0.5 left-1/2 h-[1.5px] w-0 -translate-x-1/2 bg-gold transition-all duration-300 group-hover:w-full" />
-            </a>
+            </Link>
           ))}
         </nav>
 
@@ -62,13 +67,14 @@ export function Header() {
         <div className="anim-slide-down border-t border-parchment-dark px-6 pt-4 pb-6">
           <nav className="flex flex-col mb-5">
             {NAV_LINKS.map((link) => (
-              <a
+              <Link
                 key={link.href}
-                href={link.href}
+                to={link.href}
+                onClick={() => setMobileMenuOpen(false)}
                 className="font-heading text-[0.85rem] font-semibold tracking-[0.1em] uppercase text-dark-warm no-underline py-3 border-b border-parchment-dark transition-colors duration-200 hover:text-burgundy"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </nav>
           <div className="flex flex-col gap-2.5">
@@ -89,8 +95,6 @@ export function Header() {
           </div>
         </div>
       )}
-
-      {/* Gold accent line */}
       <div className="absolute -bottom-[3px] left-0 right-0 h-0.5 bg-linear-to-r from-transparent via-gold to-transparent opacity-50 pointer-events-none" />
     </header>
   );

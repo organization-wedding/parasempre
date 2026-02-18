@@ -5,6 +5,13 @@ import type {
   UpdateGuestInput,
   ImportResult,
 } from "../types/guest";
+import {
+  createGuestInputSchema,
+  guestSchema,
+  guestsSchema,
+  importResultSchema,
+  updateGuestInputSchema,
+} from "../schemas/guest";
 
 const RACF_KEY = "user-racf";
 
@@ -26,43 +33,56 @@ function authHeaders(): Record<string, string> {
   return { "user-racf": racf };
 }
 
-async function handleResponse<T>(res: Response): Promise<T> {
+async function parseApiError(res: Response): Promise<string> {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = await res.json();
+    if (typeof body?.error === "string" && body.error.length > 0) {
+      return body.error;
+    }
+  }
+  return `Erro ${res.status}`;
+}
+
+async function handleResponse<T>(res: Response, schema: { parse: (value: unknown) => T }): Promise<T> {
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || `Erro ${res.status}`);
+    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
   }
-  return data as T;
+  return schema.parse(data);
 }
 
 export async function listGuests(): Promise<Guest[]> {
   const res = await fetch(`${API_BASE}/api/guests`);
-  return handleResponse<Guest[]>(res);
+  return handleResponse(res, guestsSchema);
 }
 
 export async function getGuest(id: number): Promise<Guest> {
   const res = await fetch(`${API_BASE}/api/guests/${id}`);
-  return handleResponse<Guest>(res);
+  return handleResponse(res, guestSchema);
 }
 
 export async function createGuest(input: CreateGuestInput): Promise<Guest> {
+  const payload = createGuestInputSchema.parse(input);
   const res = await fetch(`${API_BASE}/api/guests`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
   });
-  return handleResponse<Guest>(res);
+  return handleResponse(res, guestSchema);
 }
 
 export async function updateGuest(
   id: number,
   input: UpdateGuestInput,
 ): Promise<Guest> {
+  const payload = updateGuestInputSchema.parse(input);
   const res = await fetch(`${API_BASE}/api/guests/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
   });
-  return handleResponse<Guest>(res);
+  return handleResponse(res, guestSchema);
 }
 
 export async function deleteGuest(id: number): Promise<void> {
@@ -71,8 +91,7 @@ export async function deleteGuest(id: number): Promise<void> {
     headers: authHeaders(),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || `Erro ${res.status}`);
+    throw new Error(await parseApiError(res));
   }
 }
 
@@ -84,5 +103,5 @@ export async function importGuests(file: File): Promise<ImportResult> {
     headers: authHeaders(),
     body: form,
   });
-  return handleResponse<ImportResult>(res);
+  return handleResponse(res, importResultSchema);
 }
