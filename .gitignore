@@ -4,6 +4,7 @@
 /backend/.env
 /backend/.claude
 /backend/bin/
+/backend/server
 /backend/requests/
 
 /frontend/.DS_STORE
