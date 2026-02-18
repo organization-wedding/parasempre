@@ -4,6 +4,7 @@
 
 /backend/.env
 /backend/bin/
+/backend/server
 /backend/requests/
 
 /frontend/node_modules/
