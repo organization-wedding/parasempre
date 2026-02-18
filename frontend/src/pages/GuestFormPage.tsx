@@ -1,132 +1,162 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import Save from "lucide-react/dist/esm/icons/save";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import X from "lucide-react/dist/esm/icons/x";
 import { Header } from "../components/Header";
-import { getGuest, createGuest, updateGuest, getUserRacf } from "../lib/api";
+import { getUserRacf } from "../lib/api";
+import {
+  useCreateGuestMutation,
+  useGuestQuery,
+  useUpdateGuestMutation,
+} from "../lib/guest-queries";
 
 interface Props {
   guestId?: number;
 }
 
+const guestFormSchema = z.object({
+  firstName: z.string().trim().min(1, "Nome é obrigatório."),
+  lastName: z.string().trim().min(1, "Sobrenome é obrigatório."),
+  phone: z
+    .string()
+    .transform((value) => value.replace(/\D/g, ""))
+    .refine((value) => value.length === 0 || value.length === 11, {
+      message: "Telefone deve ter 11 dígitos.",
+    }),
+  relationship: z.enum(["P", "R"]),
+  familyGroup: z.number().int().min(1, "Grupo familiar deve ser um número válido."),
+  confirmed: z.boolean(),
+});
+
+type GuestFormValues = z.infer<typeof guestFormSchema>;
+
 export function GuestFormPage({ guestId }: Props) {
   const isEdit = guestId !== undefined;
+  const navigate = useNavigate();
+  const createMutation = useCreateGuestMutation();
+  const updateMutation = useUpdateGuestMutation();
+  const guestQuery = useGuestQuery(guestId ?? 0, isEdit);
 
-  const [loading, setLoading] = useState(isEdit);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [relationship, setRelationship] = useState("P");
-  const [familyGroup, setFamilyGroup] = useState("1");
-  const [confirmed, setConfirmed] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    setError,
+    clearErrors,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<GuestFormValues>({
+    resolver: zodResolver(guestFormSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      phone: "",
+      relationship: "P",
+      familyGroup: 1,
+      confirmed: false,
+    },
+  });
 
   useEffect(() => {
-    if (!isEdit) return;
-    getGuest(guestId)
-      .then((guest) => {
-        setFirstName(guest.first_name);
-        setLastName(guest.last_name);
-        setPhone(guest.phone || "");
-        setRelationship(guest.relationship);
-        setFamilyGroup(String(guest.family_group));
-        setConfirmed(guest.confirmed);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Erro ao carregar convidado");
-      })
-      .finally(() => setLoading(false));
-  }, [guestId, isEdit]);
+    if (!guestQuery.data) return;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+    reset({
+      firstName: guestQuery.data.first_name,
+      lastName: guestQuery.data.last_name,
+      phone: guestQuery.data.phone ?? "",
+      relationship: guestQuery.data.relationship,
+      familyGroup: guestQuery.data.family_group,
+      confirmed: guestQuery.data.confirmed,
+    });
+  }, [guestQuery.data, reset]);
+
+  const mutationError =
+    (createMutation.error instanceof Error && createMutation.error.message) ||
+    (updateMutation.error instanceof Error && updateMutation.error.message) ||
+    (guestQuery.error instanceof Error && guestQuery.error.message) ||
+    null;
+
+  async function onSubmit(values: GuestFormValues) {
+    clearErrors("root");
 
     if (!getUserRacf()) {
-      setError(
-        "Configure sua identificação (RACF) na página de Lista de Presença antes de salvar.",
-      );
+      setError("root", {
+        message: "Configure sua identificação (RACF) na página de Lista de Presença antes de salvar.",
+      });
       return;
     }
-
-    if (!firstName.trim() || !lastName.trim()) {
-      setError("Nome e sobrenome são obrigatórios.");
-      return;
-    }
-
-    const fg = Number(familyGroup);
-    if (!fg || fg < 1) {
-      setError("Grupo familiar deve ser um número válido.");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
 
     try {
-      if (isEdit) {
-        await updateGuest(guestId, {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          phone: phone.trim() || undefined,
-          relationship,
-          family_group: fg,
-          confirmed,
+      if (isEdit && guestId !== undefined) {
+        await updateMutation.mutateAsync({
+          id: guestId,
+          input: {
+            first_name: values.firstName.trim(),
+            last_name: values.lastName.trim(),
+            phone: values.phone.trim() || undefined,
+            relationship: values.relationship,
+            family_group: values.familyGroup,
+            confirmed: values.confirmed,
+          },
         });
       } else {
-        await createGuest({
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          phone: phone.trim(),
-          relationship,
-          family_group: fg,
+        await createMutation.mutateAsync({
+          first_name: values.firstName.trim(),
+          last_name: values.lastName.trim(),
+          phone: values.phone.trim(),
+          relationship: values.relationship,
+          family_group: values.familyGroup,
         });
       }
-      window.location.href = "/lista-presenca";
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar");
-    } finally {
-      setSaving(false);
+
+      await navigate({ to: "/lista-presenca" });
+    } catch (submitError) {
+      setError("root", {
+        message: submitError instanceof Error ? submitError.message : "Erro ao salvar",
+      });
     }
   }
 
-  // ─── Shared input styles ───
   const inputClass =
     "w-full px-3.5 py-2.5 text-[0.88rem] border border-gold-muted/40 bg-ivory text-dark-warm placeholder:text-hint/40 outline-none focus:border-burgundy transition-colors";
   const labelClass =
     "block font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase text-hint mb-1.5";
+  const loading = isEdit && guestQuery.isLoading;
+  const saving = isSubmitting || createMutation.isPending || updateMutation.isPending;
+  const relationship = watch("relationship");
+  const confirmed = watch("confirmed");
+  const errorMessage = errors.root?.message ?? mutationError;
 
   return (
     <div className="min-h-dvh bg-parchment">
       <Header />
 
       <main className="mx-auto max-w-[640px] px-6 pt-24 pb-16">
-        {/* ─── Back Link ─── */}
-        <a
-          href="/lista-presenca"
+        <Link
+          to="/lista-presenca"
           className="inline-flex items-center gap-1.5 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase text-hint no-underline mb-6 transition-colors hover:text-burgundy"
         >
           <ArrowLeft size={15} />
           Voltar para lista
-        </a>
+        </Link>
 
-        {/* ─── Title ─── */}
         <h1 className="font-display text-[1.4rem] md:text-[1.7rem] font-bold text-dark mb-8">
           {isEdit ? "Editar Convidado" : "Novo Convidado"}
         </h1>
 
-        {/* ─── Error ─── */}
-        {error && (
+        {errorMessage && (
           <div className="mb-6 flex items-center gap-3 rounded border border-[#c25550]/30 bg-[#fef2f1] px-4 py-3">
             <AlertTriangle size={16} className="text-[#c25550] shrink-0" />
-            <span className="text-[0.82rem] text-[#7a2e2b] flex-1">
-              {error}
-            </span>
+            <span className="text-[0.82rem] text-[#7a2e2b] flex-1">{errorMessage}</span>
             <button
               type="button"
-              onClick={() => setError(null)}
+              onClick={() => clearErrors("root")}
               className="text-[#c25550]/60 hover:text-[#c25550] cursor-pointer"
             >
               <X size={14} />
@@ -140,61 +170,43 @@ export function GuestFormPage({ guestId }: Props) {
             <span className="text-[0.85rem]">Carregando dados...</span>
           </div>
         ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="border border-gold-muted/40 bg-ivory p-6 md:p-8 rounded"
-          >
-            {/* ─── Name Fields ─── */}
+          <form onSubmit={handleSubmit(onSubmit)} className="border border-gold-muted/40 bg-ivory p-6 md:p-8 rounded">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
               <div>
                 <label className={labelClass}>Nome</label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Ex: João"
-                  required
-                  className={inputClass}
-                />
+                <input type="text" placeholder="Ex: João" className={inputClass} {...register("firstName")} />
+                {errors.firstName?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.firstName.message}</p>}
               </div>
               <div>
                 <label className={labelClass}>Sobrenome</label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Ex: Silva"
-                  required
-                  className={inputClass}
-                />
+                <input type="text" placeholder="Ex: Silva" className={inputClass} {...register("lastName")} />
+                {errors.lastName?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.lastName.message}</p>}
               </div>
             </div>
 
-            {/* ─── Phone ─── */}
             <div className="mb-5">
               <label className={labelClass}>Telefone</label>
               <input
                 type="text"
-                value={phone}
-                onChange={(e) =>
-                  setPhone(e.target.value.replace(/\D/g, "").slice(0, 11))
-                }
                 placeholder="11999999999"
                 maxLength={11}
                 className={`${inputClass} font-mono tracking-wider`}
+                {...register("phone", {
+                  onChange: (event) => {
+                    event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
+                  },
+                })}
               />
-              <p className="text-[0.72rem] text-hint/60 mt-1">
-                Formato: DDD + número (11 dígitos). Opcional.
-              </p>
+              <p className="text-[0.72rem] text-hint/60 mt-1">Formato: DDD + número (11 dígitos). Opcional.</p>
+              {errors.phone?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.phone.message}</p>}
             </div>
 
-            {/* ─── Relationship ─── */}
             <div className="mb-5">
               <label className={labelClass}>Lado</label>
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setRelationship("P")}
+                  onClick={() => setValue("relationship", "P")}
                   className={`flex-1 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 border transition-all duration-200 cursor-pointer ${
                     relationship === "P"
                       ? "bg-burgundy text-gold-light border-burgundy"
@@ -205,7 +217,7 @@ export function GuestFormPage({ guestId }: Props) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setRelationship("R")}
+                  onClick={() => setValue("relationship", "R")}
                   className={`flex-1 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 border transition-all duration-200 cursor-pointer ${
                     relationship === "R"
                       ? "bg-gold text-dark border-gold"
@@ -217,33 +229,18 @@ export function GuestFormPage({ guestId }: Props) {
               </div>
             </div>
 
-            {/* ─── Family Group ─── */}
             <div className="mb-5">
               <label className={labelClass}>Grupo Familiar</label>
-              <input
-                type="number"
-                value={familyGroup}
-                onChange={(e) => setFamilyGroup(e.target.value)}
-                min={1}
-                required
-                className={`${inputClass} w-32`}
-              />
-              <p className="text-[0.72rem] text-hint/60 mt-1">
-                Número que agrupa membros da mesma família.
-              </p>
+              <input type="number" min={1} className={`${inputClass} w-32`} {...register("familyGroup", { valueAsNumber: true })} />
+              <p className="text-[0.72rem] text-hint/60 mt-1">Número que agrupa membros da mesma família.</p>
+              {errors.familyGroup?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.familyGroup.message}</p>}
             </div>
 
-            {/* ─── Confirmed (edit only) ─── */}
             {isEdit && (
               <div className="mb-6">
                 <label className="flex items-center gap-3 cursor-pointer group">
                   <div className="relative">
-                    <input
-                      type="checkbox"
-                      checked={confirmed}
-                      onChange={(e) => setConfirmed(e.target.checked)}
-                      className="sr-only peer"
-                    />
+                    <input type="checkbox" className="sr-only peer" {...register("confirmed")} />
                     <div className="w-5 h-5 border border-gold-muted/50 bg-ivory peer-checked:bg-burgundy peer-checked:border-burgundy transition-all duration-200 flex items-center justify-center">
                       {confirmed && (
                         <svg
@@ -267,14 +264,13 @@ export function GuestFormPage({ guestId }: Props) {
               </div>
             )}
 
-            {/* ─── Actions ─── */}
             <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-4 border-t border-gold-muted/20">
-              <a
-                href="/lista-presenca"
+              <Link
+                to="/lista-presenca"
                 className="inline-flex items-center justify-center font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-gold-muted/50 text-hint bg-transparent transition-all duration-200 hover:border-burgundy hover:text-burgundy no-underline cursor-pointer"
               >
                 Cancelar
-              </a>
+              </Link>
               <button
                 type="submit"
                 disabled={saving}

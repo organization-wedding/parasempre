@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import Search from "lucide-react/dist/esm/icons/search";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import Upload from "lucide-react/dist/esm/icons/upload";
@@ -14,17 +15,19 @@ import LogIn from "lucide-react/dist/esm/icons/log-in";
 import LogOut from "lucide-react/dist/esm/icons/log-out";
 import { Header } from "../components/Header";
 import {
-  listGuests,
-  deleteGuest as apiDeleteGuest,
-  importGuests as apiImportGuests,
+  clearUserRacf,
   getUserRacf,
   setUserRacf,
-  clearUserRacf,
 } from "../lib/api";
+import {
+  useDeleteGuestMutation,
+  useGuestsQuery,
+  useImportGuestsMutation,
+} from "../lib/guest-queries";
 import type { Guest, ImportResult } from "../types/guest";
 
 function formatPhone(phone: string | null): string {
-  if (!phone) return "\u2014";
+  if (!phone) return "-";
   if (phone.length === 11) {
     return `(${phone.slice(0, 2)}) ${phone.slice(2, 7)}-${phone.slice(7)}`;
   }
@@ -35,45 +38,22 @@ type RelationshipFilter = "" | "P" | "R";
 type ConfirmedFilter = "" | "yes" | "no";
 
 export function GuestListPage() {
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: guests = [], isLoading, error, refetch } = useGuestsQuery();
+  const deleteMutation = useDeleteGuestMutation();
+  const importMutation = useImportGuestsMutation();
+
+  const [uiError, setUiError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterRel, setFilterRel] = useState<RelationshipFilter>("");
   const [filterConf, setFilterConf] = useState<ConfirmedFilter>("");
-
-  // RACF state
   const [racfInput, setRacfInput] = useState("");
   const [racfSaved, setRacfSaved] = useState(!!getUserRacf());
-
-  // Delete modal
   const [deleteTarget, setDeleteTarget] = useState<Guest | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-
-  // Import modal
   const [importOpen, setImportOpen] = useState(false);
-  const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadGuests();
-  }, []);
-
-  async function loadGuests() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await listGuests();
-      setGuests(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erro ao carregar convidados",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  const effectiveError = uiError ?? (error instanceof Error ? error.message : null);
 
   const filtered = useMemo(() => {
     return guests.filter((g) => {
@@ -83,9 +63,7 @@ export function GuestListPage() {
         `${g.first_name} ${g.last_name}`.toLowerCase().includes(q) ||
         (g.phone && g.phone.includes(search));
       const matchesRel = !filterRel || g.relationship === filterRel;
-      const matchesConf =
-        !filterConf ||
-        (filterConf === "yes" ? g.confirmed : !g.confirmed);
+      const matchesConf = !filterConf || (filterConf === "yes" ? g.confirmed : !g.confirmed);
       return matchesSearch && matchesRel && matchesConf;
     });
   }, [guests, search, filterRel, filterConf]);
@@ -115,38 +93,33 @@ export function GuestListPage() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    setDeleteLoading(true);
     try {
-      await apiDeleteGuest(deleteTarget.id);
-      setGuests((prev) => prev.filter((g) => g.id !== deleteTarget.id));
+      await deleteMutation.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erro ao excluir convidado",
-      );
+    } catch (mutationError) {
+      setUiError(mutationError instanceof Error ? mutationError.message : "Erro ao excluir convidado");
       setDeleteTarget(null);
-    } finally {
-      setDeleteLoading(false);
     }
   }
 
-  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleImportFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
     if (!file) return;
-    setImportLoading(true);
+
     setImportResult(null);
     try {
-      const result = await apiImportGuests(file);
+      const result = await importMutation.mutateAsync(file);
       setImportResult(result);
-      if (result.imported > 0) loadGuests();
-    } catch (err) {
+      if (result.imported > 0) {
+        void refetch();
+      }
+    } catch (mutationError) {
       setImportResult({
         imported: 0,
-        errors: [err instanceof Error ? err.message : "Erro na importação"],
+        errors: [mutationError instanceof Error ? mutationError.message : "Erro na importação"],
         total: 0,
       });
     } finally {
-      setImportLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -154,15 +127,9 @@ export function GuestListPage() {
   function closeImportModal() {
     setImportOpen(false);
     setImportResult(null);
-    setImportLoading(false);
   }
 
-  // ─── Filter chip helper ───
-  function chip(
-    label: string,
-    active: boolean,
-    onClick: () => void,
-  ) {
+  function chip(label: string, active: boolean, onClick: () => void) {
     return (
       <button
         type="button"
@@ -183,7 +150,6 @@ export function GuestListPage() {
       <Header />
 
       <main className="mx-auto max-w-[1280px] px-6 pt-24 pb-16">
-        {/* ─── RACF Identity Bar ─── */}
         {!racfSaved ? (
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center rounded border border-gold/30 bg-ivory px-5 py-4">
             <div className="flex items-center gap-2 flex-1">
@@ -196,8 +162,8 @@ export function GuestListPage() {
               <input
                 type="text"
                 value={racfInput}
-                onChange={(e) => setRacfInput(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === "Enter" && handleSaveRacf()}
+                onChange={(event) => setRacfInput(event.target.value.toUpperCase())}
+                onKeyDown={(event) => event.key === "Enter" && handleSaveRacf()}
                 maxLength={5}
                 placeholder="RACF"
                 className="w-24 px-3 py-2 text-[0.8rem] font-mono tracking-wider border border-gold-muted/50 bg-parchment text-dark-warm placeholder:text-hint/50 outline-none focus:border-burgundy transition-colors"
@@ -215,10 +181,7 @@ export function GuestListPage() {
         ) : (
           <div className="mb-6 flex items-center gap-3 text-[0.78rem] text-hint">
             <span>
-              Identificado como{" "}
-              <strong className="font-mono tracking-wider text-burgundy">
-                {getUserRacf()}
-              </strong>
+              Identificado como <strong className="font-mono tracking-wider text-burgundy">{getUserRacf()}</strong>
             </span>
             <button
               type="button"
@@ -231,12 +194,9 @@ export function GuestListPage() {
           </div>
         )}
 
-        {/* ─── Page Header ─── */}
         <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">
-              Lista de Presença
-            </h1>
+            <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">Lista de Presença</h1>
             <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2.5">
               <span className="inline-flex items-center gap-1.5 text-[0.82rem] text-hint">
                 <Users size={14} />
@@ -258,7 +218,7 @@ export function GuestListPage() {
               type="button"
               onClick={() => {
                 if (!racfSaved) {
-                  setError("Configure sua identificação (RACF) antes de importar.");
+                  setUiError("Configure sua identificação (RACF) antes de importar.");
                   return;
                 }
                 setImportOpen(true);
@@ -268,17 +228,16 @@ export function GuestListPage() {
               <Upload size={14} />
               Importar
             </button>
-            <a
-              href="/lista-presenca/novo"
+            <Link
+              to="/lista-presenca/novo"
               className="inline-flex items-center gap-[0.4rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px"
             >
               <Plus size={14} />
               Novo Convidado
-            </a>
+            </Link>
           </div>
         </div>
 
-        {/* ─── Search & Filters ─── */}
         <div className="flex flex-col gap-3 mb-6 md:flex-row md:items-center">
           <div className="relative flex-1">
             <Search
@@ -288,7 +247,7 @@ export function GuestListPage() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar por nome ou telefone..."
               className="w-full pl-10 pr-4 py-2.5 text-[0.85rem] border border-gold-muted/40 bg-ivory text-dark-warm placeholder:text-hint/40 outline-none focus:border-burgundy transition-colors"
             />
@@ -299,12 +258,8 @@ export function GuestListPage() {
               setFilterRel("");
               setFilterConf("");
             })}
-            {chip("Noivo", filterRel === "P", () =>
-              setFilterRel(filterRel === "P" ? "" : "P"),
-            )}
-            {chip("Noiva", filterRel === "R", () =>
-              setFilterRel(filterRel === "R" ? "" : "R"),
-            )}
+            {chip("Noivo", filterRel === "P", () => setFilterRel(filterRel === "P" ? "" : "P"))}
+            {chip("Noiva", filterRel === "R", () => setFilterRel(filterRel === "R" ? "" : "R"))}
             <span className="w-px bg-gold-muted/30 mx-1 self-stretch" />
             {chip("Confirmados", filterConf === "yes", () =>
               setFilterConf(filterConf === "yes" ? "" : "yes"),
@@ -315,16 +270,13 @@ export function GuestListPage() {
           </div>
         </div>
 
-        {/* ─── Error Banner ─── */}
-        {error && (
+        {effectiveError && (
           <div className="mb-4 flex items-center gap-3 rounded border border-[#c25550]/30 bg-[#fef2f1] px-4 py-3">
             <AlertTriangle size={16} className="text-[#c25550] shrink-0" />
-            <span className="text-[0.82rem] text-[#7a2e2b] flex-1">
-              {error}
-            </span>
+            <span className="text-[0.82rem] text-[#7a2e2b] flex-1">{effectiveError}</span>
             <button
               type="button"
-              onClick={() => setError(null)}
+              onClick={() => setUiError(null)}
               className="text-[#c25550]/60 hover:text-[#c25550] cursor-pointer"
             >
               <X size={14} />
@@ -332,8 +284,7 @@ export function GuestListPage() {
           </div>
         )}
 
-        {/* ─── Content ─── */}
-        {loading ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-hint">
             <div className="w-8 h-8 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin mb-4" />
             <span className="text-[0.85rem]">Carregando convidados...</span>
@@ -341,27 +292,22 @@ export function GuestListPage() {
         ) : guests.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Users size={48} className="text-gold-muted/40 mb-4" />
-            <h2 className="font-heading text-[1rem] font-semibold text-dark-warm mb-2">
-              Nenhum convidado cadastrado
-            </h2>
+            <h2 className="font-heading text-[1rem] font-semibold text-dark-warm mb-2">Nenhum convidado cadastrado</h2>
             <p className="text-[0.88rem] text-hint max-w-[360px] mb-6">
-              Comece adicionando convidados individualmente ou importe uma lista
-              via arquivo CSV.
+              Comece adicionando convidados individualmente ou importe uma lista via arquivo CSV.
             </p>
-            <a
-              href="/lista-presenca/novo"
+            <Link
+              to="/lista-presenca/novo"
               className="inline-flex items-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 bg-burgundy text-gold-light border border-burgundy transition-all duration-300 hover:bg-burgundy-deep no-underline"
             >
               <Plus size={14} />
               Adicionar Primeiro Convidado
-            </a>
+            </Link>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Search size={36} className="text-gold-muted/40 mb-3" />
-            <p className="text-[0.88rem] text-hint">
-              Nenhum convidado encontrado com os filtros aplicados.
-            </p>
+            <p className="text-[0.88rem] text-hint">Nenhum convidado encontrado com os filtros aplicados.</p>
           </div>
         ) : (
           <>
@@ -371,29 +317,16 @@ export function GuestListPage() {
                 : `${filtered.length} de ${guests.length} convidados`}
             </div>
 
-            {/* ─── Table ─── */}
             <div className="overflow-x-auto rounded border border-gold-muted/40 bg-ivory">
               <table className="w-full min-w-[700px]">
                 <thead>
                   <tr className="border-b border-gold-muted/30 bg-parchment">
-                    <th className="text-left font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">
-                      Nome
-                    </th>
-                    <th className="text-left font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">
-                      Telefone
-                    </th>
-                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">
-                      Lado
-                    </th>
-                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">
-                      Grupo
-                    </th>
-                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">
-                      Status
-                    </th>
-                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4 w-24">
-                      Ações
-                    </th>
+                    <th className="text-left font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">Nome</th>
+                    <th className="text-left font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">Telefone</th>
+                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">Lado</th>
+                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">Grupo</th>
+                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4">Status</th>
+                    <th className="text-center font-heading text-[0.68rem] font-semibold tracking-[0.1em] uppercase text-hint py-3 px-4 w-24">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -421,9 +354,7 @@ export function GuestListPage() {
                           {guest.relationship === "P" ? "Noivo" : "Noiva"}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-center text-[0.84rem] text-hint">
-                        {guest.family_group}
-                      </td>
+                      <td className="py-3 px-4 text-center text-[0.84rem] text-hint">{guest.family_group}</td>
                       <td className="py-3 px-4 text-center">
                         {guest.confirmed ? (
                           <span className="inline-flex items-center gap-1 text-[0.72rem] font-semibold text-burgundy">
@@ -439,20 +370,19 @@ export function GuestListPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-center gap-1">
-                          <a
-                            href={`/lista-presenca/${guest.id}`}
+                          <Link
+                            to="/lista-presenca/$guestId"
+                            params={{ guestId: String(guest.id) }}
                             className="p-1.5 text-hint hover:text-burgundy transition-colors"
                             title="Editar"
                           >
                             <Pencil size={15} />
-                          </a>
+                          </Link>
                           <button
                             type="button"
                             onClick={() => {
                               if (!racfSaved) {
-                                setError(
-                                  "Configure sua identificação (RACF) antes de excluir.",
-                                );
+                                setUiError("Configure sua identificação (RACF) antes de excluir.");
                                 return;
                               }
                               setDeleteTarget(guest);
@@ -473,44 +403,37 @@ export function GuestListPage() {
         )}
       </main>
 
-      {/* ─── Delete Confirmation Modal ─── */}
       {deleteTarget && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-dark/40 backdrop-blur-[2px]"
-            onClick={() => !deleteLoading && setDeleteTarget(null)}
+            onClick={() => !deleteMutation.isPending && setDeleteTarget(null)}
           />
           <div className="relative bg-ivory border border-gold-muted/40 shadow-xl max-w-[400px] w-full p-6 anim-fade-in-up">
             <div className="flex flex-col items-center text-center">
               <div className="w-12 h-12 rounded-full bg-[#fef2f1] flex items-center justify-center mb-4">
                 <AlertTriangle size={22} className="text-[#c25550]" />
               </div>
-              <h2 className="font-heading text-[1rem] font-semibold text-dark-warm mb-2">
-                Excluir Convidado
-              </h2>
+              <h2 className="font-heading text-[1rem] font-semibold text-dark-warm mb-2">Excluir Convidado</h2>
               <p className="text-[0.88rem] text-hint mb-6">
-                Tem certeza que deseja excluir{" "}
-                <strong className="text-dark-warm">
-                  {deleteTarget.first_name} {deleteTarget.last_name}
-                </strong>
-                ? Esta ação não pode ser desfeita.
+                Tem certeza que deseja excluir <strong className="text-dark-warm">{deleteTarget.first_name} {deleteTarget.last_name}</strong>? Esta ação não pode ser desfeita.
               </p>
               <div className="flex gap-3 w-full">
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(null)}
-                  disabled={deleteLoading}
+                  disabled={deleteMutation.isPending}
                   className="flex-1 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-4 border border-gold-muted/50 text-hint bg-transparent transition-all duration-200 hover:border-burgundy hover:text-burgundy cursor-pointer disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
-                  onClick={handleDelete}
-                  disabled={deleteLoading}
+                  onClick={() => void handleDelete()}
+                  disabled={deleteMutation.isPending}
                   className="flex-1 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-4 border border-[#c25550] bg-[#c25550] text-white transition-all duration-200 hover:bg-[#a83f3b] cursor-pointer disabled:opacity-50"
                 >
-                  {deleteLoading ? "Excluindo..." : "Excluir"}
+                  {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
                 </button>
               </div>
             </div>
@@ -518,18 +441,17 @@ export function GuestListPage() {
         </div>
       )}
 
-      {/* ─── Import Modal ─── */}
       {importOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-dark/40 backdrop-blur-[2px]"
-            onClick={() => !importLoading && closeImportModal()}
+            onClick={() => !importMutation.isPending && closeImportModal()}
           />
           <div className="relative bg-ivory border border-gold-muted/40 shadow-xl max-w-[480px] w-full p-6 anim-fade-in-up">
             <button
               type="button"
               onClick={closeImportModal}
-              disabled={importLoading}
+              disabled={importMutation.isPending}
               className="absolute top-4 right-4 text-hint/60 hover:text-dark-warm transition-colors cursor-pointer"
             >
               <X size={18} />
@@ -540,41 +462,32 @@ export function GuestListPage() {
                 <FileSpreadsheet size={20} className="text-burgundy" />
               </div>
               <div>
-                <h2 className="font-heading text-[1rem] font-semibold text-dark-warm">
-                  Importar Convidados
-                </h2>
-                <p className="text-[0.75rem] text-hint">
-                  Formatos aceitos: CSV ou XLSX
-                </p>
+                <h2 className="font-heading text-[1rem] font-semibold text-dark-warm">Importar Convidados</h2>
+                <p className="text-[0.75rem] text-hint">Formatos aceitos: CSV ou XLSX</p>
               </div>
             </div>
 
             <div className="mb-5">
               <p className="text-[0.8rem] text-hint mb-3">
-                O arquivo deve conter as colunas:{" "}
-                <code className="text-[0.75rem] bg-parchment-dark/50 px-1.5 py-0.5 rounded-sm font-mono">
-                  first_name, last_name, phone, relationship, family_group
-                </code>
+                O arquivo deve conter as colunas: <code className="text-[0.75rem] bg-parchment-dark/50 px-1.5 py-0.5 rounded-sm font-mono">first_name, last_name, phone, relationship, family_group</code>
               </p>
               <label className="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-gold-muted/40 bg-parchment/50 cursor-pointer transition-colors hover:border-burgundy/40 hover:bg-parchment">
                 <Upload size={24} className="text-hint/50" />
                 <span className="text-[0.82rem] text-hint">
-                  {importLoading
-                    ? "Importando..."
-                    : "Clique para selecionar um arquivo"}
+                  {importMutation.isPending ? "Importando..." : "Clique para selecionar um arquivo"}
                 </span>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".csv,.xlsx"
-                  onChange={handleImportFile}
-                  disabled={importLoading}
+                  onChange={(event) => void handleImportFile(event)}
+                  disabled={importMutation.isPending}
                   className="hidden"
                 />
               </label>
             </div>
 
-            {importLoading && (
+            {importMutation.isPending && (
               <div className="flex items-center justify-center py-4">
                 <div className="w-6 h-6 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin" />
               </div>
@@ -583,36 +496,16 @@ export function GuestListPage() {
             {importResult && (
               <div className="border border-gold-muted/30 bg-parchment rounded p-4">
                 <div className="flex flex-wrap gap-4 mb-2">
-                  <span className="text-[0.82rem]">
-                    <strong className="text-burgundy">
-                      {importResult.imported}
-                    </strong>{" "}
-                    importados
-                  </span>
-                  <span className="text-[0.82rem]">
-                    <strong className="text-hint">
-                      {importResult.total}
-                    </strong>{" "}
-                    no arquivo
-                  </span>
+                  <span className="text-[0.82rem]"><strong className="text-burgundy">{importResult.imported}</strong> importados</span>
+                  <span className="text-[0.82rem]"><strong className="text-hint">{importResult.total}</strong> no arquivo</span>
                   {importResult.errors.length > 0 && (
-                    <span className="text-[0.82rem]">
-                      <strong className="text-[#c25550]">
-                        {importResult.errors.length}
-                      </strong>{" "}
-                      erros
-                    </span>
+                    <span className="text-[0.82rem]"><strong className="text-[#c25550]">{importResult.errors.length}</strong> erros</span>
                   )}
                 </div>
                 {importResult.errors.length > 0 && (
                   <div className="mt-2 max-h-32 overflow-y-auto">
-                    {importResult.errors.map((err, i) => (
-                      <p
-                        key={i}
-                        className="text-[0.75rem] text-[#c25550] leading-relaxed"
-                      >
-                        {err}
-                      </p>
+                    {importResult.errors.map((importError, index) => (
+                      <p key={index} className="text-[0.75rem] text-[#c25550] leading-relaxed">{importError}</p>
                     ))}
                   </div>
                 )}
