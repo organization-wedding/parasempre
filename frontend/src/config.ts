@@ -11,7 +11,8 @@ export const VENUE = {
     "https://maps.google.com/maps?q=Chacara+Fenix,Cambe,PR,Brazil&t=&z=14&ie=UTF8&iwloc=&output=embed",
 };
 
-export const API_BASE = `http://localhost:${process.env.BACKEND_PORT || "8080"}`;
+declare const __API_BASE__: string;
+export const API_BASE = __API_BASE__;
 
 export const CONTACT = {
   phone: "(43) 99607-0599",

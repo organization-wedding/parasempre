@@ -27,6 +27,7 @@ type Config struct {
 	DB         DBConfig
 	Port       string
 	CORSOrigin string
+	AppEnv     string
 	Couple     CoupleConfig
 }
 
@@ -40,8 +41,9 @@ func Load() Config {
 			Name:     getEnv("DB_NAME"),
 			SSLMode:  getEnv("DB_SSLMODE"),
 		},
-		Port:       getEnv("PORT"),
-		CORSOrigin: getEnv("CORS_ORIGIN"),
+		Port:       getEnvOrDefault("PORT", "8080"),
+		CORSOrigin: getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000"),
+		AppEnv:     getEnvOrDefault("APP_ENV", "test"),
 		Couple: CoupleConfig{
 			Groom: PersonConfig{
 				FirstName: getEnv("GROOM_FIRST_NAME"),
@@ -60,8 +62,12 @@ func Load() Config {
 }
 
 func getEnv(key string) string {
+	return os.Getenv(key)
+}
+
+func getEnvOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
 	}
-	return ""
+	return fallback
 }
