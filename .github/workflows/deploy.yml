@@ -13,7 +13,7 @@ jobs:
   build-and-push:
     name: Build & Push Images
     runs-on: ubuntu-latest
-    environment: production
+    environment: test
     permissions:
       contents: read
       packages: write
@@ -55,7 +55,7 @@ jobs:
     name: Deploy to VPS
     needs: build-and-push
     runs-on: ubuntu-latest
-    environment: production
+    environment: test
     steps:
       - name: Deploy
         uses: appleboy/ssh-action@v1
