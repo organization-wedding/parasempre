@@ -187,7 +187,15 @@ func TestHandlerCreateGuestValidationError(t *testing.T) {
 }
 
 func TestHandlerCreateGuestMissingFamilyGroup(t *testing.T) {
-	h, _ := newTestHandler()
+	h, repo := newTestHandler()
+	repo.createFn = func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+		g := sampleGuest()
+		if input.FamilyGroup == nil {
+			t.Fatal("expected auto-assigned family_group, got nil")
+		}
+		g.FamilyGroup = *input.FamilyGroup
+		return &g, nil
+	}
 
 	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
@@ -196,15 +204,8 @@ func TestHandlerCreateGuestMissingFamilyGroup(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.handleCreate(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var resp map[string]string
-	json.NewDecoder(w.Body).Decode(&resp)
-	expected := "family_group is required and must be greater than 0"
-	if resp["error"] != expected {
-		t.Fatalf("expected error %q, got %q", expected, resp["error"])
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

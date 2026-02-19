@@ -9,13 +9,15 @@ import (
 
 // mockRepository implements Repository with function fields for easy stubbing.
 type mockRepository struct {
-	listFn      func(ctx context.Context) ([]Guest, error)
-	getByID     func(ctx context.Context, id int64) (*Guest, error)
-	getByPhone  func(ctx context.Context, phone string) (*Guest, error)
-	getByNameFn func(ctx context.Context, firstName, lastName string) (*Guest, error)
-	createFn    func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
-	updateFn    func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
-	deleteFn    func(ctx context.Context, id int64) error
+	listFn               func(ctx context.Context) ([]Guest, error)
+	getByID              func(ctx context.Context, id int64) (*Guest, error)
+	getByPhone           func(ctx context.Context, phone string) (*Guest, error)
+	getByNameFn          func(ctx context.Context, firstName, lastName string) (*Guest, error)
+	familyGroupHasUserFn func(ctx context.Context, familyGroup int64) (bool, error)
+	getNextFamilyGroupFn func(ctx context.Context) (int64, error)
+	createFn             func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
+	updateFn             func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
+	deleteFn             func(ctx context.Context, id int64) error
 }
 
 func (m *mockRepository) List(ctx context.Context) ([]Guest, error) {
@@ -35,6 +37,20 @@ func (m *mockRepository) GetByName(ctx context.Context, firstName, lastName stri
 		return m.getByNameFn(ctx, firstName, lastName)
 	}
 	return nil, nil
+}
+
+func (m *mockRepository) FamilyGroupHasUser(ctx context.Context, familyGroup int64) (bool, error) {
+	if m.familyGroupHasUserFn != nil {
+		return m.familyGroupHasUserFn(ctx, familyGroup)
+	}
+	return true, nil
+}
+
+func (m *mockRepository) GetNextFamilyGroup(ctx context.Context) (int64, error) {
+	if m.getNextFamilyGroupFn != nil {
+		return m.getNextFamilyGroupFn(ctx)
+	}
+	return 1, nil
 }
 
 func (m *mockRepository) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
@@ -280,7 +296,6 @@ func TestServiceCreate(t *testing.T) {
 				Phone:        "11988888888",
 				Relationship: "R",
 			},
-			wantErr: "family_group is required and must be greater than 0",
 		},
 		{
 			name: "family_group zero",
@@ -291,7 +306,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(0),
 			},
-			wantErr: "family_group is required and must be greater than 0",
+			wantErr: "family_group must be greater than 0",
 		},
 		{
 			name: "family_group negative",
@@ -302,7 +317,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(-1),
 			},
-			wantErr: "family_group is required and must be greater than 0",
+			wantErr: "family_group must be greater than 0",
 		},
 	}
 
@@ -359,6 +374,70 @@ func TestServiceCreateDuplicateName(t *testing.T) {
 		t.Fatal("expected duplicate name error, got nil")
 	}
 	if err.Error() != "a guest named 'João Silva' already exists" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestServiceCreateFamilyGroupWithoutUser(t *testing.T) {
+	repo := &mockRepository{
+		getByNameFn: func(ctx context.Context, firstName, lastName string) (*Guest, error) {
+			return nil, nil
+		},
+		getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
+			return nil, nil
+		},
+		familyGroupHasUserFn: func(ctx context.Context, familyGroup int64) (bool, error) {
+			return false, nil
+		},
+	}
+	svc := NewService(repo, alwaysExistsChecker())
+
+	_, err := svc.Create(context.Background(), CreateGuestInput{
+		FirstName:    "Maria",
+		LastName:     "Santos",
+		Phone:        "11988888888",
+		Relationship: "R",
+		FamilyGroup:  int64Ptr(10),
+	}, "TST01")
+
+	if err == nil {
+		t.Fatal("expected family_group validation error, got nil")
+	}
+	if err.Error() != "family_group must belong to an existing user" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestServiceCreateAutoAssignFamilyGroup(t *testing.T) {
+	repo := &mockRepository{
+		getByNameFn: func(ctx context.Context, firstName, lastName string) (*Guest, error) {
+			return nil, nil
+		},
+		getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
+			return nil, nil
+		},
+		getNextFamilyGroupFn: func(ctx context.Context) (int64, error) {
+			return 42, nil
+		},
+		createFn: func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+			if input.FamilyGroup == nil || *input.FamilyGroup != 42 {
+				t.Fatalf("expected family_group to be auto-assigned as 42, got %+v", input.FamilyGroup)
+			}
+			g := sampleGuest()
+			g.FamilyGroup = 42
+			return &g, nil
+		},
+	}
+	svc := NewService(repo, alwaysExistsChecker())
+
+	_, err := svc.Create(context.Background(), CreateGuestInput{
+		FirstName:    "Maria",
+		LastName:     "Santos",
+		Phone:        "11988888888",
+		Relationship: "R",
+	}, "TST01")
+
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

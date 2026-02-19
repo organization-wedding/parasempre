@@ -83,6 +83,25 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 		}
 	}
 
+	if input.FamilyGroup != nil {
+		hasUserInFamilyGroup, err := s.repo.FamilyGroupHasUser(ctx, *input.FamilyGroup)
+		if err != nil {
+			slog.Error("guest.service create: family_group user lookup failed", "family_group", *input.FamilyGroup, "error", err)
+			return nil, fmt.Errorf("failed to validate family_group: %w", err)
+		}
+		if !hasUserInFamilyGroup {
+			slog.Warn("guest.service create: family_group has no user", "family_group", *input.FamilyGroup)
+			return nil, errors.New("family_group must belong to an existing user")
+		}
+	} else {
+		nextFamilyGroup, err := s.repo.GetNextFamilyGroup(ctx)
+		if err != nil {
+			slog.Error("guest.service create: failed to get next family_group", "error", err)
+			return nil, fmt.Errorf("failed to generate family_group: %w", err)
+		}
+		input.FamilyGroup = &nextFamilyGroup
+	}
+
 	guest, err := s.repo.Create(ctx, input, userRACF)
 	if err != nil {
 		slog.Error("guest.service create: repository create failed", "user_racf", userRACF, "error", err)
@@ -178,8 +197,8 @@ func validateCreate(input CreateGuestInput) error {
 	if input.Relationship != "P" && input.Relationship != "R" {
 		return errors.New("relationship must be 'P' or 'R'")
 	}
-	if input.FamilyGroup == nil || *input.FamilyGroup <= 0 {
-		return errors.New("family_group is required and must be greater than 0")
+	if input.FamilyGroup != nil && *input.FamilyGroup <= 0 {
+		return errors.New("family_group must be greater than 0")
 	}
 	return nil
 }
