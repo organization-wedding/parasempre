@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +19,7 @@ func Connect(ctx context.Context, dbCfg config.DBConfig) (*pgxpool.Pool, error) 
 
 	pgxCfg, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
+		slog.Error("database connect: parse config failed", "error", err)
 		return nil, fmt.Errorf("unable to parse database config: %w", err)
 	}
 
@@ -28,13 +30,16 @@ func Connect(ctx context.Context, dbCfg config.DBConfig) (*pgxpool.Pool, error) 
 
 	pool, err := pgxpool.NewWithConfig(ctx, pgxCfg)
 	if err != nil {
+		slog.Error("database connect: create pool failed", "error", err)
 		return nil, fmt.Errorf("unable to create connection pool: %w", err)
 	}
 
 	if err := pool.Ping(ctx); err != nil {
+		slog.Error("database connect: ping failed", "error", err)
 		pool.Close()
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
+	slog.Info("database connect: pool ready", "host", dbCfg.Host, "db", dbCfg.Name)
 	return pool, nil
 }

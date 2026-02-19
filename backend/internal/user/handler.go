@@ -3,6 +3,7 @@ package user
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 )
 
@@ -22,6 +23,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var input RegisterInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		slog.Error("register: invalid request body", "error", err)
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
@@ -29,17 +31,21 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	u, err := h.svc.Register(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyRegistered) {
+			slog.Warn("register: user already registered", "phone", input.Phone)
 			writeError(w, http.StatusConflict, "user already registered for this guest")
 			return
 		}
 		if errors.Is(err, ErrGuestNotFound) {
+			slog.Warn("register: guest not found", "phone", input.Phone)
 			writeError(w, http.StatusNotFound, "no guest found with this phone")
 			return
 		}
 		if errors.Is(err, ErrURACFTaken) {
+			slog.Warn("register: uracf already in use", "uracf", input.URACF)
 			writeError(w, http.StatusConflict, "uracf already in use")
 			return
 		}
+		slog.Error("register: failed to register user", "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -51,6 +57,7 @@ func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.svc.CheckByPhone(r.Context(), phone)
 	if err != nil {
+		slog.Warn("check: failed to check phone", "phone", phone, "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
