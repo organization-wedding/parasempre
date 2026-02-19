@@ -13,6 +13,7 @@ jobs:
   build-and-push:
     name: Build & Push Images
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
       packages: write
@@ -56,18 +57,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Copy compose file to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
-          source: docker-compose.prod.yml
-          target: /opt/parasempre
-
       - name: Deploy
         uses: appleboy/ssh-action@v1
         with:
@@ -76,12 +65,31 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT }}
           script: |
+            mkdir -p /opt/parasempre
             cd /opt/parasempre
+
+            cat > docker-compose.prod.yml <<'COMPOSEEOF'
+            services:
+              backend:
+                image: ghcr.io/organization-wedding/parasempre-backend:latest
+                ports:
+                  - "${PORT:-8080}:${PORT:-8080}"
+                env_file: .env
+                restart: unless-stopped
+
+              frontend:
+                image: ghcr.io/organization-wedding/parasempre-frontend:latest
+                ports:
+                  - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
+                depends_on:
+                  - backend
+                restart: unless-stopped
+            COMPOSEEOF
 
             cat > .env <<'ENVEOF'
             PORT=${{ secrets.PORT }}
-            CORS_ORIGIN=http://${{ secrets.VPS_HOST }}:${{ secrets.FRONTEND_PORT }}
             FRONTEND_PORT=${{ secrets.FRONTEND_PORT }}
+            CORS_ORIGIN=http://${{ secrets.VPS_HOST }}:${{ secrets.FRONTEND_PORT }}
             APP_ENV=production
             DB_HOST=${{ secrets.DB_HOST }}
             DB_PORT=${{ secrets.DB_PORT }}
