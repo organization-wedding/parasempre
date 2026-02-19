@@ -30,13 +30,15 @@ func (m *mockUserRepo) Create(ctx context.Context, u *User) (*User, error) {
 
 // mockGuestRepo implements guest.Repository with function fields.
 type mockGuestRepo struct {
-	listFn     func(ctx context.Context) ([]guest.Guest, error)
-	getByID    func(ctx context.Context, id int64) (*guest.Guest, error)
-	getByPhone func(ctx context.Context, phone string) (*guest.Guest, error)
-	getByName  func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
-	createFn   func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
-	updateFn   func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
-	deleteFn   func(ctx context.Context, id int64) error
+	listFn               func(ctx context.Context) ([]guest.Guest, error)
+	getByID              func(ctx context.Context, id int64) (*guest.Guest, error)
+	getByPhone           func(ctx context.Context, phone string) (*guest.Guest, error)
+	getByName            func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
+	familyGroupHasUserFn func(ctx context.Context, familyGroup int64) (bool, error)
+	getNextFamilyGroupFn func(ctx context.Context) (int64, error)
+	createFn             func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
+	updateFn             func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
+	deleteFn             func(ctx context.Context, id int64) error
 }
 
 func (m *mockGuestRepo) List(ctx context.Context) ([]guest.Guest, error) {
@@ -60,6 +62,20 @@ func (m *mockGuestRepo) GetByName(ctx context.Context, firstName, lastName strin
 
 func (m *mockGuestRepo) Create(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error) {
 	return m.createFn(ctx, input, userRACF)
+}
+
+func (m *mockGuestRepo) FamilyGroupHasUser(ctx context.Context, familyGroup int64) (bool, error) {
+	if m.familyGroupHasUserFn != nil {
+		return m.familyGroupHasUserFn(ctx, familyGroup)
+	}
+	return true, nil
+}
+
+func (m *mockGuestRepo) GetNextFamilyGroup(ctx context.Context) (int64, error) {
+	if m.getNextFamilyGroupFn != nil {
+		return m.getNextFamilyGroupFn(ctx)
+	}
+	return 1, nil
 }
 
 func (m *mockGuestRepo) Update(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error) {

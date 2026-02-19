@@ -93,6 +93,35 @@ func (r *PostgresRepository) GetByName(ctx context.Context, firstName, lastName 
 	return &g, nil
 }
 
+func (r *PostgresRepository) FamilyGroupHasUser(ctx context.Context, familyGroup int64) (bool, error) {
+	var hasUser bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1
+			FROM users u
+			JOIN guests g ON g.id = u.guest_id
+			WHERE g.family_group = $1
+		)`, familyGroup).
+		Scan(&hasUser)
+	if err != nil {
+		slog.Error("guest.repo family_group_has_user: query failed", "family_group", familyGroup, "error", err)
+		return false, err
+	}
+
+	return hasUser, nil
+}
+
+func (r *PostgresRepository) GetNextFamilyGroup(ctx context.Context) (int64, error) {
+	var nextFamilyGroup int64
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE(MAX(family_group), 0) + 1 FROM guests`).Scan(&nextFamilyGroup)
+	if err != nil {
+		slog.Error("guest.repo get_next_family_group: query failed", "error", err)
+		return 0, err
+	}
+
+	return nextFamilyGroup, nil
+}
+
 func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
 	var phone *string
 	if input.Phone != "" {
