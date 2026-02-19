@@ -34,6 +34,7 @@ var racfRegex = regexp.MustCompile(`^[A-Za-z0-9]{5}$`)
 func getUserRACF(r *http.Request) (string, error) {
 	racf := strings.TrimSpace(r.Header.Get("user-racf"))
 	if racf == "" {
+		slog.Error("auth: missing user-racf header")
 		return "", fmt.Errorf("header user-racf is required")
 	}
 	if !racfRegex.MatchString(racf) {
@@ -49,6 +50,7 @@ func parseID(r *http.Request) (int64, error) {
 func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	guests, err := h.svc.List(r.Context())
 	if err != nil {
+		slog.Error("list: failed to list guests", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list guests")
 		return
 	}
@@ -58,6 +60,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
+		slog.Warn("get: invalid guest ID", "error", err)
 		writeError(w, http.StatusBadRequest, "invalid guest ID")
 		return
 	}
@@ -65,9 +68,11 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	guest, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
+			slog.Warn("get: guest not found", "id", id)
 			writeError(w, http.StatusNotFound, "guest not found")
 			return
 		}
+		slog.Error("get: failed to get guest", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get guest")
 		return
 	}
@@ -77,18 +82,21 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	userRACF, err := getUserRACF(r)
 	if err != nil {
+		slog.Error("create: failed to get user RACF", "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var input CreateGuestInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		slog.Error("create: invalid request body", "error", err)
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	guest, err := h.svc.Create(r.Context(), input, userRACF)
 	if err != nil {
+		slog.Error("create: failed to create guest", "user_racf", userRACF, "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -98,18 +106,21 @@ func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	userRACF, err := getUserRACF(r)
 	if err != nil {
+		slog.Error("update: failed to get user RACF", "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	id, err := parseID(r)
 	if err != nil {
+		slog.Warn("update: invalid guest ID", "error", err)
 		writeError(w, http.StatusBadRequest, "invalid guest ID")
 		return
 	}
 
 	var input UpdateGuestInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		slog.Error("update: invalid request body", "id", id, "error", err)
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
@@ -117,9 +128,11 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	guest, err := h.svc.Update(r.Context(), id, input, userRACF)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
+			slog.Warn("update: guest not found", "id", id)
 			writeError(w, http.StatusNotFound, "guest not found")
 			return
 		}
+		slog.Error("update: failed to update guest", "id", id, "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -129,6 +142,7 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	userRACF, err := getUserRACF(r)
 	if err != nil {
+		slog.Error("delete: failed to get user RACF", "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -136,6 +150,7 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	id, err := parseID(r)
 	if err != nil {
+		slog.Warn("delete: invalid guest ID", "error", err)
 		writeError(w, http.StatusBadRequest, "invalid guest ID")
 		return
 	}
@@ -143,9 +158,11 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	err = h.svc.Delete(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
+			slog.Warn("delete: guest not found", "id", id)
 			writeError(w, http.StatusNotFound, "guest not found")
 			return
 		}
+		slog.Error("delete: failed to delete guest", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete guest")
 		return
 	}
@@ -155,12 +172,14 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
 	userRACF, err := getUserRACF(r)
 	if err != nil {
+		slog.Error("import: failed to get user RACF", "error", err)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
+		slog.Error("import: missing file", "error", err)
 		writeError(w, http.StatusBadRequest, "file is required")
 		return
 	}
@@ -175,11 +194,13 @@ func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
 	case ".xlsx":
 		guests, err = ParseXLSX(file)
 	default:
+		slog.Warn("import: unsupported file format", "extension", ext)
 		writeError(w, http.StatusBadRequest, "unsupported file format: use .csv or .xlsx")
 		return
 	}
 
 	if err != nil {
+		slog.Error("import: failed to parse file", "extension", ext, "error", err)
 		writeError(w, http.StatusBadRequest, "failed to parse file: "+err.Error())
 		return
 	}

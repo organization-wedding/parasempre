@@ -31,39 +31,49 @@ var (
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (*User, error) {
 	if input.Phone == "" {
+		slog.Warn("user.service register: missing phone")
 		return nil, errors.New("phone is required")
 	}
 	if !phoneRegex.MatchString(input.Phone) {
+		slog.Warn("user.service register: invalid phone", "phone", input.Phone)
 		return nil, errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
 	}
 	if input.URACF == "" {
+		slog.Warn("user.service register: missing uracf", "phone", input.Phone)
 		return nil, errors.New("uracf is required")
 	}
 	if !uracfRegex.MatchString(input.URACF) {
+		slog.Warn("user.service register: invalid uracf", "uracf", input.URACF)
 		return nil, errors.New("uracf must be exactly 5 uppercase alphanumeric characters")
 	}
 
 	g, err := s.guestRepo.GetByPhone(ctx, input.Phone)
 	if err != nil {
+		slog.Error("user.service register: guest lookup failed", "phone", input.Phone, "error", err)
 		return nil, err
 	}
 	if g == nil {
+		slog.Warn("user.service register: guest not found", "phone", input.Phone)
 		return nil, ErrGuestNotFound
 	}
 
 	existing, err := s.repo.GetByGuestID(ctx, g.ID)
 	if err != nil {
+		slog.Error("user.service register: guest user lookup failed", "guest_id", g.ID, "error", err)
 		return nil, err
 	}
 	if existing != nil {
+		slog.Warn("user.service register: guest already registered", "guest_id", g.ID)
 		return nil, ErrAlreadyRegistered
 	}
 
 	existingByURACF, err := s.repo.GetByURACF(ctx, input.URACF)
 	if err != nil {
+		slog.Error("user.service register: uracf lookup failed", "uracf", input.URACF, "error", err)
 		return nil, err
 	}
 	if existingByURACF != nil {
+		slog.Warn("user.service register: uracf taken", "uracf", input.URACF)
 		return nil, ErrURACFTaken
 	}
 
@@ -73,33 +83,46 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*User, err
 		URACF:   input.URACF,
 	}
 
-	return s.repo.Create(ctx, u)
+	created, err := s.repo.Create(ctx, u)
+	if err != nil {
+		slog.Error("user.service register: create failed", "guest_id", g.ID, "uracf", input.URACF, "error", err)
+		return nil, err
+	}
+	slog.Info("user.service register: user created", "id", created.ID, "guest_id", g.ID)
+	return created, nil
 }
 
 func (s *Service) CheckByPhone(ctx context.Context, phone string) (*CheckResponse, error) {
 	if phone == "" {
+		slog.Warn("user.service check: missing phone")
 		return nil, errors.New("phone is required")
 	}
 	if !phoneRegex.MatchString(phone) {
+		slog.Warn("user.service check: invalid phone", "phone", phone)
 		return nil, errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
 	}
 
 	g, err := s.guestRepo.GetByPhone(ctx, phone)
 	if err != nil {
+		slog.Error("user.service check: guest lookup failed", "phone", phone, "error", err)
 		return nil, err
 	}
 	if g == nil {
+		slog.Info("user.service check: guest not found", "phone", phone)
 		return &CheckResponse{Exists: false}, nil
 	}
 
 	u, err := s.repo.GetByGuestID(ctx, g.ID)
 	if err != nil {
+		slog.Error("user.service check: user lookup failed", "guest_id", g.ID, "error", err)
 		return nil, err
 	}
 	if u == nil {
+		slog.Info("user.service check: no user for guest", "guest_id", g.ID)
 		return &CheckResponse{Exists: false}, nil
 	}
 
+	slog.Info("user.service check: user exists", "guest_id", g.ID, "role", u.Role)
 	return &CheckResponse{Exists: true, Role: u.Role}, nil
 }
 
