@@ -42,7 +42,7 @@ func Load() Config {
 			SSLMode:  getEnv("DB_SSLMODE"),
 		},
 		Port:       getEnvOrDefault("PORT", "8080"),
-		CORSOrigin: getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000"),
+		CORSOrigin: getEnvOrDefault("CORS_ORIGIN", "http://localhost:"+getEnvOrDefault("FRONTEND_PORT", "3000")),
 		AppEnv:     getEnvOrDefault("APP_ENV", "test"),
 		Couple: CoupleConfig{
 			Groom: PersonConfig{

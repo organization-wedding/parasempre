@@ -2,6 +2,7 @@ import { serve } from "bun";
 import index from "./index.html";
 
 const server = serve({
+  port: parseInt(process.env.FRONTEND_PORT || "3000"),
   routes: {
     "/*": index,
   },
