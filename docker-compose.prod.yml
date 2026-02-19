@@ -1,13 +1,13 @@
 services:
   backend:
-    build: ./backend
+    image: ghcr.io/organization-wedding/parasempre-backend:latest
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     env_file: .env
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/organization-wedding/parasempre-frontend:latest
     ports:
       - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
     depends_on:
