@@ -81,6 +81,7 @@ jobs:
                 image: ghcr.io/organization-wedding/parasempre-frontend:latest
                 ports:
                   - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
+                env_file: .env
                 depends_on:
                   - backend
                 restart: unless-stopped
