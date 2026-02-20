@@ -13,7 +13,7 @@ type mockRepository struct {
 	getByID              func(ctx context.Context, id int64) (*Guest, error)
 	getByPhone           func(ctx context.Context, phone string) (*Guest, error)
 	getByNameFn          func(ctx context.Context, firstName, lastName string) (*Guest, error)
-	familyGroupHasUserFn func(ctx context.Context, familyGroup int64) (bool, error)
+	familyGroupExistsFn  func(ctx context.Context, familyGroup int64) (bool, error)
 	getNextFamilyGroupFn func(ctx context.Context) (int64, error)
 	createFn             func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
 	updateFn             func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
@@ -39,9 +39,9 @@ func (m *mockRepository) GetByName(ctx context.Context, firstName, lastName stri
 	return nil, nil
 }
 
-func (m *mockRepository) FamilyGroupHasUser(ctx context.Context, familyGroup int64) (bool, error) {
-	if m.familyGroupHasUserFn != nil {
-		return m.familyGroupHasUserFn(ctx, familyGroup)
+func (m *mockRepository) FamilyGroupExists(ctx context.Context, familyGroup int64) (bool, error) {
+	if m.familyGroupExistsFn != nil {
+		return m.familyGroupExistsFn(ctx, familyGroup)
 	}
 	return true, nil
 }
@@ -378,7 +378,7 @@ func TestServiceCreateDuplicateName(t *testing.T) {
 	}
 }
 
-func TestServiceCreateFamilyGroupWithoutUser(t *testing.T) {
+func TestServiceCreateFamilyGroupNotFound(t *testing.T) {
 	repo := &mockRepository{
 		getByNameFn: func(ctx context.Context, firstName, lastName string) (*Guest, error) {
 			return nil, nil
@@ -386,7 +386,7 @@ func TestServiceCreateFamilyGroupWithoutUser(t *testing.T) {
 		getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
 			return nil, nil
 		},
-		familyGroupHasUserFn: func(ctx context.Context, familyGroup int64) (bool, error) {
+		familyGroupExistsFn: func(ctx context.Context, familyGroup int64) (bool, error) {
 			return false, nil
 		},
 	}
@@ -403,7 +403,7 @@ func TestServiceCreateFamilyGroupWithoutUser(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected family_group validation error, got nil")
 	}
-	if err.Error() != "family_group must belong to an existing user" {
+	if err.Error() != "family_group not found" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

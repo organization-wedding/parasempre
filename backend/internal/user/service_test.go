@@ -34,7 +34,7 @@ type mockGuestRepo struct {
 	getByID              func(ctx context.Context, id int64) (*guest.Guest, error)
 	getByPhone           func(ctx context.Context, phone string) (*guest.Guest, error)
 	getByName            func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
-	familyGroupHasUserFn func(ctx context.Context, familyGroup int64) (bool, error)
+	familyGroupExistsFn  func(ctx context.Context, familyGroup int64) (bool, error)
 	getNextFamilyGroupFn func(ctx context.Context) (int64, error)
 	createFn             func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
 	updateFn             func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
@@ -64,9 +64,9 @@ func (m *mockGuestRepo) Create(ctx context.Context, input guest.CreateGuestInput
 	return m.createFn(ctx, input, userRACF)
 }
 
-func (m *mockGuestRepo) FamilyGroupHasUser(ctx context.Context, familyGroup int64) (bool, error) {
-	if m.familyGroupHasUserFn != nil {
-		return m.familyGroupHasUserFn(ctx, familyGroup)
+func (m *mockGuestRepo) FamilyGroupExists(ctx context.Context, familyGroup int64) (bool, error) {
+	if m.familyGroupExistsFn != nil {
+		return m.familyGroupExistsFn(ctx, familyGroup)
 	}
 	return true, nil
 }

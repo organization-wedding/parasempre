@@ -93,22 +93,17 @@ func (r *PostgresRepository) GetByName(ctx context.Context, firstName, lastName 
 	return &g, nil
 }
 
-func (r *PostgresRepository) FamilyGroupHasUser(ctx context.Context, familyGroup int64) (bool, error) {
-	var hasUser bool
+func (r *PostgresRepository) FamilyGroupExists(ctx context.Context, familyGroup int64) (bool, error) {
+	var exists bool
 	err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS(
-			SELECT 1
-			FROM users u
-			JOIN guests g ON g.id = u.guest_id
-			WHERE g.family_group = $1
-		)`, familyGroup).
-		Scan(&hasUser)
+		`SELECT EXISTS(SELECT 1 FROM guests WHERE family_group = $1)`, familyGroup).
+		Scan(&exists)
 	if err != nil {
-		slog.Error("guest.repo family_group_has_user: query failed", "family_group", familyGroup, "error", err)
+		slog.Error("guest.repo family_group_exists: query failed", "family_group", familyGroup, "error", err)
 		return false, err
 	}
 
-	return hasUser, nil
+	return exists, nil
 }
 
 func (r *PostgresRepository) GetNextFamilyGroup(ctx context.Context) (int64, error) {

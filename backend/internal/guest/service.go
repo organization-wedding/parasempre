@@ -84,14 +84,14 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 	}
 
 	if input.FamilyGroup != nil {
-		hasUserInFamilyGroup, err := s.repo.FamilyGroupHasUser(ctx, *input.FamilyGroup)
+		familyGroupExists, err := s.repo.FamilyGroupExists(ctx, *input.FamilyGroup)
 		if err != nil {
-			slog.Error("guest.service create: family_group user lookup failed", "family_group", *input.FamilyGroup, "error", err)
+			slog.Error("guest.service create: family_group lookup failed", "family_group", *input.FamilyGroup, "error", err)
 			return nil, fmt.Errorf("failed to validate family_group: %w", err)
 		}
-		if !hasUserInFamilyGroup {
-			slog.Warn("guest.service create: family_group has no user", "family_group", *input.FamilyGroup)
-			return nil, errors.New("family_group must belong to an existing user")
+		if !familyGroupExists {
+			slog.Warn("guest.service create: family_group not found", "family_group", *input.FamilyGroup)
+			return nil, errors.New("family_group not found")
 		}
 	} else {
 		nextFamilyGroup, err := s.repo.GetNextFamilyGroup(ctx)
