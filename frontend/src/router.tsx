@@ -8,10 +8,16 @@ import { LandingPage } from "./pages/LandingPage";
 import { GuestListPage } from "./pages/GuestListPage";
 import { GuestFormPage } from "./pages/GuestFormPage";
 import { UnderConstruction } from "./pages/UnderConstruction";
+import { ImpersonationModal } from "./components/ImpersonationModal";
 import "./index.css";
 
 function RootLayout() {
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <ImpersonationModal />
+    </>
+  );
 }
 
 const rootRoute = createRootRoute({
@@ -24,27 +30,27 @@ const homeRoute = createRoute({
   component: LandingPage,
 });
 
-const guestListRoute = createRoute({
+const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/lista-presenca",
+  path: "/dashboard",
   component: GuestListPage,
 });
 
 const guestCreateRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/lista-presenca/novo",
+  path: "/dashboard/novo",
   component: GuestFormPage,
 });
 
 const guestEditRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/lista-presenca/$guestId",
+  path: "/dashboard/$guestId",
   component: GuestEditRoute,
 });
 
-const fallbackRoute = createRoute({
+const guestListRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "*",
+  path: "/lista-presenca",
   component: UnderConstruction,
 });
 
@@ -55,14 +61,15 @@ function GuestEditRoute() {
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
-  guestListRoute,
+  dashboardRoute,
   guestCreateRoute,
   guestEditRoute,
-  fallbackRoute,
+  guestListRoute,
 ]);
 
 export const router = createRouter({
   routeTree,
+  defaultNotFoundComponent: UnderConstruction,
 });
 
 declare module "@tanstack/react-router" {

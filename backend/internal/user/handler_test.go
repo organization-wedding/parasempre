@@ -16,7 +16,7 @@ func newTestHandler() (*Handler, *mockUserRepo, *mockGuestRepo) {
 	userRepo := &mockUserRepo{}
 	guestRepo := &mockGuestRepo{}
 	svc := NewService(userRepo, guestRepo)
-	return NewHandler(svc), userRepo, guestRepo
+	return NewHandler(svc, "test"), userRepo, guestRepo
 }
 
 func TestHandlerRegisterSuccess(t *testing.T) {

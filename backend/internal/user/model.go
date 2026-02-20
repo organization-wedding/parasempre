@@ -20,3 +20,10 @@ type CheckResponse struct {
 	Exists bool   `json:"exists"`
 	Role   string `json:"role,omitempty"`
 }
+
+type UserListItem struct {
+	URACF     string `json:"uracf"`
+	Role      string `json:"role"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}

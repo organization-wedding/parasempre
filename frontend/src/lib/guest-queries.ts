@@ -61,6 +61,18 @@ export function useDeleteGuestMutation() {
   });
 }
 
+export function useDeleteGuestsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      await Promise.all(ids.map((id) => deleteGuest(id)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all });
+    },
+  });
+}
+
 export function useImportGuestsMutation() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -14,6 +14,7 @@ type mockUserRepo struct {
 	getByURACF   func(ctx context.Context, uracf string) (*User, error)
 	getByGuestID func(ctx context.Context, guestID int64) (*User, error)
 	createFn     func(ctx context.Context, u *User) (*User, error)
+	listFn       func(ctx context.Context) ([]UserListItem, error)
 }
 
 func (m *mockUserRepo) GetByURACF(ctx context.Context, uracf string) (*User, error) {
@@ -26,6 +27,13 @@ func (m *mockUserRepo) GetByGuestID(ctx context.Context, guestID int64) (*User, 
 
 func (m *mockUserRepo) Create(ctx context.Context, u *User) (*User, error) {
 	return m.createFn(ctx, u)
+}
+
+func (m *mockUserRepo) List(ctx context.Context) ([]UserListItem, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx)
+	}
+	return []UserListItem{}, nil
 }
 
 // mockGuestRepo implements guest.Repository with function fields.

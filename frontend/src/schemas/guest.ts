@@ -23,7 +23,7 @@ export const createGuestInputSchema = z.object({
   last_name: z.string().trim().min(1, "Nome e sobrenome são obrigatórios."),
   phone: z.string(),
   relationship: relationshipSchema,
-  family_group: z.number().int().min(1, "Grupo familiar deve ser um número válido."),
+  family_group: z.number().int().min(1).optional(),
 });
 
 export const updateGuestInputSchema = z

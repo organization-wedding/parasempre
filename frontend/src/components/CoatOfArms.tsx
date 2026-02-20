@@ -6,8 +6,6 @@ export function CoatOfArms({ className = "" }: { className?: string }) {
       src={brasaoImg}
       alt="Brasão Para Sempre"
       className={className}
-      width={120}
-      height={155}
     />
   );
 }
