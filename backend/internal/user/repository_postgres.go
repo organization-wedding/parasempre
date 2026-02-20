@@ -46,6 +46,36 @@ func (r *PostgresRepository) GetByGuestID(ctx context.Context, guestID int64) (*
 	return &u, nil
 }
 
+func (r *PostgresRepository) List(ctx context.Context) ([]UserListItem, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.uracf, u.role,
+		       COALESCE(g.first_name, '') AS first_name,
+		       COALESCE(g.last_name,  '') AS last_name
+		FROM users u
+		LEFT JOIN guests g ON g.id = u.guest_id
+		ORDER BY
+			CASE u.role WHEN 'groom' THEN 0 WHEN 'bride' THEN 1 ELSE 2 END,
+			u.uracf
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []UserListItem
+	for rows.Next() {
+		var item UserListItem
+		if err := rows.Scan(&item.URACF, &item.Role, &item.FirstName, &item.LastName); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if items == nil {
+		items = []UserListItem{}
+	}
+	return items, rows.Err()
+}
+
 func (r *PostgresRepository) Create(ctx context.Context, u *User) (*User, error) {
 	var created User
 	err := r.pool.QueryRow(ctx,

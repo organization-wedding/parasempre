@@ -41,7 +41,7 @@ func main() {
 	guestHandler := guest.NewHandler(guestSvc)
 
 	userSvc := user.NewService(userRepo, guestRepo)
-	userHandler := user.NewHandler(userSvc)
+	userHandler := user.NewHandler(userSvc, cfg.AppEnv)
 
 	userSvc.SeedCouple(ctx,
 		user.CoupleData{URACF: cfg.Couple.Groom.URACF},

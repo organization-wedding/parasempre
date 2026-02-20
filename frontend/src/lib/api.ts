@@ -21,10 +21,12 @@ export function getUserRacf(): string | null {
 
 export function setUserRacf(racf: string) {
   localStorage.setItem(RACF_KEY, racf.toUpperCase());
+  window.dispatchEvent(new Event("racf-changed"));
 }
 
 export function clearUserRacf() {
   localStorage.removeItem(RACF_KEY);
+  window.dispatchEvent(new Event("racf-changed"));
 }
 
 function authHeaders(): Record<string, string> {
@@ -50,6 +52,36 @@ async function handleResponse<T>(res: Response, schema: { parse: (value: unknown
     throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
   }
   return schema.parse(data);
+}
+
+export interface UserListItem {
+  uracf: string;
+  role: string;
+  first_name: string;
+  last_name: string;
+}
+
+export async function listUsers(): Promise<UserListItem[]> {
+  const res = await fetch(`${API_BASE}/api/users`);
+  if (!res.ok) {
+    const data = (await res.json()) as { error?: string };
+    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
+  }
+  return res.json() as Promise<UserListItem[]>;
+}
+
+export async function getUserMe(): Promise<{ role: string } | null> {
+  const racf = getUserRacf();
+  if (!racf) return null;
+  const res = await fetch(`${API_BASE}/api/users/me`, {
+    headers: { "user-racf": racf },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const data = (await res.json()) as { error?: string };
+    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
+  }
+  return res.json() as Promise<{ role: string }>;
 }
 
 export async function listGuests(): Promise<Guest[]> {

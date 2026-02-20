@@ -8,16 +8,21 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc    *Service
+	appEnv string
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, appEnv string) *Handler {
+	return &Handler{svc: svc, appEnv: appEnv}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/users", h.handleRegister)
 	mux.HandleFunc("GET /api/users/check", h.handleCheck)
+	mux.HandleFunc("GET /api/users/me", h.handleMe)
+	if h.appEnv != "production" {
+		mux.HandleFunc("GET /api/users", h.handleList)
+	}
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +67,37 @@ func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
+	users, err := h.svc.List(r.Context())
+	if err != nil {
+		slog.Error("list users: failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, users)
+}
+
+func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
+	uracf := r.Header.Get("user-racf")
+	if uracf == "" {
+		writeError(w, http.StatusUnauthorized, "user-racf header required")
+		return
+	}
+
+	u, err := h.svc.GetMe(r.Context(), uracf)
+	if err != nil {
+		slog.Error("me: lookup failed", "uracf", uracf, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if u == nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"role": u.Role})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

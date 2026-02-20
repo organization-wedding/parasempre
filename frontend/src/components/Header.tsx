@@ -11,7 +11,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-100 border-b border-gold-muted backdrop-blur-[12px] bg-[rgba(249,247,239,0.95)]">
+    <header className="fixed inset-x-0 top-0 z-[100] border-b border-gold-muted backdrop-blur-[12px] bg-[rgba(249,247,239,0.95)]">
       <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-2.5">
         <Link
           to="/"

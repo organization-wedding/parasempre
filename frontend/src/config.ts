@@ -12,7 +12,15 @@ export const VENUE = {
 };
 
 declare const __API_BASE__: string;
-export const API_BASE = __API_BASE__;
+export const API_BASE: string = (() => {
+  try {
+    return __API_BASE__;
+  } catch {
+    return "http://localhost:8080";
+  }
+})();
+
+export const IS_DEV = API_BASE.includes("localhost");
 
 export const CONTACT = {
   phone: "(43) 99607-0599",

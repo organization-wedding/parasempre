@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import Save from "lucide-react/dist/esm/icons/save";
@@ -12,8 +12,12 @@ import { getUserRacf } from "../lib/api";
 import {
   useCreateGuestMutation,
   useGuestQuery,
+  useGuestsQuery,
   useUpdateGuestMutation,
 } from "../lib/guest-queries";
+import { useUserMeQuery } from "../lib/user-queries";
+import { UnauthorizedPage } from "./UnauthorizedPage";
+import type { Guest } from "../types/guest";
 
 interface Props {
   guestId?: number;
@@ -29,11 +33,18 @@ const guestFormSchema = z.object({
       message: "Telefone deve ter 11 dígitos.",
     }),
   relationship: z.enum(["P", "R"]),
-  familyGroup: z.number().int().min(1, "Grupo familiar deve ser um número válido."),
+  familyGroup: z.number().int().min(1).optional(),
   confirmed: z.boolean(),
 });
 
 type GuestFormValues = z.infer<typeof guestFormSchema>;
+
+function formatPhoneDisplay(digits: string): string {
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
 
 export function GuestFormPage({ guestId }: Props) {
   const isEdit = guestId !== undefined;
@@ -41,12 +52,23 @@ export function GuestFormPage({ guestId }: Props) {
   const createMutation = useCreateGuestMutation();
   const updateMutation = useUpdateGuestMutation();
   const guestQuery = useGuestQuery(guestId ?? 0, isEdit);
+  const { data: allGuests = [] } = useGuestsQuery();
+  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
+  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
+
+  // Family group autocomplete state
+  const [familySearch, setFamilySearch] = useState("");
+  const [assignedFamilyGroup, setAssignedFamilyGroup] = useState<number | undefined>(undefined);
+  const [familyGroupLabel, setFamilyGroupLabel] = useState("");
+  const [showFamilyDropdown, setShowFamilyDropdown] = useState(false);
+  const familyContainerRef = useRef<HTMLDivElement>(null);
 
   const {
     register,
     handleSubmit,
     reset,
     setValue,
+    control,
     setError,
     clearErrors,
     watch,
@@ -58,7 +80,7 @@ export function GuestFormPage({ guestId }: Props) {
       lastName: "",
       phone: "",
       relationship: "P",
-      familyGroup: 1,
+      familyGroup: undefined,
       confirmed: false,
     },
   });
@@ -74,7 +96,64 @@ export function GuestFormPage({ guestId }: Props) {
       familyGroup: guestQuery.data.family_group,
       confirmed: guestQuery.data.confirmed,
     });
+
+    const fg = guestQuery.data.family_group;
+    setAssignedFamilyGroup(fg);
+    setFamilyGroupLabel(`Grupo #${fg}`);
   }, [guestQuery.data, reset]);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (familyContainerRef.current && !familyContainerRef.current.contains(e.target as Node)) {
+        setShowFamilyDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Pre-select relationship based on role in create mode
+  useEffect(() => {
+    if (isEdit || !userMe?.role) return;
+    if (userMe.role === "groom") setValue("relationship", "P");
+    else if (userMe.role === "bride") setValue("relationship", "R");
+  }, [userMe?.role, isEdit, setValue]);
+
+  const familyOptions = useMemo(() => {
+    if (!familySearch.trim()) return [];
+    const q = familySearch.toLowerCase().trim();
+    return allGuests
+      .filter((g) => {
+        if (isEdit && g.id === guestId) return false;
+        const name = `${g.first_name} ${g.last_name}`.toLowerCase();
+        return name.includes(q);
+      })
+      .slice(0, 8);
+  }, [allGuests, familySearch, isEdit, guestId]);
+
+  const familyMembers = useMemo((): Guest[] => {
+    if (assignedFamilyGroup === undefined) return [];
+    return allGuests.filter((g) => {
+      if (isEdit && g.id === guestId) return false;
+      return g.family_group === assignedFamilyGroup;
+    });
+  }, [allGuests, assignedFamilyGroup, isEdit, guestId]);
+
+  function handleSelectFamily(guest: Guest) {
+    setAssignedFamilyGroup(guest.family_group);
+    setFamilyGroupLabel(`${guest.first_name} ${guest.last_name}`);
+    setValue("familyGroup", guest.family_group, { shouldValidate: true });
+    setFamilySearch("");
+    setShowFamilyDropdown(false);
+  }
+
+  function clearFamily() {
+    setAssignedFamilyGroup(undefined);
+    setFamilyGroupLabel("");
+    setFamilySearch("");
+    setValue("familyGroup", undefined);
+  }
 
   const mutationError =
     (createMutation.error instanceof Error && createMutation.error.message) ||
@@ -115,12 +194,17 @@ export function GuestFormPage({ guestId }: Props) {
         });
       }
 
-      await navigate({ to: "/lista-presenca" });
+      await navigate({ to: "/dashboard" });
     } catch (submitError) {
       setError("root", {
         message: submitError instanceof Error ? submitError.message : "Erro ao salvar",
       });
     }
+  }
+
+  // Unauthorized guard
+  if (getUserRacf() && !roleLoading && userMe && !isAuthorized) {
+    return <UnauthorizedPage />;
   }
 
   const inputClass =
@@ -139,7 +223,7 @@ export function GuestFormPage({ guestId }: Props) {
 
       <main className="mx-auto max-w-[640px] px-6 pt-24 pb-16">
         <Link
-          to="/lista-presenca"
+          to="/dashboard"
           className="inline-flex items-center gap-1.5 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase text-hint no-underline mb-6 transition-colors hover:text-burgundy"
         >
           <ArrowLeft size={15} />
@@ -186,18 +270,25 @@ export function GuestFormPage({ guestId }: Props) {
 
             <div className="mb-5">
               <label className={labelClass}>Telefone</label>
-              <input
-                type="text"
-                placeholder="11999999999"
-                maxLength={11}
-                className={`${inputClass} font-mono tracking-wider`}
-                {...register("phone", {
-                  onChange: (event) => {
-                    event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
-                  },
-                })}
+              <Controller
+                name="phone"
+                control={control}
+                render={({ field }) => (
+                  <input
+                    type="text"
+                    value={formatPhoneDisplay(field.value ?? "")}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+                      field.onChange(digits);
+                    }}
+                    onBlur={field.onBlur}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
+                    className={`${inputClass} font-mono tracking-wider`}
+                  />
+                )}
               />
-              <p className="text-[0.72rem] text-hint/60 mt-1">Formato: DDD + número (11 dígitos). Opcional.</p>
+              <p className="text-[0.72rem] text-hint/60 mt-1">DDD + número (11 dígitos). Opcional.</p>
               {errors.phone?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.phone.message}</p>}
             </div>
 
@@ -229,11 +320,88 @@ export function GuestFormPage({ guestId }: Props) {
               </div>
             </div>
 
+            {/* Family Group Autocomplete */}
             <div className="mb-5">
               <label className={labelClass}>Grupo Familiar</label>
-              <input type="number" min={1} className={`${inputClass} w-32`} {...register("familyGroup", { valueAsNumber: true })} />
-              <p className="text-[0.72rem] text-hint/60 mt-1">Número que agrupa membros da mesma família.</p>
-              {errors.familyGroup?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.familyGroup.message}</p>}
+              <div ref={familyContainerRef} className="relative">
+                {assignedFamilyGroup !== undefined ? (
+                  <div className="flex items-center justify-between px-3.5 py-2.5 border border-gold-muted/40 bg-ivory">
+                    <span className="text-[0.88rem] text-dark-warm">{familyGroupLabel}</span>
+                    <button
+                      type="button"
+                      onClick={clearFamily}
+                      className="text-hint/50 hover:text-dark-warm transition-colors cursor-pointer ml-2 shrink-0"
+                      title="Remover seleção"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={familySearch}
+                    onChange={(e) => {
+                      setFamilySearch(e.target.value);
+                      setShowFamilyDropdown(true);
+                    }}
+                    onFocus={() => {
+                      if (familySearch.trim()) setShowFamilyDropdown(true);
+                    }}
+                    placeholder="Pesquisar por nome do convidado..."
+                    className={inputClass}
+                    autoComplete="off"
+                  />
+                )}
+
+                {showFamilyDropdown && familyOptions.length > 0 && assignedFamilyGroup === undefined && (
+                  <div className="absolute top-full left-0 right-0 z-[50] bg-ivory border border-gold-muted/40 border-t-0 shadow-md max-h-52 overflow-y-auto">
+                    {familyOptions.map((g) => (
+                      <button
+                        type="button"
+                        key={g.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSelectFamily(g)}
+                        className="w-full text-left px-3.5 py-2.5 transition-colors hover:bg-parchment border-b border-gold-muted/20 last:border-b-0 cursor-pointer"
+                      >
+                        <span className="text-[0.85rem] text-dark-warm">
+                          {g.first_name} {g.last_name}
+                        </span>
+                        <span className="text-[0.72rem] text-hint ml-2">Família #{g.family_group}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {showFamilyDropdown && familySearch.trim().length > 0 && familyOptions.length === 0 && assignedFamilyGroup === undefined && (
+                  <div className="absolute top-full left-0 right-0 z-[50] bg-ivory border border-gold-muted/40 border-t-0 shadow-md px-3.5 py-3">
+                    <span className="text-[0.82rem] text-hint">Nenhum convidado encontrado.</span>
+                  </div>
+                )}
+              </div>
+
+              {familyMembers.length > 0 && (
+                <div className="mt-3 p-3 bg-parchment border border-gold-muted/25">
+                  <p className="text-[0.7rem] font-heading font-semibold tracking-[0.06em] uppercase text-hint mb-2">
+                    Outros desta família ({familyMembers.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {familyMembers.map((m) => (
+                      <span
+                        key={m.id}
+                        className="inline-flex items-center text-[0.75rem] text-dark-warm bg-ivory border border-gold-muted/30 px-2 py-0.5"
+                      >
+                        {m.first_name} {m.last_name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[0.72rem] text-hint/60 mt-1.5">
+                {assignedFamilyGroup !== undefined
+                  ? `Grupo #${assignedFamilyGroup} atribuído.`
+                  : "Digite um nome para buscar e agrupar com uma família existente. Deixe em branco para criar um novo grupo."}
+              </p>
             </div>
 
             {isEdit && (
@@ -266,7 +434,7 @@ export function GuestFormPage({ guestId }: Props) {
 
             <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-4 border-t border-gold-muted/20">
               <Link
-                to="/lista-presenca"
+                to="/dashboard"
                 className="inline-flex items-center justify-center font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-gold-muted/50 text-hint bg-transparent transition-all duration-200 hover:border-burgundy hover:text-burgundy no-underline cursor-pointer"
               >
                 Cancelar

@@ -92,6 +92,19 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*User, err
 	return created, nil
 }
 
+func (s *Service) List(ctx context.Context) ([]UserListItem, error) {
+	return s.repo.List(ctx)
+}
+
+func (s *Service) GetMe(ctx context.Context, uracf string) (*User, error) {
+	u, err := s.repo.GetByURACF(ctx, uracf)
+	if err != nil {
+		slog.Error("user.service get_me: lookup failed", "uracf", uracf, "error", err)
+		return nil, err
+	}
+	return u, nil
+}
+
 func (s *Service) CheckByPhone(ctx context.Context, phone string) (*CheckResponse, error) {
 	if phone == "" {
 		slog.Warn("user.service check: missing phone")
