@@ -156,11 +156,9 @@ func (s *Service) seedPerson(ctx context.Context, data CoupleData, role string) 
 
 	existing, err := s.repo.GetByURACF(ctx, data.URACF)
 	if err != nil {
-		slog.Error("seed: failed to check existing user", "role", role, "error", err)
 		return
 	}
 	if existing != nil {
-		slog.Info("seed: user already exists", "role", role, "uracf", data.URACF)
 		return
 	}
 
