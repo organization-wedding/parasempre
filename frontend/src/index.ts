@@ -1,5 +1,4 @@
 import { serve } from "bun";
-import index from "./index.html";
 
 const port = parseInt(process.env.FRONTEND_PORT || "3000");
 const isProd = process.env.NODE_ENV === "production";
@@ -21,6 +20,7 @@ if (isProd) {
     },
   });
 } else {
+  const {default: index} = await import("./index.html");
   server = serve({
     port,
     routes: {
