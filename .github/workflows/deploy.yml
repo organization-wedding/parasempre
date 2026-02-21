@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
 
 env:
   REGISTRY: ghcr.io
@@ -10,10 +10,41 @@ env:
   FRONTEND_IMAGE: ghcr.io/organization-wedding/parasempre-frontend
 
 jobs:
+  resolve-env:
+    name: Resolve Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      image_tag: ${{ steps.env.outputs.image_tag }}
+      api_base: ${{ steps.env.outputs.api_base }}
+      compose_file: ${{ steps.env.outputs.compose_file }}
+      compose_filename: ${{ steps.env.outputs.compose_filename }}
+      deploy_dir: ${{ steps.env.outputs.deploy_dir }}
+    steps:
+      - name: Determine environment from branch
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "environment=prod" >> "$GITHUB_OUTPUT"
+            echo "image_tag=prod-latest" >> "$GITHUB_OUTPUT"
+            echo "api_base=https://api.nosparasempre.com.br" >> "$GITHUB_OUTPUT"
+            echo "compose_file=deploy/docker-compose.prod.yml" >> "$GITHUB_OUTPUT"
+            echo "compose_filename=docker-compose.prod.yml" >> "$GITHUB_OUTPUT"
+            echo "deploy_dir=/opt/parasempre/prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=teste" >> "$GITHUB_OUTPUT"
+            echo "image_tag=teste-latest" >> "$GITHUB_OUTPUT"
+            echo "api_base=https://teste.api.nosparasempre.com.br" >> "$GITHUB_OUTPUT"
+            echo "compose_file=deploy/docker-compose.teste.yml" >> "$GITHUB_OUTPUT"
+            echo "compose_filename=docker-compose.teste.yml" >> "$GITHUB_OUTPUT"
+            echo "deploy_dir=/opt/parasempre/teste" >> "$GITHUB_OUTPUT"
+          fi
+
   build-and-push:
     name: Build & Push Images
+    needs: resolve-env
     runs-on: ubuntu-latest
-    environment: test
+    environment: ${{ needs.resolve-env.outputs.environment }}
     permissions:
       contents: read
       packages: write
@@ -33,30 +64,43 @@ jobs:
         with:
           context: ./backend
           push: true
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-from: type=gha,scope=backend-${{ needs.resolve-env.outputs.environment }}
+          cache-to: type=gha,mode=max,scope=backend-${{ needs.resolve-env.outputs.environment }}
           tags: |
-            ${{ env.BACKEND_IMAGE }}:latest
-            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:${{ needs.resolve-env.outputs.image_tag }}
+            ${{ env.BACKEND_IMAGE }}:${{ needs.resolve-env.outputs.environment }}-${{ github.sha }}
 
       - name: Build & push frontend
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
-          build-args: API_BASE=http://${{ secrets.VPS_HOST }}:${{ secrets.PORT }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+          build-args: API_BASE=${{ needs.resolve-env.outputs.api_base }}
+          cache-from: type=gha,scope=frontend-${{ needs.resolve-env.outputs.environment }}
+          cache-to: type=gha,mode=max,scope=frontend-${{ needs.resolve-env.outputs.environment }}
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:latest
-            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:${{ needs.resolve-env.outputs.image_tag }}
+            ${{ env.FRONTEND_IMAGE }}:${{ needs.resolve-env.outputs.environment }}-${{ github.sha }}
 
   deploy:
-    name: Deploy to VPS
-    needs: build-and-push
+    name: Deploy to VPS (${{ needs.resolve-env.outputs.environment }})
+    needs: [resolve-env, build-and-push]
     runs-on: ubuntu-latest
-    environment: test
+    environment: ${{ needs.resolve-env.outputs.environment }}
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose file to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          source: ${{ needs.resolve-env.outputs.compose_file }}
+          target: ${{ needs.resolve-env.outputs.deploy_dir }}
+          strip_components: 1
+
       - name: Deploy
         uses: appleboy/ssh-action@v1
         with:
@@ -65,52 +109,11 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT }}
           script: |
-            mkdir -p /opt/parasempre
-            cd /opt/parasempre
+            cd ${{ needs.resolve-env.outputs.deploy_dir }}
 
-            cat > docker-compose.prod.yml <<'COMPOSEEOF'
-            services:
-              backend:
-                image: ghcr.io/organization-wedding/parasempre-backend:latest
-                ports:
-                  - "${PORT:-8080}:${PORT:-8080}"
-                env_file: .env
-                restart: unless-stopped
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-              frontend:
-                image: ghcr.io/organization-wedding/parasempre-frontend:latest
-                ports:
-                  - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
-                env_file: .env
-                depends_on:
-                  - backend
-                restart: unless-stopped
-            COMPOSEEOF
-
-            cat > .env <<'ENVEOF'
-            PORT=${{ secrets.PORT }}
-            FRONTEND_PORT=${{ secrets.FRONTEND_PORT }}
-            CORS_ORIGIN=http://${{ secrets.VPS_HOST }}:${{ secrets.FRONTEND_PORT }}
-            APP_ENV=production
-            DB_HOST=${{ secrets.DB_HOST }}
-            DB_PORT=${{ secrets.DB_PORT }}
-            DB_USER=${{ secrets.DB_USER }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            DB_NAME=${{ secrets.DB_NAME }}
-            DB_SSLMODE=${{ secrets.DB_SSLMODE }}
-            GROOM_FIRST_NAME=${{ secrets.GROOM_FIRST_NAME }}
-            GROOM_LAST_NAME=${{ secrets.GROOM_LAST_NAME }}
-            GROOM_PHONE=${{ secrets.GROOM_PHONE }}
-            GROOM_URACF=${{ secrets.GROOM_URACF }}
-            BRIDE_FIRST_NAME=${{ secrets.BRIDE_FIRST_NAME }}
-            BRIDE_LAST_NAME=${{ secrets.BRIDE_LAST_NAME }}
-            BRIDE_PHONE=${{ secrets.BRIDE_PHONE }}
-            BRIDE_URACF=${{ secrets.BRIDE_URACF }}
-            ENVEOF
-
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f ${{ needs.resolve-env.outputs.compose_filename }} pull
+            docker compose -f ${{ needs.resolve-env.outputs.compose_filename }} up -d --remove-orphans
 
             docker image prune -f
