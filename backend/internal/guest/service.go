@@ -58,7 +58,7 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 	}
 	if !exists {
 		slog.Warn("guest.service create: unknown user racf", "user_racf", userRACF)
-		return nil, errors.New("user-racf does not match any registered user")
+		return nil, errors.New("usuário não autorizado para realizar esta operação")
 	}
 
 	existing, err := s.repo.GetByName(ctx, input.FirstName, input.LastName)
@@ -68,7 +68,7 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 	}
 	if existing != nil {
 		slog.Warn("guest.service create: duplicate name", "first_name", input.FirstName, "last_name", input.LastName)
-		return nil, fmt.Errorf("a guest named '%s %s' already exists", input.FirstName, input.LastName)
+		return nil, fmt.Errorf("já existe um convidado com o nome '%s %s'", input.FirstName, input.LastName)
 	}
 
 	if input.Phone != "" {
@@ -79,7 +79,7 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 		}
 		if existingByPhone != nil {
 			slog.Warn("guest.service create: duplicate phone", "phone", input.Phone)
-			return nil, fmt.Errorf("a guest with phone '%s' already exists", input.Phone)
+			return nil, fmt.Errorf("o telefone '%s' já está cadastrado para outro convidado", input.Phone)
 		}
 	}
 
@@ -91,7 +91,7 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 		}
 		if !familyGroupExists {
 			slog.Warn("guest.service create: family_group not found", "family_group", *input.FamilyGroup)
-			return nil, errors.New("family_group not found")
+			return nil, errors.New("grupo familiar não encontrado")
 		}
 	} else {
 		nextFamilyGroup, err := s.repo.GetNextFamilyGroup(ctx)
@@ -124,7 +124,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 	}
 	if !exists {
 		slog.Warn("guest.service update: unknown user racf", "id", id, "user_racf", userRACF)
-		return nil, errors.New("user-racf does not match any registered user")
+		return nil, errors.New("usuário não autorizado para realizar esta operação")
 	}
 
 	if input.Phone != nil && *input.Phone != "" {
@@ -135,7 +135,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 		}
 		if existingByPhone != nil && existingByPhone.ID != id {
 			slog.Warn("guest.service update: duplicate phone", "id", id, "phone", *input.Phone)
-			return nil, fmt.Errorf("a guest with phone '%s' already exists", *input.Phone)
+			return nil, fmt.Errorf("o telefone '%s' já está cadastrado para outro convidado", *input.Phone)
 		}
 	}
 
@@ -160,7 +160,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 		}
 		if existing != nil && existing.ID != id {
 			slog.Warn("guest.service update: duplicate name", "id", id, "first_name", firstName, "last_name", lastName)
-			return nil, fmt.Errorf("a guest named '%s %s' already exists", firstName, lastName)
+			return nil, fmt.Errorf("já existe um convidado com o nome '%s %s'", firstName, lastName)
 		}
 	}
 
@@ -186,29 +186,29 @@ var phoneRegex = regexp.MustCompile(`^\d{2}9\d{8}$`)
 
 func validateCreate(input CreateGuestInput) error {
 	if input.FirstName == "" {
-		return errors.New("first_name is required")
+		return errors.New("o nome é obrigatório")
 	}
 	if input.LastName == "" {
-		return errors.New("last_name is required")
+		return errors.New("o sobrenome é obrigatório")
 	}
 	if input.Phone != "" && !phoneRegex.MatchString(input.Phone) {
-		return errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
+		return errors.New("telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)")
 	}
 	if input.Relationship != "P" && input.Relationship != "R" {
-		return errors.New("relationship must be 'P' or 'R'")
+		return errors.New("tipo de relacionamento inválido")
 	}
 	if input.FamilyGroup != nil && *input.FamilyGroup <= 0 {
-		return errors.New("family_group must be greater than 0")
+		return errors.New("grupo familiar deve ser maior que zero")
 	}
 	return nil
 }
 
 func validateUpdate(input UpdateGuestInput) error {
 	if input.Phone != nil && *input.Phone != "" && !phoneRegex.MatchString(*input.Phone) {
-		return errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
+		return errors.New("telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)")
 	}
 	if input.Relationship != nil && *input.Relationship != "P" && *input.Relationship != "R" {
-		return errors.New("relationship must be 'P' or 'R'")
+		return errors.New("tipo de relacionamento inválido")
 	}
 	return nil
 }

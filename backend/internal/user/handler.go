@@ -29,7 +29,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var input RegisterInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		slog.Error("register: invalid request body", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid JSON")
+		writeError(w, http.StatusBadRequest, "Dados inválidos na requisição")
 		return
 	}
 
@@ -37,17 +37,17 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrAlreadyRegistered) {
 			slog.Warn("register: user already registered", "phone", input.Phone)
-			writeError(w, http.StatusConflict, "user already registered for this guest")
+			writeError(w, http.StatusConflict, "Este convidado já possui cadastro")
 			return
 		}
 		if errors.Is(err, ErrGuestNotFound) {
 			slog.Warn("register: guest not found", "phone", input.Phone)
-			writeError(w, http.StatusNotFound, "no guest found with this phone")
+			writeError(w, http.StatusNotFound, "Nenhum convidado encontrado com este telefone")
 			return
 		}
 		if errors.Is(err, ErrURACFTaken) {
 			slog.Warn("register: uracf already in use", "uracf", input.URACF)
-			writeError(w, http.StatusConflict, "uracf already in use")
+			writeError(w, http.StatusConflict, "Este identificador de acesso já está em uso")
 			return
 		}
 		slog.Error("register: failed to register user", "error", err)
@@ -73,7 +73,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	users, err := h.svc.List(r.Context())
 	if err != nil {
 		slog.Error("list users: failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
+		writeError(w, http.StatusInternalServerError, "Não foi possível carregar a lista de usuários")
 		return
 	}
 	writeJSON(w, http.StatusOK, users)
@@ -82,18 +82,18 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 	uracf := r.Header.Get("user-racf")
 	if uracf == "" {
-		writeError(w, http.StatusUnauthorized, "user-racf header required")
+		writeError(w, http.StatusUnauthorized, "Autenticação necessária")
 		return
 	}
 
 	u, err := h.svc.GetMe(r.Context(), uracf)
 	if err != nil {
 		slog.Error("me: lookup failed", "uracf", uracf, "error", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
+		writeError(w, http.StatusInternalServerError, "Não foi possível carregar os dados do usuário")
 		return
 	}
 	if u == nil {
-		writeError(w, http.StatusNotFound, "user not found")
+		writeError(w, http.StatusNotFound, "Usuário não encontrado")
 		return
 	}
 
