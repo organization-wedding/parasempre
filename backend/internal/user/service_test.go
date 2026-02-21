@@ -131,6 +131,7 @@ func TestServiceRegister(t *testing.T) {
 		userExists bool
 		uracfTaken bool
 		wantErr    string
+		wantErrIs  error
 	}{
 		{
 			name:       "valid registration",
@@ -140,42 +141,42 @@ func TestServiceRegister(t *testing.T) {
 		{
 			name:    "missing phone",
 			input:   RegisterInput{Phone: "", URACF: "USR01"},
-			wantErr: "phone is required",
+			wantErr: "o telefone é obrigatório",
 		},
 		{
 			name:    "invalid phone format",
 			input:   RegisterInput{Phone: "1188888888", URACF: "USR01"},
-			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
+			wantErr: "telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)",
 		},
 		{
 			name:    "missing uracf",
 			input:   RegisterInput{Phone: "11999999999", URACF: ""},
-			wantErr: "uracf is required",
+			wantErr: "o identificador de acesso é obrigatório",
 		},
 		{
 			name:    "invalid uracf format",
 			input:   RegisterInput{Phone: "11999999999", URACF: "toolong1"},
-			wantErr: "uracf must be exactly 5 uppercase alphanumeric characters",
+			wantErr: "identificador de acesso inválido",
 		},
 		{
 			name:       "guest not found",
 			input:      RegisterInput{Phone: "11999999999", URACF: "USR01"},
 			guestFound: false,
-			wantErr:    ErrGuestNotFound.Error(),
+			wantErrIs:  ErrGuestNotFound,
 		},
 		{
 			name:       "user already registered for guest",
 			input:      RegisterInput{Phone: "11999999999", URACF: "USR01"},
 			guestFound: true,
 			userExists: true,
-			wantErr:    ErrAlreadyRegistered.Error(),
+			wantErrIs:  ErrAlreadyRegistered,
 		},
 		{
 			name:       "uracf already taken",
 			input:      RegisterInput{Phone: "11999999999", URACF: "USR01"},
 			guestFound: true,
 			uracfTaken: true,
-			wantErr:    ErrURACFTaken.Error(),
+			wantErrIs:  ErrURACFTaken,
 		},
 	}
 
@@ -217,6 +218,15 @@ func TestServiceRegister(t *testing.T) {
 
 			svc := NewService(userRepo, guestRepo)
 			u, err := svc.Register(context.Background(), tt.input)
+			if tt.wantErrIs != nil {
+				if err == nil {
+					t.Fatalf("expected error wrapping %v, got nil", tt.wantErrIs)
+				}
+				if !errors.Is(err, tt.wantErrIs) {
+					t.Fatalf("expected errors.Is(err, %v) to be true, got err=%q", tt.wantErrIs, err.Error())
+				}
+				return
+			}
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -273,12 +283,12 @@ func TestServiceCheckByPhone(t *testing.T) {
 		{
 			name:    "missing phone",
 			phone:   "",
-			wantErr: "phone is required",
+			wantErr: "o telefone é obrigatório",
 		},
 		{
 			name:    "invalid phone format",
 			phone:   "abc",
-			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
+			wantErr: "telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)",
 		},
 	}
 

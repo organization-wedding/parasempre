@@ -54,7 +54,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      corsMiddleware(cfg.CORSOrigin)(mux),
+		Handler:      corsMiddleware(cfg.CORSOrigin)(recoveryMiddleware(mux)),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -111,4 +111,18 @@ func corsMiddleware(origin string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// recoveryMiddleware catches any panic, logs it and returns a 500 so the
+// server keeps running instead of crashing.
+func recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				slog.Error("panic recovered", "panic", rec, "path", r.URL.Path, "method", r.Method)
+				http.Error(w, `{"error":"Erro interno do servidor"}`, http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
