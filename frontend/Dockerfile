@@ -19,6 +19,6 @@ WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/index.ts ./src/index.ts
 
-ENV NODE_ENV=production
+ENV NODE_ENV=test
 
 CMD ["bun", "src/index.ts"]
