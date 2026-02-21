@@ -1,0 +1,34 @@
+services:
+  backend:
+    image: ghcr.io/organization-wedding/parasempre-backend:teste-latest
+    container_name: parasempre-teste-backend
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - traefik-web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.parasempre-teste-backend.rule=Host(`teste.api.nosparasempre.com.br`)"
+      - "traefik.http.routers.parasempre-teste-backend.entrypoints=websecure"
+      - "traefik.http.routers.parasempre-teste-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.parasempre-teste-backend.loadbalancer.server.port=8080"
+
+  frontend:
+    image: ghcr.io/organization-wedding/parasempre-frontend:teste-latest
+    container_name: parasempre-teste-frontend
+    env_file: .env
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - traefik-web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.parasempre-teste-frontend.rule=Host(`teste.nosparasempre.com.br`)"
+      - "traefik.http.routers.parasempre-teste-frontend.entrypoints=websecure"
+      - "traefik.http.routers.parasempre-teste-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.parasempre-teste-frontend.loadbalancer.server.port=3000"
+
+networks:
+  traefik-web:
+    external: true
