@@ -20,7 +20,7 @@ export const API_BASE: string = (() => {
   }
 })();
 
-export const IS_DEV = API_BASE.includes("localhost");
+export const IS_DEV = API_BASE.includes("localhost") || API_BASE.includes("teste");
 
 export const CONTACT = {
   phone: "(43) 99607-0599",
