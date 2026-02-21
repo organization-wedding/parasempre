@@ -35,10 +35,10 @@ func getUserRACF(r *http.Request) (string, error) {
 	racf := strings.TrimSpace(r.Header.Get("user-racf"))
 	if racf == "" {
 		slog.Error("auth: missing user-racf header")
-		return "", fmt.Errorf("header user-racf is required")
+		return "", fmt.Errorf("autenticação necessária")
 	}
 	if !racfRegex.MatchString(racf) {
-		return "", fmt.Errorf("user-racf must be exactly 5 alphanumeric characters")
+		return "", fmt.Errorf("credencial de acesso inválida")
 	}
 	return strings.ToUpper(racf), nil
 }
@@ -51,7 +51,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	guests, err := h.svc.List(r.Context())
 	if err != nil {
 		slog.Error("list: failed to list guests", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list guests")
+		writeError(w, http.StatusInternalServerError, "Não foi possível carregar a lista de convidados")
 		return
 	}
 	writeJSON(w, http.StatusOK, guests)
@@ -61,7 +61,7 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
 		slog.Warn("get: invalid guest ID", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid guest ID")
+		writeError(w, http.StatusBadRequest, "ID de convidado inválido")
 		return
 	}
 
@@ -69,11 +69,11 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			slog.Warn("get: guest not found", "id", id)
-			writeError(w, http.StatusNotFound, "guest not found")
+			writeError(w, http.StatusNotFound, "Convidado não encontrado")
 			return
 		}
 		slog.Error("get: failed to get guest", "id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get guest")
+		writeError(w, http.StatusInternalServerError, "Não foi possível carregar os dados do convidado")
 		return
 	}
 	writeJSON(w, http.StatusOK, guest)
@@ -90,7 +90,7 @@ func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var input CreateGuestInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		slog.Error("create: invalid request body", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid JSON")
+		writeError(w, http.StatusBadRequest, "Dados inválidos na requisição")
 		return
 	}
 
@@ -114,14 +114,14 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
 		slog.Warn("update: invalid guest ID", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid guest ID")
+		writeError(w, http.StatusBadRequest, "ID de convidado inválido")
 		return
 	}
 
 	var input UpdateGuestInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		slog.Error("update: invalid request body", "id", id, "error", err)
-		writeError(w, http.StatusBadRequest, "invalid JSON")
+		writeError(w, http.StatusBadRequest, "Dados inválidos na requisição")
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			slog.Warn("update: guest not found", "id", id)
-			writeError(w, http.StatusNotFound, "guest not found")
+			writeError(w, http.StatusNotFound, "Convidado não encontrado")
 			return
 		}
 		slog.Error("update: failed to update guest", "id", id, "error", err)
@@ -151,7 +151,7 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
 		slog.Warn("delete: invalid guest ID", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid guest ID")
+		writeError(w, http.StatusBadRequest, "ID de convidado inválido")
 		return
 	}
 
@@ -159,11 +159,11 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			slog.Warn("delete: guest not found", "id", id)
-			writeError(w, http.StatusNotFound, "guest not found")
+			writeError(w, http.StatusNotFound, "Convidado não encontrado")
 			return
 		}
 		slog.Error("delete: failed to delete guest", "id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete guest")
+		writeError(w, http.StatusInternalServerError, "Não foi possível excluir o convidado")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -180,7 +180,7 @@ func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		slog.Error("import: missing file", "error", err)
-		writeError(w, http.StatusBadRequest, "file is required")
+		writeError(w, http.StatusBadRequest, "Arquivo não enviado")
 		return
 	}
 	defer file.Close()
@@ -195,13 +195,13 @@ func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
 		guests, err = ParseXLSX(file)
 	default:
 		slog.Warn("import: unsupported file format", "extension", ext)
-		writeError(w, http.StatusBadRequest, "unsupported file format: use .csv or .xlsx")
+		writeError(w, http.StatusBadRequest, "Formato não suportado. Use .csv ou .xlsx")
 		return
 	}
 
 	if err != nil {
 		slog.Error("import: failed to parse file", "extension", ext, "error", err)
-		writeError(w, http.StatusBadRequest, "failed to parse file: "+err.Error())
+		writeError(w, http.StatusBadRequest, "Não foi possível processar o arquivo")
 		return
 	}
 

@@ -233,7 +233,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(1),
 			},
-			wantErr: "first_name is required",
+			wantErr: "o nome é obrigatório",
 		},
 		{
 			name: "missing last_name",
@@ -243,7 +243,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(1),
 			},
-			wantErr: "last_name is required",
+			wantErr: "o sobrenome é obrigatório",
 		},
 		{
 			name: "invalid phone format",
@@ -254,7 +254,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(1),
 			},
-			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
+			wantErr: "telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)",
 		},
 		{
 			name: "phone without leading 9",
@@ -265,7 +265,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(1),
 			},
-			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
+			wantErr: "telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)",
 		},
 		{
 			name: "invalid relationship",
@@ -276,7 +276,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "X",
 				FamilyGroup:  int64Ptr(1),
 			},
-			wantErr: "relationship must be 'P' or 'R'",
+			wantErr: "tipo de relacionamento inválido",
 		},
 		{
 			name: "missing relationship",
@@ -286,7 +286,7 @@ func TestServiceCreate(t *testing.T) {
 				Phone:       "11988888888",
 				FamilyGroup: int64Ptr(1),
 			},
-			wantErr: "relationship must be 'P' or 'R'",
+			wantErr: "tipo de relacionamento inválido",
 		},
 		{
 			name: "missing family_group",
@@ -306,7 +306,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(0),
 			},
-			wantErr: "family_group must be greater than 0",
+			wantErr: "grupo familiar deve ser maior que zero",
 		},
 		{
 			name: "family_group negative",
@@ -317,7 +317,7 @@ func TestServiceCreate(t *testing.T) {
 				Relationship: "R",
 				FamilyGroup:  int64Ptr(-1),
 			},
-			wantErr: "family_group must be greater than 0",
+			wantErr: "grupo familiar deve ser maior que zero",
 		},
 	}
 
@@ -373,7 +373,7 @@ func TestServiceCreateDuplicateName(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate name error, got nil")
 	}
-	if err.Error() != "a guest named 'João Silva' already exists" {
+	if err.Error() != "já existe um convidado com o nome 'João Silva'" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -403,7 +403,7 @@ func TestServiceCreateFamilyGroupNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected family_group validation error, got nil")
 	}
-	if err.Error() != "family_group not found" {
+	if err.Error() != "grupo familiar não encontrado" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -465,7 +465,7 @@ func TestServiceCreateDuplicatePhone(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate phone error, got nil")
 	}
-	if err.Error() != "a guest with phone '11999999999' already exists" {
+	if err.Error() != "o telefone '11999999999' já está cadastrado para outro convidado" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -487,7 +487,7 @@ func TestServiceCreateUserRACFNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected user not found error, got nil")
 	}
-	if err.Error() != "user-racf does not match any registered user" {
+	if err.Error() != "usuário não autorizado para realizar esta operação" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -513,12 +513,12 @@ func TestServiceUpdate(t *testing.T) {
 		{
 			name:    "invalid relationship",
 			input:   UpdateGuestInput{Relationship: &invalid},
-			wantErr: "relationship must be 'P' or 'R'",
+			wantErr: "tipo de relacionamento inválido",
 		},
 		{
 			name:    "invalid phone format",
 			input:   UpdateGuestInput{Phone: &badPhone},
-			wantErr: "phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)",
+			wantErr: "telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)",
 		},
 	}
 
@@ -568,7 +568,7 @@ func TestServiceUpdateUserRACFNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected user not found error, got nil")
 	}
-	if err.Error() != "user-racf does not match any registered user" {
+	if err.Error() != "usuário não autorizado para realizar esta operação" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

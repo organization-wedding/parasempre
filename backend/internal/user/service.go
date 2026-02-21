@@ -32,19 +32,19 @@ var (
 func (s *Service) Register(ctx context.Context, input RegisterInput) (*User, error) {
 	if input.Phone == "" {
 		slog.Warn("user.service register: missing phone")
-		return nil, errors.New("phone is required")
+		return nil, errors.New("o telefone é obrigatório")
 	}
 	if !phoneRegex.MatchString(input.Phone) {
 		slog.Warn("user.service register: invalid phone", "phone", input.Phone)
-		return nil, errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
+		return nil, errors.New("telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)")
 	}
 	if input.URACF == "" {
 		slog.Warn("user.service register: missing uracf", "phone", input.Phone)
-		return nil, errors.New("uracf is required")
+		return nil, errors.New("o identificador de acesso é obrigatório")
 	}
 	if !uracfRegex.MatchString(input.URACF) {
 		slog.Warn("user.service register: invalid uracf", "uracf", input.URACF)
-		return nil, errors.New("uracf must be exactly 5 uppercase alphanumeric characters")
+		return nil, errors.New("identificador de acesso inválido")
 	}
 
 	g, err := s.guestRepo.GetByPhone(ctx, input.Phone)
@@ -108,11 +108,11 @@ func (s *Service) GetMe(ctx context.Context, uracf string) (*User, error) {
 func (s *Service) CheckByPhone(ctx context.Context, phone string) (*CheckResponse, error) {
 	if phone == "" {
 		slog.Warn("user.service check: missing phone")
-		return nil, errors.New("phone is required")
+		return nil, errors.New("o telefone é obrigatório")
 	}
 	if !phoneRegex.MatchString(phone) {
 		slog.Warn("user.service check: invalid phone", "phone", phone)
-		return nil, errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
+		return nil, errors.New("telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)")
 	}
 
 	g, err := s.guestRepo.GetByPhone(ctx, phone)
