@@ -2,15 +2,14 @@ package guest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
-)
 
-var (
-	ErrNotFound   = errors.New("guest not found")
-	ErrValidation = errors.New("validation error")
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
+	"github.com/ferjunior7/parasempre/backend/internal/database"
+	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
 
 // UserChecker verifies whether a RACF belongs to a registered user.
@@ -18,20 +17,27 @@ type UserChecker interface {
 	UserExistsByURACF(ctx context.Context, uracf string) (bool, error)
 }
 
-type Service struct {
-	repo        Repository
-	userChecker UserChecker
+// UserCreator creates a user linked to a guest within a transaction.
+type UserCreator interface {
+	CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
 }
 
-func NewService(repo Repository, userChecker UserChecker) *Service {
-	return &Service{repo: repo, userChecker: userChecker}
+type Service struct {
+	repo        TxAwareRepository
+	userChecker UserChecker
+	userCreator UserCreator
+	txRunner    database.TxRunner
+}
+
+func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator UserCreator, txRunner database.TxRunner) *Service {
+	return &Service{repo: repo, userChecker: userChecker, userCreator: userCreator, txRunner: txRunner}
 }
 
 func (s *Service) List(ctx context.Context) ([]Guest, error) {
 	guests, err := s.repo.List(ctx)
 	if err != nil {
 		slog.Error("guest.service list: failed", "error", err)
-		return nil, err
+		return nil, apperror.Internal("failed to list guests", err)
 	}
 	return guests, nil
 }
@@ -39,110 +45,98 @@ func (s *Service) List(ctx context.Context) ([]Guest, error) {
 func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {
 	guest, err := s.repo.GetByID(ctx, id)
 	if err != nil {
+		if _, ok := apperror.IsAppError(err); ok {
+			return nil, err
+		}
 		slog.Error("guest.service get_by_id: failed", "id", id, "error", err)
-		return nil, err
+		return nil, apperror.Internal("failed to get guest", err)
 	}
 	return guest, nil
 }
 
 func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
-	if err := validateCreate(input); err != nil {
-		slog.Warn("guest.service create: validation failed", "first_name", input.FirstName, "last_name", input.LastName, "error", err)
+	if err := validate.Struct(input); err != nil {
 		return nil, err
 	}
 
 	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
 	if err != nil {
 		slog.Error("guest.service create: user check failed", "user_racf", userRACF, "error", err)
-		return nil, fmt.Errorf("failed to verify user: %w", err)
+		return nil, apperror.Internal("failed to verify user", err)
 	}
 	if !exists {
-		slog.Warn("guest.service create: unknown user racf", "user_racf", userRACF)
-		return nil, errors.New("user-racf does not match any registered user")
+		return nil, apperror.Validation("user-racf does not match any registered user")
 	}
 
 	existing, err := s.repo.GetByName(ctx, input.FirstName, input.LastName)
 	if err != nil {
-		slog.Error("guest.service create: name lookup failed", "first_name", input.FirstName, "last_name", input.LastName, "error", err)
-		return nil, fmt.Errorf("failed to check name uniqueness: %w", err)
+		slog.Error("guest.service create: name lookup failed", "error", err)
+		return nil, apperror.Internal("failed to check name uniqueness", err)
 	}
 	if existing != nil {
-		slog.Warn("guest.service create: duplicate name", "first_name", input.FirstName, "last_name", input.LastName)
-		return nil, fmt.Errorf("a guest named '%s %s' already exists", input.FirstName, input.LastName)
-	}
-
-	if input.Phone != "" {
-		existingByPhone, err := s.repo.GetByPhone(ctx, input.Phone)
-		if err != nil {
-			slog.Error("guest.service create: phone lookup failed", "phone", input.Phone, "error", err)
-			return nil, fmt.Errorf("failed to check phone uniqueness: %w", err)
-		}
-		if existingByPhone != nil {
-			slog.Warn("guest.service create: duplicate phone", "phone", input.Phone)
-			return nil, fmt.Errorf("a guest with phone '%s' already exists", input.Phone)
-		}
+		return nil, apperror.Conflict(fmt.Sprintf("a guest named '%s %s' already exists", input.FirstName, input.LastName))
 	}
 
 	if input.FamilyGroup != nil {
 		familyGroupExists, err := s.repo.FamilyGroupExists(ctx, *input.FamilyGroup)
 		if err != nil {
-			slog.Error("guest.service create: family_group lookup failed", "family_group", *input.FamilyGroup, "error", err)
-			return nil, fmt.Errorf("failed to validate family_group: %w", err)
+			slog.Error("guest.service create: family_group lookup failed", "error", err)
+			return nil, apperror.Internal("failed to validate family_group", err)
 		}
 		if !familyGroupExists {
-			slog.Warn("guest.service create: family_group not found", "family_group", *input.FamilyGroup)
-			return nil, errors.New("family_group not found")
+			return nil, apperror.Validation("family_group not found")
 		}
 	} else {
 		nextFamilyGroup, err := s.repo.GetNextFamilyGroup(ctx)
 		if err != nil {
 			slog.Error("guest.service create: failed to get next family_group", "error", err)
-			return nil, fmt.Errorf("failed to generate family_group: %w", err)
+			return nil, apperror.Internal("failed to generate family_group", err)
 		}
 		input.FamilyGroup = &nextFamilyGroup
 	}
 
-	guest, err := s.repo.Create(ctx, input, userRACF)
-	if err != nil {
-		slog.Error("guest.service create: repository create failed", "user_racf", userRACF, "error", err)
-		return nil, err
+	var created *Guest
+	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		g, err := txRepo.Create(ctx, input, userRACF)
+		if err != nil {
+			return err
+		}
+		created = g
+
+		if err := s.userCreator.CreateGuestUserTx(ctx, tx, g.ID, input.Phone); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		if _, ok := apperror.IsAppError(err); ok {
+			return nil, err
+		}
+		slog.Error("guest.service create: transaction failed", "error", err)
+		return nil, apperror.Internal("failed to create guest", err)
 	}
-	slog.Info("guest.service create: guest created", "id", guest.ID, "user_racf", userRACF)
-	return guest, nil
+
+	slog.Info("guest.service create: guest+user created", "id", created.ID, "user_racf", userRACF)
+	return created, nil
 }
 
 func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error) {
-	if err := validateUpdate(input); err != nil {
-		slog.Warn("guest.service update: validation failed", "id", id, "error", err)
+	if err := validate.Struct(input); err != nil {
 		return nil, err
 	}
 
 	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
 	if err != nil {
-		slog.Error("guest.service update: user check failed", "id", id, "user_racf", userRACF, "error", err)
-		return nil, fmt.Errorf("failed to verify user: %w", err)
+		slog.Error("guest.service update: user check failed", "error", err)
+		return nil, apperror.Internal("failed to verify user", err)
 	}
 	if !exists {
-		slog.Warn("guest.service update: unknown user racf", "id", id, "user_racf", userRACF)
-		return nil, errors.New("user-racf does not match any registered user")
-	}
-
-	if input.Phone != nil && *input.Phone != "" {
-		existingByPhone, err := s.repo.GetByPhone(ctx, *input.Phone)
-		if err != nil {
-			slog.Error("guest.service update: phone lookup failed", "id", id, "phone", *input.Phone, "error", err)
-			return nil, fmt.Errorf("failed to check phone uniqueness: %w", err)
-		}
-		if existingByPhone != nil && existingByPhone.ID != id {
-			slog.Warn("guest.service update: duplicate phone", "id", id, "phone", *input.Phone)
-			return nil, fmt.Errorf("a guest with phone '%s' already exists", *input.Phone)
-		}
+		return nil, apperror.Validation("user-racf does not match any registered user")
 	}
 
 	if input.FirstName != nil || input.LastName != nil {
 		current, err := s.repo.GetByID(ctx, id)
 		if err != nil {
-			slog.Error("guest.service update: current guest fetch failed", "id", id, "error", err)
 			return nil, err
 		}
 		firstName := current.FirstName
@@ -155,19 +149,21 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 		}
 		existing, err := s.repo.GetByName(ctx, firstName, lastName)
 		if err != nil {
-			slog.Error("guest.service update: name lookup failed", "id", id, "first_name", firstName, "last_name", lastName, "error", err)
-			return nil, fmt.Errorf("failed to check name uniqueness: %w", err)
+			slog.Error("guest.service update: name lookup failed", "error", err)
+			return nil, apperror.Internal("failed to check name uniqueness", err)
 		}
 		if existing != nil && existing.ID != id {
-			slog.Warn("guest.service update: duplicate name", "id", id, "first_name", firstName, "last_name", lastName)
-			return nil, fmt.Errorf("a guest named '%s %s' already exists", firstName, lastName)
+			return nil, apperror.Conflict(fmt.Sprintf("a guest named '%s %s' already exists", firstName, lastName))
 		}
 	}
 
 	guest, err := s.repo.Update(ctx, id, input, userRACF)
 	if err != nil {
-		slog.Error("guest.service update: repository update failed", "id", id, "user_racf", userRACF, "error", err)
-		return nil, err
+		if _, ok := apperror.IsAppError(err); ok {
+			return nil, err
+		}
+		slog.Error("guest.service update: repository update failed", "error", err)
+		return nil, apperror.Internal("failed to update guest", err)
 	}
 	slog.Info("guest.service update: guest updated", "id", guest.ID, "user_racf", userRACF)
 	return guest, nil
@@ -175,40 +171,12 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
+		if _, ok := apperror.IsAppError(err); ok {
+			return err
+		}
 		slog.Error("guest.service delete: failed", "id", id, "error", err)
-		return err
+		return apperror.Internal("failed to delete guest", err)
 	}
 	slog.Info("guest.service delete: guest deleted", "id", id)
-	return nil
-}
-
-var phoneRegex = regexp.MustCompile(`^\d{2}9\d{8}$`)
-
-func validateCreate(input CreateGuestInput) error {
-	if input.FirstName == "" {
-		return errors.New("first_name is required")
-	}
-	if input.LastName == "" {
-		return errors.New("last_name is required")
-	}
-	if input.Phone != "" && !phoneRegex.MatchString(input.Phone) {
-		return errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
-	}
-	if input.Relationship != "P" && input.Relationship != "R" {
-		return errors.New("relationship must be 'P' or 'R'")
-	}
-	if input.FamilyGroup != nil && *input.FamilyGroup <= 0 {
-		return errors.New("family_group must be greater than 0")
-	}
-	return nil
-}
-
-func validateUpdate(input UpdateGuestInput) error {
-	if input.Phone != nil && *input.Phone != "" && !phoneRegex.MatchString(*input.Phone) {
-		return errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
-	}
-	if input.Relationship != nil && *input.Relationship != "P" && *input.Relationship != "R" {
-		return errors.New("relationship must be 'P' or 'R'")
-	}
 	return nil
 }
