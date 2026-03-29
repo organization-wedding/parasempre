@@ -141,6 +141,15 @@ func (m *mockGuestRepo) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (m *mockGuestRepo) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error) {
+	return nil, nil
+}
+
+// WithTx returns itself (mock ignores transactions).
+func (m *mockGuestRepo) WithTx(_ pgx.Tx) guest.Repository {
+	return m
+}
+
 func sampleUser() *User {
 	guestID := int64(1)
 	return &User{

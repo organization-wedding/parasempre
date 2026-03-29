@@ -23,6 +23,7 @@ type mockRepository struct {
 	createFn             func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
 	updateFn             func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
 	deleteFn             func(ctx context.Context, id int64) error
+	setConfirmedFn       func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
 }
 
 func (m *mockRepository) List(ctx context.Context) ([]Guest, error) {
@@ -66,6 +67,10 @@ func (m *mockRepository) Delete(ctx context.Context, id int64) error {
 	return m.deleteFn(ctx, id)
 }
 
+func (m *mockRepository) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+	return m.setConfirmedFn(ctx, id, confirmed, userRACF)
+}
+
 // WithTx returns itself (mock ignores transactions).
 func (m *mockRepository) WithTx(_ pgx.Tx) Repository {
 	return m
@@ -93,6 +98,22 @@ func (m *mockUserCreator) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, gues
 		return m.createFn(ctx, tx, guestID, phone)
 	}
 	return nil
+}
+
+// mockUserPhoneLookup implements UserPhoneLookup for tests.
+type mockUserPhoneLookup struct {
+	getGuestIDByPhoneFn func(ctx context.Context, phone string) (*int64, error)
+}
+
+func (m *mockUserPhoneLookup) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error) {
+	if m.getGuestIDByPhoneFn != nil {
+		return m.getGuestIDByPhoneFn(ctx, phone)
+	}
+	return nil, nil
+}
+
+func noopPhoneLookup() *mockUserPhoneLookup {
+	return &mockUserPhoneLookup{}
 }
 
 // mockTxRunner implements database.TxRunner by running fn with a nil tx (pass-through).
@@ -135,11 +156,16 @@ func noopUserCreator() *mockUserCreator {
 // newTestService creates a Service wired with mocks. The mockTxRunner calls fn(nil)
 // so WithTx returns the mock itself, and all repo calls go through the mockRepository.
 func newTestService(repo *mockRepository, checker *mockUserChecker, creator *mockUserCreator) *Service {
+	return newTestServiceWithPhone(repo, checker, creator, noopPhoneLookup())
+}
+
+func newTestServiceWithPhone(repo *mockRepository, checker *mockUserChecker, creator *mockUserCreator, phoneLookup *mockUserPhoneLookup) *Service {
 	return &Service{
-		repo:        repo,
-		userChecker: checker,
-		userCreator: creator,
-		txRunner:    &mockTxRunner{},
+		repo:            repo,
+		userChecker:     checker,
+		userCreator:     creator,
+		userPhoneLookup: phoneLookup,
+		txRunner:        &mockTxRunner{},
 	}
 }
 
@@ -599,6 +625,227 @@ func TestServiceUpdateUserRACFNotFound(t *testing.T) {
 	_, err := svc.Update(context.Background(), 1, UpdateGuestInput{Relationship: &relP}, "TST01")
 
 	assertAppError(t, err, http.StatusBadRequest, "user-racf does not match any registered user")
+}
+
+func TestServiceConfirm(t *testing.T) {
+	tests := []struct {
+		name           string
+		getByIDFn      func(ctx context.Context, id int64) (*Guest, error)
+		setConfirmedFn func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
+		userExists     bool
+		wantErr        bool
+	}{
+		{
+			name: "success",
+			getByIDFn: func(ctx context.Context, id int64) (*Guest, error) {
+				g := sampleGuest() // Confirmed: false
+				return &g, nil
+			},
+			setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+				g := sampleGuest()
+				g.Confirmed = true
+				return &g, nil
+			},
+			userExists: true,
+		},
+		{
+			name: "guest not found",
+			getByIDFn: func(ctx context.Context, id int64) (*Guest, error) {
+				return nil, apperror.NotFound("guest not found")
+			},
+			userExists: true,
+			wantErr:    true,
+		},
+		{
+			name:       "user racf not found",
+			userExists: false,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockRepository{getByID: tt.getByIDFn, setConfirmedFn: tt.setConfirmedFn}
+			checker := &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
+				return tt.userExists, nil
+			}}
+			svc := newTestService(repo, checker, noopUserCreator())
+			guest, err := svc.Confirm(context.Background(), 1, "TST01")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !guest.Confirmed {
+				t.Fatal("expected confirmed to be true")
+			}
+		})
+	}
+}
+
+func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
+	setConfirmedCalled := false
+	repo := &mockRepository{
+		getByID: func(ctx context.Context, id int64) (*Guest, error) {
+			g := sampleGuest()
+			g.Confirmed = true // já confirmado
+			return &g, nil
+		},
+		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+			setConfirmedCalled = true
+			return nil, nil
+		},
+	}
+	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	guest, err := svc.Confirm(context.Background(), 1, "TST01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !guest.Confirmed {
+		t.Fatal("expected confirmed to be true")
+	}
+	if setConfirmedCalled {
+		t.Fatal("expected SetConfirmed to NOT be called (idempotent skip)")
+	}
+}
+
+func TestServiceCancel(t *testing.T) {
+	repo := &mockRepository{
+		getByID: func(ctx context.Context, id int64) (*Guest, error) {
+			g := sampleGuest()
+			g.Confirmed = true // está confirmado, cancel deve executar
+			return &g, nil
+		},
+		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+			g := sampleGuest()
+			g.Confirmed = false
+			return &g, nil
+		},
+	}
+	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	guest, err := svc.Cancel(context.Background(), 1, "TST01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if guest.Confirmed {
+		t.Fatal("expected confirmed to be false")
+	}
+}
+
+func TestServiceCancelAlreadyCancelled(t *testing.T) {
+	setConfirmedCalled := false
+	repo := &mockRepository{
+		getByID: func(ctx context.Context, id int64) (*Guest, error) {
+			g := sampleGuest() // Confirmed: false — já cancelado
+			return &g, nil
+		},
+		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+			setConfirmedCalled = true
+			return nil, nil
+		},
+	}
+	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	guest, err := svc.Cancel(context.Background(), 1, "TST01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if guest.Confirmed {
+		t.Fatal("expected confirmed to be false")
+	}
+	if setConfirmedCalled {
+		t.Fatal("expected SetConfirmed to NOT be called (idempotent skip)")
+	}
+}
+
+func TestServiceConfirmByPhone(t *testing.T) {
+	tests := []struct {
+		name        string
+		phoneLookup func(ctx context.Context, phone string) (*int64, error)
+		wantErr     bool
+		wantErrCode int
+		wantErrMsg  string
+	}{
+		{
+			name: "success",
+			phoneLookup: func(ctx context.Context, phone string) (*int64, error) {
+				id := int64(1)
+				return &id, nil
+			},
+		},
+		{
+			name: "phone not found",
+			phoneLookup: func(ctx context.Context, phone string) (*int64, error) {
+				return nil, nil
+			},
+			wantErr:     true,
+			wantErrCode: http.StatusNotFound,
+			wantErrMsg:  "no guest found for this phone number",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockRepository{
+				getByID: func(ctx context.Context, id int64) (*Guest, error) {
+					g := sampleGuest() // Confirmed: false → confirm vai executar
+					return &g, nil
+				},
+				setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+					g := sampleGuest()
+					g.Confirmed = true
+					return &g, nil
+				},
+			}
+			phoneLookup := &mockUserPhoneLookup{getGuestIDByPhoneFn: tt.phoneLookup}
+			svc := newTestServiceWithPhone(repo, alwaysExistsChecker(), noopUserCreator(), phoneLookup)
+
+			guest, err := svc.ConfirmByPhone(context.Background(), "43999999999", "TST01")
+			if tt.wantErr {
+				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !guest.Confirmed {
+				t.Fatal("expected confirmed to be true")
+			}
+		})
+	}
+}
+
+func TestServiceCancelByPhone(t *testing.T) {
+	repo := &mockRepository{
+		getByID: func(ctx context.Context, id int64) (*Guest, error) {
+			g := sampleGuest()
+			g.Confirmed = true // está confirmado, cancel deve executar
+			return &g, nil
+		},
+		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+			g := sampleGuest()
+			g.Confirmed = false
+			return &g, nil
+		},
+	}
+	phoneLookup := &mockUserPhoneLookup{
+		getGuestIDByPhoneFn: func(ctx context.Context, phone string) (*int64, error) {
+			id := int64(1)
+			return &id, nil
+		},
+	}
+	svc := newTestServiceWithPhone(repo, alwaysExistsChecker(), noopUserCreator(), phoneLookup)
+
+	guest, err := svc.CancelByPhone(context.Background(), "43999999999", "TST01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if guest.Confirmed {
+		t.Fatal("expected confirmed to be false")
+	}
 }
 
 func TestServiceDelete(t *testing.T) {

@@ -97,6 +97,64 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) HandleConfirm(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.HandleError(w, err)
+		return
+	}
+
+	guest, err := h.svc.Confirm(r.Context(), id, userRACF)
+	if err != nil {
+		httputil.HandleError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.HandleError(w, err)
+		return
+	}
+
+	guest, err := h.svc.Cancel(r.Context(), id, userRACF)
+	if err != nil {
+		httputil.HandleError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleConfirmByPhone(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	phone := r.PathValue("phone")
+	guest, err := h.svc.ConfirmByPhone(r.Context(), phone, userRACF)
+	if err != nil {
+		httputil.HandleError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleCancelByPhone(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	phone := r.PathValue("phone")
+	guest, err := h.svc.CancelByPhone(r.Context(), phone, userRACF)
+	if err != nil {
+		httputil.HandleError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
 func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	userRACF := middleware.UserRACFFromContext(r.Context())
 

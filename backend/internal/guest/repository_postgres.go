@@ -149,6 +149,25 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 	return &g, nil
 }
 
+func (r *PostgresRepository) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+	var g Guest
+	err := r.db.QueryRow(ctx,
+		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
+		 WHERE id = $3
+		 RETURNING id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`,
+		confirmed, userRACF, id).
+		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.NotFound("guest not found")
+		}
+		slog.Error("guest.repo set_confirmed: update failed", "id", id, "error", err)
+		return nil, err
+	}
+	slog.Info("guest.repo set_confirmed: guest updated", "id", g.ID, "confirmed", confirmed)
+	return &g, nil
+}
+
 func (r *PostgresRepository) Delete(ctx context.Context, id int64) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM guests WHERE id = $1`, id)
 	if err != nil {

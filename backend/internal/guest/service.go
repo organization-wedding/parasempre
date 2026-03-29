@@ -22,15 +22,21 @@ type UserCreator interface {
 	CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
 }
 
-type Service struct {
-	repo        TxAwareRepository
-	userChecker UserChecker
-	userCreator UserCreator
-	txRunner    database.TxRunner
+// UserPhoneLookup resolves a phone number to a guest_id via the users table.
+type UserPhoneLookup interface {
+	GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error)
 }
 
-func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator UserCreator, txRunner database.TxRunner) *Service {
-	return &Service{repo: repo, userChecker: userChecker, userCreator: userCreator, txRunner: txRunner}
+type Service struct {
+	repo             TxAwareRepository
+	userChecker      UserChecker
+	userCreator      UserCreator
+	userPhoneLookup  UserPhoneLookup
+	txRunner         database.TxRunner
+}
+
+func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator UserCreator, userPhoneLookup UserPhoneLookup, txRunner database.TxRunner) *Service {
+	return &Service{repo: repo, userChecker: userChecker, userCreator: userCreator, userPhoneLookup: userPhoneLookup, txRunner: txRunner}
 }
 
 func (s *Service) List(ctx context.Context) ([]Guest, error) {
@@ -167,6 +173,76 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 	}
 	slog.Info("guest.service update: guest updated", "id", guest.ID, "user_racf", userRACF)
 	return guest, nil
+}
+
+func (s *Service) Confirm(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	return s.setConfirmed(ctx, id, true, userRACF)
+}
+
+func (s *Service) Cancel(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	return s.setConfirmed(ctx, id, false, userRACF)
+}
+
+func (s *Service) ConfirmByPhone(ctx context.Context, phone string, userRACF string) (*Guest, error) {
+	return s.setConfirmedByPhone(ctx, phone, true, userRACF)
+}
+
+func (s *Service) CancelByPhone(ctx context.Context, phone string, userRACF string) (*Guest, error) {
+	return s.setConfirmedByPhone(ctx, phone, false, userRACF)
+}
+
+func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
+	if err != nil {
+		slog.Error("guest.service set_confirmed: user check failed", "id", id, "user_racf", userRACF, "error", err)
+		return nil, apperror.Internal("failed to verify user", err)
+	}
+	if !exists {
+		return nil, apperror.Validation("user-racf does not match any registered user")
+	}
+
+	// Idempotência: se o guest já está no estado desejado, retorna sem fazer UPDATE.
+	// Evita escrita desnecessária e atualização de updated_at em chamadas repetidas
+	// (ex: bot WhatsApp reprocessando a mesma mensagem).
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if _, ok := apperror.IsAppError(err); ok {
+			return nil, err
+		}
+		slog.Error("guest.service set_confirmed: failed to fetch guest", "id", id, "error", err)
+		return nil, apperror.Internal("failed to fetch guest", err)
+	}
+	if current.Confirmed == confirmed {
+		slog.Info("guest.service set_confirmed: already in desired state, skipping update", "id", id, "confirmed", confirmed)
+		return current, nil
+	}
+
+	guest, err := s.repo.SetConfirmed(ctx, id, confirmed, userRACF)
+	if err != nil {
+		if _, ok := apperror.IsAppError(err); ok {
+			return nil, err
+		}
+		slog.Error("guest.service set_confirmed: failed", "id", id, "error", err)
+		return nil, apperror.Internal("failed to update confirmation", err)
+	}
+	slog.Info("guest.service set_confirmed: success", "id", guest.ID, "confirmed", confirmed, "user_racf", userRACF)
+	return guest, nil
+}
+
+// setConfirmedByPhone busca o guest_id via tabela users (que possui o phone)
+// e delega para setConfirmed. Permite que o bot WhatsApp confirme presença
+// usando apenas o número de telefone do convidado.
+func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirmed bool, userRACF string) (*Guest, error) {
+	guestID, err := s.userPhoneLookup.GetGuestIDByPhone(ctx, phone)
+	if err != nil {
+		slog.Error("guest.service set_confirmed_by_phone: phone lookup failed", "phone", phone, "error", err)
+		return nil, apperror.Internal("failed to find guest by phone", err)
+	}
+	if guestID == nil {
+		return nil, apperror.NotFound("no guest found for this phone number")
+	}
+
+	return s.setConfirmed(ctx, *guestID, confirmed, userRACF)
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
