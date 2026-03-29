@@ -255,6 +255,103 @@ func TestHandlerDeleteGuestNotFound(t *testing.T) {
 	}
 }
 
+func TestHandlerConfirmGuest(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+		g := sampleGuest() // Confirmed: false — estado diferente, confirm executa
+		return &g, nil
+	}
+	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+		g := sampleGuest()
+		g.Confirmed = true
+		return &g, nil
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/confirm", h.HandleConfirm)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/1/confirm", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var guest Guest
+	if err := json.NewDecoder(w.Body).Decode(&guest); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if !guest.Confirmed {
+		t.Fatal("expected confirmed to be true")
+	}
+}
+
+func TestHandlerConfirmGuestNotFound(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+		return nil, apperror.NotFound("guest not found")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/confirm", h.HandleConfirm)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/999/confirm", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandlerCancelGuest(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+		g := sampleGuest()
+		g.Confirmed = true // está confirmado, cancel deve executar
+		return &g, nil
+	}
+	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+		g := sampleGuest()
+		g.Confirmed = false
+		return &g, nil
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/cancel", h.HandleCancel)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/1/cancel", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandlerCancelGuestNotFound(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+		return nil, apperror.NotFound("guest not found")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/cancel", h.HandleCancel)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/999/cancel", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
 func TestHandlerImportCSV(t *testing.T) {
 	h, repo := newTestHandler()
 	var created int

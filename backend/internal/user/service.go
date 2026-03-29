@@ -122,6 +122,19 @@ func (s *Service) FindOrCreateByPhone(ctx context.Context, phone string) (int64,
 	return 0, "", "", apperror.NotFound("no user found with this phone")
 }
 
+// GetGuestIDByPhone implements guest.UserPhoneLookup.
+// Busca um user pelo phone e retorna o guest_id associado.
+func (s *Service) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error) {
+	u, err := s.repo.GetByPhone(ctx, phone)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil || u.GuestID == nil {
+		return nil, nil
+	}
+	return u.GuestID, nil
+}
+
 func (s *Service) PhoneExists(ctx context.Context, phone string) (bool, error) {
 	u, err := s.repo.GetByPhone(ctx, phone)
 	if err != nil {

@@ -54,7 +54,7 @@ func main() {
 	// Services
 	userSvc := user.NewServiceWithTx(userRepo, guestRepo)
 
-	guestSvc := guest.NewService(guestRepo, &userCheckerAdapter{repo: userRepo}, userSvc, txRunner)
+	guestSvc := guest.NewService(guestRepo, &userCheckerAdapter{repo: userRepo}, userSvc, userSvc, txRunner)
 	guestHandler := guest.NewHandler(guestSvc)
 	userHandler := user.NewHandler(userSvc, cfg.AppEnv)
 
@@ -115,6 +115,24 @@ func main() {
 		http.HandlerFunc(guestHandler.HandleImport),
 		middleware.RequireAuth(jwtSvc),
 		middleware.RequireRole("groom", "bride"),
+	))
+
+	// Confirm/Cancel presence (any authenticated role)
+	mux.Handle("PATCH /api/guests/{id}/confirm", middleware.Chain(
+		http.HandlerFunc(guestHandler.HandleConfirm),
+		middleware.RequireAuth(jwtSvc),
+	))
+	mux.Handle("PATCH /api/guests/{id}/cancel", middleware.Chain(
+		http.HandlerFunc(guestHandler.HandleCancel),
+		middleware.RequireAuth(jwtSvc),
+	))
+	mux.Handle("PATCH /api/guests/phone/{phone}/confirm", middleware.Chain(
+		http.HandlerFunc(guestHandler.HandleConfirmByPhone),
+		middleware.RequireAuth(jwtSvc),
+	))
+	mux.Handle("PATCH /api/guests/phone/{phone}/cancel", middleware.Chain(
+		http.HandlerFunc(guestHandler.HandleCancelByPhone),
+		middleware.RequireAuth(jwtSvc),
 	))
 
 	// Dev only
