@@ -30,9 +30,9 @@ func TestWriteJSON(t *testing.T) {
 	}
 }
 
-func TestWriteError(t *testing.T) {
+func TestWriteErrorMsg(t *testing.T) {
 	w := httptest.NewRecorder()
-	WriteError(w, http.StatusBadRequest, "bad input")
+	WriteErrorMsg(w, http.StatusBadRequest, "bad input")
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
@@ -45,9 +45,10 @@ func TestWriteError(t *testing.T) {
 	}
 }
 
-func TestHandleErrorAppError(t *testing.T) {
+func TestWriteErrorAppError(t *testing.T) {
 	w := httptest.NewRecorder()
-	HandleError(w, apperror.NotFound("guest not found"))
+	r := httptest.NewRequest(http.MethodGet, "/api/guests/1", nil)
+	WriteError(w, r, apperror.NotFound("guest not found"))
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
@@ -60,9 +61,10 @@ func TestHandleErrorAppError(t *testing.T) {
 	}
 }
 
-func TestHandleErrorGeneric(t *testing.T) {
+func TestWriteErrorGeneric(t *testing.T) {
 	w := httptest.NewRecorder()
-	HandleError(w, http.ErrServerClosed)
+	r := httptest.NewRequest(http.MethodGet, "/api/guests", nil)
+	WriteError(w, r, http.ErrServerClosed)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", w.Code)

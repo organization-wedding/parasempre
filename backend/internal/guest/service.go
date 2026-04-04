@@ -28,11 +28,11 @@ type UserPhoneLookup interface {
 }
 
 type Service struct {
-	repo             TxAwareRepository
-	userChecker      UserChecker
-	userCreator      UserCreator
-	userPhoneLookup  UserPhoneLookup
-	txRunner         database.TxRunner
+	repo            TxAwareRepository
+	userChecker     UserChecker
+	userCreator     UserCreator
+	userPhoneLookup UserPhoneLookup
+	txRunner        database.TxRunner
 }
 
 func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator UserCreator, userPhoneLookup UserPhoneLookup, txRunner database.TxRunner) *Service {

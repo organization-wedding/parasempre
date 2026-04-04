@@ -19,13 +19,13 @@ func NewHandler(svc *Service, appEnv string) *Handler {
 func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	var input RegisterInput
 	if err := httputil.DecodeJSON(r, &input); err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 
 	u, err := h.svc.Register(r.Context(), input)
 	if err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, u)
@@ -36,7 +36,7 @@ func (h *Handler) HandleCheck(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.svc.CheckByPhone(r.Context(), phone)
 	if err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
@@ -45,7 +45,7 @@ func (h *Handler) HandleCheck(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	users, err := h.svc.List(r.Context())
 	if err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, users)
@@ -56,11 +56,11 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 
 	u, err := h.svc.GetMe(r.Context(), uracf)
 	if err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 	if u == nil {
-		httputil.WriteError(w, http.StatusNotFound, "user not found")
+		httputil.WriteErrorMsg(w, http.StatusNotFound, "user not found")
 		return
 	}
 

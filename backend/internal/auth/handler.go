@@ -48,27 +48,27 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) HandleSendOTP(w http.ResponseWriter, r *http.Request) {
 	var input SendOTPInput
 	if err := httputil.DecodeJSON(r, &input); err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 	if err := validate.Struct(input); err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 
 	exists, err := h.phoneCheck.PhoneExists(r.Context(), input.Phone)
 	if err != nil {
 		slog.Error("auth: phone check failed", "phone", input.Phone, "error", err)
-		httputil.HandleError(w, apperror.Internal("failed to verify phone", err))
+		httputil.WriteError(w, r, apperror.Internal("failed to verify phone", err))
 		return
 	}
 	if !exists {
-		httputil.HandleError(w, apperror.NotFound("no guest found with this phone"))
+		httputil.WriteError(w, r, apperror.NotFound("no guest found with this phone"))
 		return
 	}
 
 	if err := h.otpSvc.SendOTP(r.Context(), input.Phone); err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 
@@ -78,29 +78,29 @@ func (h *Handler) HandleSendOTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleVerifyOTP(w http.ResponseWriter, r *http.Request) {
 	var input VerifyOTPInput
 	if err := httputil.DecodeJSON(r, &input); err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 	if err := validate.Struct(input); err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 
 	if err := h.otpSvc.VerifyOTP(r.Context(), input.Phone, input.Code); err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 
 	userID, uracf, role, err := h.userFinder.FindOrCreateByPhone(r.Context(), input.Phone)
 	if err != nil {
-		httputil.HandleError(w, err)
+		httputil.WriteError(w, r, err)
 		return
 	}
 
 	token, err := h.jwtSvc.Generate(userID, uracf, role)
 	if err != nil {
 		slog.Error("auth: jwt generation failed", "user_id", userID, "error", err)
-		httputil.HandleError(w, apperror.Internal("failed to generate token", err))
+		httputil.WriteError(w, r, apperror.Internal("failed to generate token", err))
 		return
 	}
 

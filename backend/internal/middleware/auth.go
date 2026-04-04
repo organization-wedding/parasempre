@@ -18,19 +18,19 @@ func RequireAuth(jwtSvc *auth.JWTService) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			if header == "" {
-				httputil.WriteError(w, http.StatusUnauthorized, "authorization header required")
+				httputil.WriteErrorMsg(w, http.StatusUnauthorized, "authorization header required")
 				return
 			}
 
 			tokenStr := strings.TrimPrefix(header, "Bearer ")
 			if tokenStr == header {
-				httputil.WriteError(w, http.StatusUnauthorized, "invalid authorization format")
+				httputil.WriteErrorMsg(w, http.StatusUnauthorized, "invalid authorization format")
 				return
 			}
 
 			claims, err := jwtSvc.Parse(tokenStr)
 			if err != nil {
-				httputil.HandleError(w, err)
+				httputil.WriteError(w, r, err)
 				return
 			}
 
@@ -50,12 +50,12 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := ClaimsFromContext(r.Context())
 			if claims == nil {
-				httputil.WriteError(w, http.StatusUnauthorized, "authentication required")
+				httputil.WriteErrorMsg(w, http.StatusUnauthorized, "authentication required")
 				return
 			}
 
 			if !allowed[claims.Role] {
-				httputil.WriteError(w, http.StatusForbidden, "insufficient permissions")
+				httputil.WriteErrorMsg(w, http.StatusForbidden, "insufficient permissions")
 				return
 			}
 
@@ -68,7 +68,7 @@ func DevOnly(appEnv string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if appEnv == "production" {
-				httputil.WriteError(w, http.StatusForbidden, "this endpoint is not available in production")
+				httputil.WriteErrorMsg(w, http.StatusForbidden, "this endpoint is not available in production")
 				return
 			}
 			next.ServeHTTP(w, r)

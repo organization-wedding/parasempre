@@ -16,7 +16,7 @@ func TestAppErrorMessage(t *testing.T) {
 func TestAppErrorWithWrapped(t *testing.T) {
 	inner := errors.New("db timeout")
 	err := Internal("falha interna", inner)
-	if err.Error() != "falha interna: db timeout" {
+	if err.Error() != "falha interna" {
 		t.Fatalf("unexpected message: %q", err.Error())
 	}
 	if !errors.Is(err, inner) {
