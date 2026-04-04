@@ -6,7 +6,6 @@ type Guest struct {
 	ID           int64     `json:"id"`
 	FirstName    string    `json:"first_name"`
 	LastName     string    `json:"last_name"`
-	Phone        *string   `json:"phone"`
 	Relationship string    `json:"relationship"`
 	Confirmed    bool      `json:"confirmed"`
 	FamilyGroup  int64     `json:"family_group"`
@@ -17,18 +16,17 @@ type Guest struct {
 }
 
 type CreateGuestInput struct {
-	FirstName    string `json:"first_name"`
-	LastName     string `json:"last_name"`
-	Phone        string `json:"phone"`
-	Relationship string `json:"relationship"`
-	FamilyGroup  *int64 `json:"family_group"`
+	FirstName    string  `json:"first_name"   validate:"required"`
+	LastName     string  `json:"last_name"    validate:"required"`
+	Relationship string  `json:"relationship" validate:"required,relationship"`
+	FamilyGroup  *int64  `json:"family_group" validate:"omitempty,gt=0"`
+	Phone        *string `json:"phone"        validate:"omitempty,brphone"`
 }
 
 type UpdateGuestInput struct {
 	FirstName    *string `json:"first_name"`
 	LastName     *string `json:"last_name"`
-	Phone        *string `json:"phone"`
-	Relationship *string `json:"relationship"`
+	Relationship *string `json:"relationship" validate:"omitempty,relationship"`
 	Confirmed    *bool   `json:"confirmed"`
 	FamilyGroup  *int64  `json:"family_group"`
 }

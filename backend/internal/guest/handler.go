@@ -1,16 +1,13 @@
 package guest
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 
-	"github.com/ferjunior7/parasempre/backend/internal/apperr"
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
+	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 )
 
 type Handler struct {
@@ -21,33 +18,7 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/guests", h.handleList)
-	mux.HandleFunc("POST /api/guests", h.handleCreate)
-	mux.HandleFunc("GET /api/guests/{id}", h.handleGet)
-	mux.HandleFunc("PUT /api/guests/{id}", h.handleUpdate)
-	mux.HandleFunc("DELETE /api/guests/{id}", h.handleDelete)
-	mux.HandleFunc("POST /api/guests/import", h.handleImport)
-}
-
-var racfRegex = regexp.MustCompile(`^[A-Za-z0-9]{5}$`)
-
-func getUserRACF(r *http.Request) (string, error) {
-	racf := strings.TrimSpace(r.Header.Get("user-racf"))
-	if racf == "" {
-		return "", apperr.Validation("autenticação necessária")
-	}
-	if !racfRegex.MatchString(racf) {
-		return "", apperr.Validation("credencial de acesso inválida")
-	}
-	return strings.ToUpper(racf), nil
-}
-
-func parseID(r *http.Request) (int64, error) {
-	return strconv.ParseInt(r.PathValue("id"), 10, 64)
-}
-
-func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	guests, err := h.svc.List(r.Context())
 	if err != nil {
 		httputil.WriteError(w, r, err)
@@ -56,10 +27,10 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, guests)
 }
 
-func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
+func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
+	id, err := httputil.PathID(r)
 	if err != nil {
-		httputil.WriteError(w, r, apperr.Validation("ID de convidado inválido"))
+		httputil.WriteError(w, r, err)
 		return
 	}
 
@@ -71,17 +42,12 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, guest)
 }
 
-func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
-	if err != nil {
-		httputil.WriteError(w, r, err)
-		return
-	}
+func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
 
 	var input CreateGuestInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		slog.Error("create: invalid request body", "error", err)
-		httputil.WriteError(w, r, apperr.Validation("Dados inválidos na requisição"))
+	if err := httputil.DecodeJSON(r, &input); err != nil {
+		httputil.WriteError(w, r, err)
 		return
 	}
 
@@ -93,23 +59,18 @@ func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, guest)
 }
 
-func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
+func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	id, err := httputil.PathID(r)
 	if err != nil {
 		httputil.WriteError(w, r, err)
 		return
 	}
 
-	id, err := parseID(r)
-	if err != nil {
-		httputil.WriteError(w, r, apperr.Validation("ID de convidado inválido"))
-		return
-	}
-
 	var input UpdateGuestInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		slog.Error("update: invalid request body", "id", id, "error", err)
-		httputil.WriteError(w, r, apperr.Validation("Dados inválidos na requisição"))
+	if err := httputil.DecodeJSON(r, &input); err != nil {
+		httputil.WriteError(w, r, err)
 		return
 	}
 
@@ -121,38 +82,85 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, guest)
 }
 
-func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
+func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := httputil.PathID(r)
 	if err != nil {
 		httputil.WriteError(w, r, err)
 		return
 	}
-	_ = userRACF
 
-	id, err := parseID(r)
+	err = h.svc.Delete(r.Context(), id)
 	if err != nil {
-		httputil.WriteError(w, r, apperr.Validation("ID de convidado inválido"))
-		return
-	}
-
-	if err := h.svc.Delete(r.Context(), id); err != nil {
 		httputil.WriteError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
+func (h *Handler) HandleConfirm(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	id, err := httputil.PathID(r)
 	if err != nil {
 		httputil.WriteError(w, r, err)
 		return
 	}
 
+	guest, err := h.svc.Confirm(r.Context(), id, userRACF)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+
+	guest, err := h.svc.Cancel(r.Context(), id, userRACF)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleConfirmByPhone(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	phone := r.PathValue("phone")
+	guest, err := h.svc.ConfirmByPhone(r.Context(), phone, userRACF)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleCancelByPhone(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
+	phone := r.PathValue("phone")
+	guest, err := h.svc.CancelByPhone(r.Context(), phone, userRACF)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		slog.Error("import: missing file", "error", err)
-		httputil.WriteError(w, r, apperr.Validation("Arquivo não enviado"))
+		httputil.WriteErrorMsg(w, http.StatusBadRequest, "file is required")
 		return
 	}
 	defer file.Close()
@@ -166,14 +174,13 @@ func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
 	case ".xlsx":
 		guests, err = ParseXLSX(file)
 	default:
-		slog.Warn("import: unsupported file format", "extension", ext)
-		httputil.WriteError(w, r, apperr.Validation("Formato não suportado. Use .csv ou .xlsx"))
+		httputil.WriteErrorMsg(w, http.StatusBadRequest, "unsupported file format: use .csv or .xlsx")
 		return
 	}
 
 	if err != nil {
 		slog.Error("import: failed to parse file", "extension", ext, "error", err)
-		httputil.WriteError(w, r, apperr.Validation("Não foi possível processar o arquivo"))
+		httputil.WriteErrorMsg(w, http.StatusBadRequest, "failed to parse file: "+err.Error())
 		return
 	}
 

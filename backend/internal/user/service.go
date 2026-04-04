@@ -2,24 +2,26 @@ package user
 
 import (
 	"context"
-	"errors"
+	"crypto/rand"
 	"log/slog"
-	"regexp"
+	"math/big"
 
-	"github.com/ferjunior7/parasempre/backend/internal/apperr"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
+	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
 
-// Sentinel errors kept exported so that errors.Is() keeps working in tests
-// and in any caller that needs to distinguish error kinds.
-var (
-	ErrAlreadyRegistered = errors.New("user already registered")
-	ErrGuestNotFound     = errors.New("no guest found with this phone")
-	ErrURACFTaken        = errors.New("uracf already in use")
-)
+// TxAwareRepository extends Repository with transaction support.
+type TxAwareRepository interface {
+	Repository
+	WithTx(tx pgx.Tx) Repository
+}
 
 type Service struct {
 	repo      Repository
+	txRepo    TxAwareRepository
 	guestRepo guest.Repository
 }
 
@@ -27,79 +29,53 @@ func NewService(repo Repository, guestRepo guest.Repository) *Service {
 	return &Service{repo: repo, guestRepo: guestRepo}
 }
 
-var (
-	phoneRegex = regexp.MustCompile(`^\d{2}9\d{8}$`)
-	uracfRegex = regexp.MustCompile(`^[A-Z0-9]{5}$`)
-)
+func NewServiceWithTx(repo TxAwareRepository, guestRepo guest.Repository) *Service {
+	return &Service{repo: repo, txRepo: repo, guestRepo: guestRepo}
+}
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (*User, error) {
-	if input.Phone == "" {
-		slog.Warn("user.service register: missing phone")
-		return nil, apperr.Validation("o telefone é obrigatório")
-	}
-	if !phoneRegex.MatchString(input.Phone) {
-		slog.Warn("user.service register: invalid phone", "phone", input.Phone)
-		return nil, apperr.Validation("telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)")
-	}
-	if input.URACF == "" {
-		slog.Warn("user.service register: missing uracf", "phone", input.Phone)
-		return nil, apperr.Validation("o identificador de acesso é obrigatório")
-	}
-	if !uracfRegex.MatchString(input.URACF) {
-		slog.Warn("user.service register: invalid uracf", "uracf", input.URACF)
-		return nil, apperr.Validation("identificador de acesso inválido")
+	if err := validate.Struct(input); err != nil {
+		return nil, err
 	}
 
-	g, err := s.guestRepo.GetByPhone(ctx, input.Phone)
+	// Find user by phone (phone is now on users table only)
+	existing, err := s.repo.GetByPhone(ctx, input.Phone)
 	if err != nil {
-		slog.Error("user.service register: guest lookup failed", "phone", input.Phone, "error", err)
-		return nil, apperr.Internal(err)
-	}
-	if g == nil {
-		slog.Warn("user.service register: guest not found", "phone", input.Phone)
-		return nil, apperr.NotFound("Nenhum convidado encontrado com este telefone", ErrGuestNotFound)
-	}
-
-	existing, err := s.repo.GetByGuestID(ctx, g.ID)
-	if err != nil {
-		slog.Error("user.service register: guest user lookup failed", "guest_id", g.ID, "error", err)
-		return nil, apperr.Internal(err)
+		slog.Error("user.service register: user lookup failed", "phone", input.Phone, "error", err)
+		return nil, apperror.Internal("failed to lookup user", err)
 	}
 	if existing != nil {
-		slog.Warn("user.service register: guest already registered", "guest_id", g.ID)
-		return nil, apperr.Conflict("Este convidado já possui cadastro", ErrAlreadyRegistered)
+		return nil, apperror.Conflict("user already registered with this phone")
 	}
 
 	existingByURACF, err := s.repo.GetByURACF(ctx, input.URACF)
 	if err != nil {
 		slog.Error("user.service register: uracf lookup failed", "uracf", input.URACF, "error", err)
-		return nil, apperr.Internal(err)
+		return nil, apperror.Internal("failed to check uracf", err)
 	}
 	if existingByURACF != nil {
-		slog.Warn("user.service register: uracf taken", "uracf", input.URACF)
-		return nil, apperr.Conflict("Este identificador de acesso já está em uso", ErrURACFTaken)
+		return nil, apperror.Conflict("uracf already in use")
 	}
 
 	u := &User{
-		GuestID: &g.ID,
-		Role:    "guest",
-		URACF:   input.URACF,
+		Role:  "guest",
+		URACF: input.URACF,
+		Phone: &input.Phone,
 	}
 
 	created, err := s.repo.Create(ctx, u)
 	if err != nil {
-		slog.Error("user.service register: create failed", "guest_id", g.ID, "uracf", input.URACF, "error", err)
-		return nil, apperr.Internal(err)
+		slog.Error("user.service register: create failed", "uracf", input.URACF, "error", err)
+		return nil, apperror.Internal("failed to create user", err)
 	}
-	slog.Info("user.service register: user created", "id", created.ID, "guest_id", g.ID)
+	slog.Info("user.service register: user created", "id", created.ID)
 	return created, nil
 }
 
 func (s *Service) List(ctx context.Context) ([]UserListItem, error) {
 	items, err := s.repo.List(ctx)
 	if err != nil {
-		slog.Error("user.service list: failed", "error", err)
-		return nil, apperr.Internal(err)
+		return nil, apperror.Internal("failed to list users", err)
 	}
 	return items, nil
 }
@@ -108,50 +84,112 @@ func (s *Service) GetMe(ctx context.Context, uracf string) (*User, error) {
 	u, err := s.repo.GetByURACF(ctx, uracf)
 	if err != nil {
 		slog.Error("user.service get_me: lookup failed", "uracf", uracf, "error", err)
-		return nil, apperr.Internal(err)
-	}
-	if u == nil {
-		return nil, apperr.NotFound("Usuário não encontrado", nil)
+		return nil, apperror.Internal("failed to get user", err)
 	}
 	return u, nil
 }
 
 func (s *Service) CheckByPhone(ctx context.Context, phone string) (*CheckResponse, error) {
-	if phone == "" {
-		slog.Warn("user.service check: missing phone")
-		return nil, apperr.Validation("o telefone é obrigatório")
+	type phoneInput struct {
+		Phone string `validate:"required,brphone"`
 	}
-	if !phoneRegex.MatchString(phone) {
-		slog.Warn("user.service check: invalid phone", "phone", phone)
-		return nil, apperr.Validation("telefone inválido. Use o formato: DDD + 9 + 8 dígitos (ex: 11912345678)")
+	if err := validate.Struct(phoneInput{Phone: phone}); err != nil {
+		return nil, err
 	}
 
-	g, err := s.guestRepo.GetByPhone(ctx, phone)
+	u, err := s.repo.GetByPhone(ctx, phone)
 	if err != nil {
-		slog.Error("user.service check: guest lookup failed", "phone", phone, "error", err)
-		return nil, apperr.Internal(err)
+		slog.Error("user.service check: user lookup failed", "phone", phone, "error", err)
+		return nil, apperror.Internal("failed to check phone", err)
 	}
-	if g == nil {
-		slog.Info("user.service check: guest not found", "phone", phone)
-		return &CheckResponse{Exists: false}, nil
-	}
-
-	u, err := s.repo.GetByGuestID(ctx, g.ID)
-	if err != nil {
-		slog.Error("user.service check: user lookup failed", "guest_id", g.ID, "error", err)
-		return nil, apperr.Internal(err)
-	}
-	if u == nil {
-		slog.Info("user.service check: no user for guest", "guest_id", g.ID)
-		return &CheckResponse{Exists: false}, nil
+	if u != nil {
+		return &CheckResponse{Exists: true, Role: u.Role}, nil
 	}
 
-	slog.Info("user.service check: user exists", "guest_id", g.ID, "role", u.Role)
-	return &CheckResponse{Exists: true, Role: u.Role}, nil
+	return &CheckResponse{Exists: false}, nil
 }
 
-type CoupleData struct {
-	URACF string
+func (s *Service) FindOrCreateByPhone(ctx context.Context, phone string) (int64, string, string, error) {
+	u, err := s.repo.GetByPhone(ctx, phone)
+	if err != nil {
+		slog.Error("user.service find_or_create: user lookup failed", "phone", phone, "error", err)
+		return 0, "", "", apperror.Internal("failed to find user", err)
+	}
+	if u != nil {
+		return u.ID, u.URACF, u.Role, nil
+	}
+
+	return 0, "", "", apperror.NotFound("no user found with this phone")
+}
+
+// GetGuestIDByPhone implements guest.UserPhoneLookup.
+// Busca um user pelo phone e retorna o guest_id associado.
+func (s *Service) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error) {
+	u, err := s.repo.GetByPhone(ctx, phone)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil || u.GuestID == nil {
+		return nil, nil
+	}
+	return u.GuestID, nil
+}
+
+func (s *Service) PhoneExists(ctx context.Context, phone string) (bool, error) {
+	u, err := s.repo.GetByPhone(ctx, phone)
+	if err != nil {
+		return false, err
+	}
+	return u != nil, nil
+}
+
+func (s *Service) RecordLogin(ctx context.Context, userID int64) {
+	if err := s.repo.UpdateLastLogin(ctx, userID); err != nil {
+		slog.Error("user.service record_login: update last_login failed", "user_id", userID, "error", err)
+	}
+	if err := s.repo.LogAction(ctx, userID, "login", nil); err != nil {
+		slog.Error("user.service record_login: log action failed", "user_id", userID, "error", err)
+	}
+}
+
+// CreateGuestUserTx creates a user linked to a guest within an existing transaction.
+func (s *Service) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error {
+	uracf, err := GenerateURACF()
+	if err != nil {
+		slog.Error("user.service create_guest_user: uracf generation failed", "error", err)
+		return apperror.Internal("failed to generate uracf", err)
+	}
+
+	u := &User{
+		GuestID: &guestID,
+		Role:    "guest",
+		URACF:   uracf,
+		Phone:   phone,
+	}
+
+	txRepo := s.txRepo.WithTx(tx)
+	if _, err := txRepo.Create(ctx, u); err != nil {
+		slog.Error("user.service create_guest_user: create failed", "guest_id", guestID, "error", err)
+		return apperror.Internal("failed to create guest user", err)
+	}
+
+	slog.Info("user.service create_guest_user: user created", "guest_id", guestID, "uracf", uracf)
+	return nil
+}
+
+const uracfChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// GenerateURACF generates a random 5-character uppercase alphanumeric string.
+func GenerateURACF() (string, error) {
+	result := make([]byte, 5)
+	for i := range result {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(uracfChars))))
+		if err != nil {
+			return "", err
+		}
+		result[i] = uracfChars[n.Int64()]
+	}
+	return string(result), nil
 }
 
 func (s *Service) SeedCouple(ctx context.Context, groom, bride CoupleData) {
@@ -176,6 +214,9 @@ func (s *Service) seedPerson(ctx context.Context, data CoupleData, role string) 
 	u := &User{
 		Role:  role,
 		URACF: data.URACF,
+	}
+	if data.Phone != "" {
+		u.Phone = &data.Phone
 	}
 
 	created, err := s.repo.Create(ctx, u)
