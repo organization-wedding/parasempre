@@ -13,7 +13,6 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 )
 
-// mockRepository implements TxAwareRepository with function fields for easy stubbing.
 type mockRepository struct {
 	listFn               func(ctx context.Context, limit, offset int) ([]Guest, int, error)
 	getByID              func(ctx context.Context, id int64) (*Guest, error)
@@ -100,6 +99,22 @@ func (m *mockUserCreator) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, gues
 	return nil
 }
 
+// mockUserDeleter implements UserDeleter for tests.
+type mockUserDeleter struct {
+	deleteFn func(ctx context.Context, tx pgx.Tx, guestID int64) error
+}
+
+func (m *mockUserDeleter) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, tx, guestID)
+	}
+	return nil
+}
+
+func noopUserDeleter() *mockUserDeleter {
+	return &mockUserDeleter{}
+}
+
 // mockUserPhoneLookup implements UserPhoneLookup for tests.
 type mockUserPhoneLookup struct {
 	getGuestIDByPhoneFn func(ctx context.Context, phone string) (*int64, error)
@@ -164,6 +179,7 @@ func newTestServiceWithPhone(repo *mockRepository, checker *mockUserChecker, cre
 		repo:            repo,
 		userChecker:     checker,
 		userCreator:     creator,
+		userDeleter:     noopUserDeleter(),
 		userPhoneLookup: phoneLookup,
 		txRunner:        &mockTxRunner{},
 	}

@@ -112,6 +112,11 @@ func (r *PostgresRepository) Create(ctx context.Context, u *User) (*User, error)
 	return &created, nil
 }
 
+func (r *PostgresRepository) DeleteByGuestID(ctx context.Context, guestID int64) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM users WHERE guest_id = $1`, guestID)
+	return err
+}
+
 func (r *PostgresRepository) UpdateLastLogin(ctx context.Context, userID int64) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE users SET last_login_at = now(), updated_at = now() WHERE id = $1`, userID)
