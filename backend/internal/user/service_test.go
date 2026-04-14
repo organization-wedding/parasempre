@@ -75,7 +75,7 @@ func (m *mockUserRepo) WithTx(_ pgx.Tx) Repository {
 
 // mockGuestRepo implements guest.Repository with function fields.
 type mockGuestRepo struct {
-	listFn               func(ctx context.Context) ([]guest.Guest, error)
+	listFn               func(ctx context.Context, limit, offset int) ([]guest.Guest, int, error)
 	getByID              func(ctx context.Context, id int64) (*guest.Guest, error)
 	getByName            func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
 	familyGroupExistsFn  func(ctx context.Context, familyGroup int64) (bool, error)
@@ -85,11 +85,11 @@ type mockGuestRepo struct {
 	deleteFn             func(ctx context.Context, id int64) error
 }
 
-func (m *mockGuestRepo) List(ctx context.Context) ([]guest.Guest, error) {
+func (m *mockGuestRepo) List(ctx context.Context, limit, offset int) ([]guest.Guest, int, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx)
+		return m.listFn(ctx, limit, offset)
 	}
-	return []guest.Guest{}, nil
+	return []guest.Guest{}, 0, nil
 }
 
 func (m *mockGuestRepo) GetByID(ctx context.Context, id int64) (*guest.Guest, error) {

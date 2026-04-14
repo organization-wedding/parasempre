@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
@@ -19,12 +20,15 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
-	guests, err := h.svc.List(r.Context())
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+
+	result, err := h.svc.List(r.Context(), page, limit)
 	if err != nil {
 		httputil.WriteError(w, r, err)
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, guests)
+	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -184,25 +188,34 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var created int
-	var errs []string
+	var successCount int
+	var rowErrors []ImportRowError
+	const dataRowStart = 2 // row 1 is the header in CSV/XLSX files
 	for i, input := range guests {
+		rowNumber := i + dataRowStart
 		if _, err := h.svc.Create(r.Context(), input, userRACF); err != nil {
-			slog.Warn("import: failed to create guest", "row", i+2, "error", err)
-			errs = append(errs, err.Error())
+			slog.Warn("import: failed to create guest", "row", rowNumber, "error", err)
+			rowErrors = append(rowErrors, ImportRowError{Row: rowNumber, Error: err.Error()})
 			continue
 		}
-		created++
+		successCount++
+	}
+
+	if rowErrors == nil {
+		rowErrors = []ImportRowError{}
 	}
 
 	status := http.StatusOK
-	if len(errs) > 0 {
+	if len(rowErrors) > 0 && successCount > 0 {
+		status = http.StatusMultiStatus
+	} else if len(rowErrors) > 0 {
 		status = http.StatusBadRequest
 	}
 
-	httputil.WriteJSON(w, status, map[string]any{
-		"imported": created,
-		"errors":   errs,
-		"total":    len(guests),
+	httputil.WriteJSON(w, status, ImportResponse{
+		SuccessCount: successCount,
+		ErrorCount:   len(rowErrors),
+		Total:        len(guests),
+		Errors:       rowErrors,
 	})
 }

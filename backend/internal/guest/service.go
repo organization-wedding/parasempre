@@ -39,13 +39,29 @@ func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator Use
 	return &Service{repo: repo, userChecker: userChecker, userCreator: userCreator, userPhoneLookup: userPhoneLookup, txRunner: txRunner}
 }
 
-func (s *Service) List(ctx context.Context) ([]Guest, error) {
-	guests, err := s.repo.List(ctx)
+func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset := (page - 1) * limit
+	guests, total, err := s.repo.List(ctx, limit, offset)
 	if err != nil {
 		slog.Error("guest.service list: failed", "error", err)
 		return nil, apperror.Internal("failed to list guests", err)
 	}
-	return guests, nil
+	return &PagedResponse{
+		Data:  guests,
+		Page:  page,
+		Limit: limit,
+		Total: total,
+	}, nil
 }
 
 func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {
@@ -72,15 +88,6 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 	}
 	if !exists {
 		return nil, apperror.Validation("user-racf does not match any registered user")
-	}
-
-	existing, err := s.repo.GetByName(ctx, input.FirstName, input.LastName)
-	if err != nil {
-		slog.Error("guest.service create: name lookup failed", "error", err)
-		return nil, apperror.Internal("failed to check name uniqueness", err)
-	}
-	if existing != nil {
-		return nil, apperror.Conflict(fmt.Sprintf("a guest named '%s %s' already exists", input.FirstName, input.LastName))
 	}
 
 	if input.FamilyGroup != nil {

@@ -43,6 +43,10 @@ func Unauthorized(msg string) *AppError {
 func Forbidden(msg string) *AppError {
 	return &AppError{Code: http.StatusForbidden, Message: msg}
 }
+// TooManyRequests creates a 429 AppError for rate limiting.
+func TooManyRequests(msg string) *AppError {
+	return &AppError{Code: http.StatusTooManyRequests, Message: msg}
+}
 
 // Internal creates a 500 AppError. The cause is stored for logging but the
 // user-facing message is always returned to the client.

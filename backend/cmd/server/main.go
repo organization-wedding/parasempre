@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/ferjunior7/parasempre/backend/internal/auth"
 	"github.com/ferjunior7/parasempre/backend/internal/config"
 	"github.com/ferjunior7/parasempre/backend/internal/database"
@@ -25,10 +27,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer connectCancel()
 
-	pool, err := database.Connect(ctx, cfg.DB)
+	pool, err := database.Connect(connectCtx, cfg.DB)
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -67,21 +69,32 @@ func main() {
 	}
 	otpSvc := auth.NewOTPService(otpRepo, whatsappSender)
 	authHandler := auth.NewHandler(otpSvc, jwtSvc, userSvc, userSvc, userSvc)
-
-	// Seed couple
-	userSvc.SeedCouple(ctx,
+	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer seedCancel()
+	userSvc.SeedCouple(seedCtx,
 		user.CoupleData{URACF: cfg.Couple.Groom.URACF, Phone: cfg.Couple.Groom.Phone},
 		user.CoupleData{URACF: cfg.Couple.Bride.URACF, Phone: cfg.Couple.Bride.Phone},
 	)
 
-	// Routes
+	otpMinuteLimiter := middleware.NewRateLimiter(rate.Every(time.Minute), 1)
+	defer otpMinuteLimiter.Close()
+	otpHourLimiter := middleware.NewRateLimiter(rate.Every(time.Hour/10), 10)
+	defer otpHourLimiter.Close()
+
 	mux := http.NewServeMux()
 
-	// Public
-	authHandler.RegisterRoutes(mux)
+	mux.Handle("POST /api/auth/otp/send", middleware.Chain(
+		http.HandlerFunc(authHandler.HandleSendOTP),
+		otpHourLimiter.Middleware(),
+		otpMinuteLimiter.Middleware(),
+	))
+	mux.Handle("POST /api/auth/otp/verify", middleware.Chain(
+		http.HandlerFunc(authHandler.HandleVerifyOTP),
+		otpHourLimiter.Middleware(),
+		otpMinuteLimiter.Middleware(),
+	))
 	mux.HandleFunc("GET /api/users/check", userHandler.HandleCheck)
 
-	// Authenticated (any role)
 	mux.Handle("GET /api/guests", middleware.Chain(
 		http.HandlerFunc(guestHandler.HandleList),
 		middleware.RequireAuth(jwtSvc),

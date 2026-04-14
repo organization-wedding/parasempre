@@ -3,8 +3,11 @@ package guest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -24,22 +27,25 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 	return &PostgresRepository{db: tx}
 }
 
-func (r *PostgresRepository) List(ctx context.Context) ([]Guest, error) {
+func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at
-		 FROM guests ORDER BY created_at DESC`)
+		`SELECT id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at,
+		        COUNT(*) OVER() AS total
+		 FROM guests ORDER BY created_at DESC
+		 LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		slog.Error("guest.repo list: query failed", "error", err)
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var guests []Guest
+	var total int
 	for rows.Next() {
 		var g Guest
-		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt, &total); err != nil {
 			slog.Error("guest.repo list: scan failed", "error", err)
-			return nil, err
+			return nil, 0, err
 		}
 		guests = append(guests, g)
 	}
@@ -48,7 +54,7 @@ func (r *PostgresRepository) List(ctx context.Context) ([]Guest, error) {
 		guests = []Guest{}
 	}
 
-	return guests, rows.Err()
+	return guests, total, rows.Err()
 }
 
 func (r *PostgresRepository) GetByID(ctx context.Context, id int64) (*Guest, error) {
@@ -116,6 +122,10 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput,
 		input.FirstName, input.LastName, input.Relationship, *input.FamilyGroup, userRACF, userRACF).
 		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, apperror.Conflict(fmt.Sprintf("a guest named '%s %s' already exists", input.FirstName, input.LastName))
+		}
 		slog.Error("guest.repo create: insert failed", "error", err)
 		return nil, err
 	}
