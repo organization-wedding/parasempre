@@ -1,4 +1,5 @@
 import { API_BASE } from "../config";
+import { getToken, clearAuth } from "./auth";
 import type {
   Guest,
   CreateGuestInput,
@@ -13,26 +14,10 @@ import {
   updateGuestInputSchema,
 } from "../schemas/guest";
 
-const RACF_KEY = "user-racf";
-
-export function getUserRacf(): string | null {
-  return localStorage.getItem(RACF_KEY);
-}
-
-export function setUserRacf(racf: string) {
-  localStorage.setItem(RACF_KEY, racf.toUpperCase());
-  window.dispatchEvent(new Event("racf-changed"));
-}
-
-export function clearUserRacf() {
-  localStorage.removeItem(RACF_KEY);
-  window.dispatchEvent(new Event("racf-changed"));
-}
-
 function authHeaders(): Record<string, string> {
-  const racf = getUserRacf();
-  if (!racf) throw new Error("Identificação (RACF) não configurada");
-  return { "user-racf": racf };
+  const token = getToken();
+  if (!token) throw new Error("Autenticação necessária");
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function parseApiError(res: Response): Promise<string> {
@@ -47,6 +32,12 @@ async function parseApiError(res: Response): Promise<string> {
 }
 
 async function handleResponse<T>(res: Response, schema: { parse: (value: unknown) => T }): Promise<T> {
+  if (res.status === 401) {
+    clearAuth();
+    const path = encodeURIComponent(window.location.pathname);
+    window.location.href = `/login?redirect=${path}`;
+    throw new Error("Sessão expirada");
+  }
   const data = await res.json();
   if (!res.ok) {
     throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
@@ -71,11 +62,15 @@ export async function listUsers(): Promise<UserListItem[]> {
 }
 
 export async function getUserMe(): Promise<{ role: string } | null> {
-  const racf = getUserRacf();
-  if (!racf) return null;
+  const token = getToken();
+  if (!token) return null;
   const res = await fetch(`${API_BASE}/api/users/me`, {
-    headers: { "user-racf": racf },
+    headers: { Authorization: `Bearer ${token}` },
   });
+  if (res.status === 401) {
+    clearAuth();
+    return null;
+  }
   if (res.status === 404) return null;
   if (!res.ok) {
     const data = (await res.json()) as { error?: string };
@@ -85,12 +80,16 @@ export async function getUserMe(): Promise<{ role: string } | null> {
 }
 
 export async function listGuests(): Promise<Guest[]> {
-  const res = await fetch(`${API_BASE}/api/guests`);
+  const res = await fetch(`${API_BASE}/api/guests`, {
+    headers: authHeaders(),
+  });
   return handleResponse(res, guestsSchema);
 }
 
 export async function getGuest(id: number): Promise<Guest> {
-  const res = await fetch(`${API_BASE}/api/guests/${id}`);
+  const res = await fetch(`${API_BASE}/api/guests/${id}`, {
+    headers: authHeaders(),
+  });
   return handleResponse(res, guestSchema);
 }
 
@@ -136,4 +135,37 @@ export async function importGuests(file: File): Promise<ImportResult> {
     body: form,
   });
   return handleResponse(res, importResultSchema);
+}
+
+// ── Auth / OTP ──────────────────────────────────────────────
+
+export async function sendOtp(phone: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/otp/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
+  if (!res.ok) {
+    const data = (await res.json()) as { error?: string };
+    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
+  }
+}
+
+export interface TokenResponse {
+  token: string;
+  role: string;
+  uracf: string;
+}
+
+export async function verifyOtp(phone: string, code: string): Promise<TokenResponse> {
+  const res = await fetch(`${API_BASE}/api/auth/otp/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, code }),
+  });
+  if (!res.ok) {
+    const data = (await res.json()) as { error?: string };
+    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
+  }
+  return res.json() as Promise<TokenResponse>;
 }

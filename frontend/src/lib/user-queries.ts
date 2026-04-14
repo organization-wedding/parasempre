@@ -1,25 +1,13 @@
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getUserMe, getUserRacf } from "./api";
-
-export function useCurrentRacf() {
-  const [racf, setRacf] = useState(getUserRacf());
-  useEffect(() => {
-    function onChanged() {
-      setRacf(getUserRacf());
-    }
-    window.addEventListener("racf-changed", onChanged);
-    return () => window.removeEventListener("racf-changed", onChanged);
-  }, []);
-  return racf;
-}
+import { getUserMe } from "./api";
+import { useAuth } from "./auth-queries";
 
 export function useUserMeQuery(enabled = true) {
-  const racf = useCurrentRacf();
+  const { token } = useAuth();
   return useQuery({
-    queryKey: ["user-me", racf],
+    queryKey: ["user-me", token],
     queryFn: getUserMe,
-    enabled: enabled && !!racf,
+    enabled: enabled && !!token,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

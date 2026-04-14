@@ -23,14 +23,6 @@ import { useUserMeQuery } from "../lib/user-queries";
 import { UnauthorizedPage } from "./UnauthorizedPage";
 import type { Guest, ImportResult } from "../types/guest";
 
-function formatPhone(phone: string | null): string {
-  if (!phone) return "—";
-  if (phone.length === 11) {
-    return `(${phone.slice(0, 2)}) ${phone.slice(2, 7)}-${phone.slice(7)}`;
-  }
-  return phone;
-}
-
 type RelationshipFilter = "" | "P" | "R";
 type ConfirmedFilter = "" | "yes" | "no";
 
@@ -56,7 +48,7 @@ export function GuestListPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
-  // Role check — RACF comes from the impersonation modal
+  // Role check — user is already authenticated (router guard)
   const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
   const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
 
@@ -67,8 +59,7 @@ export function GuestListPage() {
       const q = search.toLowerCase();
       const matchesSearch =
         !q ||
-        `${g.first_name} ${g.last_name}`.toLowerCase().includes(q) ||
-        (g.phone && g.phone.includes(search));
+        `${g.first_name} ${g.last_name}`.toLowerCase().includes(q);
       const matchesRel = !filterRel || g.relationship === filterRel;
       const matchesConf = !filterConf || (filterConf === "yes" ? g.confirmed : !g.confirmed);
       return matchesSearch && matchesRel && matchesConf;
@@ -237,7 +228,7 @@ export function GuestListPage() {
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por nome ou telefone..."
+              placeholder="Buscar por nome..."
               className="w-full pl-10 pr-4 py-2.5 text-[0.85rem] border border-gold-muted/50 bg-ivory text-dark-warm placeholder:text-hint/40 outline-none focus:border-burgundy transition-colors"
             />
           </div>
@@ -402,7 +393,7 @@ export function GuestListPage() {
             </div>
 
             <div className="overflow-x-auto rounded border border-gold-muted/50 shadow-[0_2px_8px_rgba(28,20,16,0.06)]">
-              <table className="w-full min-w-[740px]">
+              <table className="w-full min-w-[600px]">
                 <thead>
                   <tr className="border-b-2 border-gold-muted/40 bg-dark/[0.04]">
                     <th className="py-3 px-3 w-10">
@@ -415,7 +406,6 @@ export function GuestListPage() {
                       />
                     </th>
                     <th className="text-left font-heading text-[0.67rem] font-bold tracking-[0.12em] uppercase text-dark-warm/70 py-3 px-4">Nome</th>
-                    <th className="text-left font-heading text-[0.67rem] font-bold tracking-[0.12em] uppercase text-dark-warm/70 py-3 px-4">Telefone</th>
                     <th className="text-center font-heading text-[0.67rem] font-bold tracking-[0.12em] uppercase text-dark-warm/70 py-3 px-4">Lado</th>
                     <th className="text-center font-heading text-[0.67rem] font-bold tracking-[0.12em] uppercase text-dark-warm/70 py-3 px-4">Grupo</th>
                     <th className="text-center font-heading text-[0.67rem] font-bold tracking-[0.12em] uppercase text-dark-warm/70 py-3 px-4">Status</th>
@@ -442,9 +432,6 @@ export function GuestListPage() {
                         <span className="text-[0.88rem] font-semibold text-dark">
                           {guest.first_name} {guest.last_name}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-[0.84rem] text-dark-warm/70 font-mono tracking-wide">
-                        {formatPhone(guest.phone)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span
@@ -578,7 +565,7 @@ export function GuestListPage() {
             </div>
             <div className="mb-5">
               <p className="text-[0.8rem] text-dark-warm/70 mb-3">
-                O arquivo deve conter as colunas: <code className="text-[0.75rem] bg-parchment-dark/60 px-1.5 py-0.5 font-mono">first_name, last_name, phone, relationship, family_group</code>
+                O arquivo deve conter as colunas: <code className="text-[0.75rem] bg-parchment-dark/60 px-1.5 py-0.5 font-mono">first_name, last_name, relationship, family_group</code>
               </p>
               <label className="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-gold-muted/40 bg-parchment/50 cursor-pointer hover:border-burgundy/40 hover:bg-parchment transition-colors">
                 <Upload size={24} className="text-hint/50" />
