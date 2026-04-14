@@ -22,6 +22,11 @@ type UserCreator interface {
 	CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
 }
 
+// UserDeleter deletes a user linked to a guest within a transaction.
+type UserDeleter interface {
+	DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error
+}
+
 // UserPhoneLookup resolves a phone number to a guest_id via the users table.
 type UserPhoneLookup interface {
 	GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error)
@@ -31,12 +36,13 @@ type Service struct {
 	repo            TxAwareRepository
 	userChecker     UserChecker
 	userCreator     UserCreator
+	userDeleter     UserDeleter
 	userPhoneLookup UserPhoneLookup
 	txRunner        database.TxRunner
 }
 
-func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator UserCreator, userPhoneLookup UserPhoneLookup, txRunner database.TxRunner) *Service {
-	return &Service{repo: repo, userChecker: userChecker, userCreator: userCreator, userPhoneLookup: userPhoneLookup, txRunner: txRunner}
+func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator UserCreator, userDeleter UserDeleter, userPhoneLookup UserPhoneLookup, txRunner database.TxRunner) *Service {
+	return &Service{repo: repo, userChecker: userChecker, userCreator: userCreator, userDeleter: userDeleter, userPhoneLookup: userPhoneLookup, txRunner: txRunner}
 }
 
 func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, error) {
@@ -253,7 +259,13 @@ func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirm
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
+	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
+		if err := s.userDeleter.DeleteGuestUserTx(ctx, tx, id); err != nil {
+			return err
+		}
+		txRepo := s.repo.WithTx(tx)
+		return txRepo.Delete(ctx, id)
+	}); err != nil {
 		if _, ok := apperror.IsAppError(err); ok {
 			return err
 		}

@@ -177,6 +177,17 @@ func (s *Service) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int6
 	return nil
 }
 
+// DeleteGuestUserTx deletes the user linked to a guest within an existing transaction.
+func (s *Service) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error {
+	txRepo := s.txRepo.WithTx(tx)
+	if err := txRepo.DeleteByGuestID(ctx, guestID); err != nil {
+		slog.Error("user.service delete_guest_user: delete failed", "guest_id", guestID, "error", err)
+		return apperror.Internal("failed to delete guest user", err)
+	}
+	slog.Info("user.service delete_guest_user: user deleted", "guest_id", guestID)
+	return nil
+}
+
 const uracfChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 // GenerateURACF generates a random 5-character uppercase alphanumeric string.

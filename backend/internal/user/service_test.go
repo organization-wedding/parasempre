@@ -61,6 +61,10 @@ func (m *mockUserRepo) UpdateLastLogin(ctx context.Context, userID int64) error 
 	return nil
 }
 
+func (m *mockUserRepo) DeleteByGuestID(ctx context.Context, guestID int64) error {
+	return nil
+}
+
 func (m *mockUserRepo) LogAction(ctx context.Context, userID int64, action string, details map[string]any) error {
 	if m.logAction != nil {
 		return m.logAction(ctx, userID, action, details)

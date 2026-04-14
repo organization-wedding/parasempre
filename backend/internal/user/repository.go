@@ -7,6 +7,7 @@ type Repository interface {
 	GetByGuestID(ctx context.Context, guestID int64) (*User, error)
 	GetByPhone(ctx context.Context, phone string) (*User, error)
 	Create(ctx context.Context, u *User) (*User, error)
+	DeleteByGuestID(ctx context.Context, guestID int64) error
 	List(ctx context.Context) ([]UserListItem, error)
 	UpdateLastLogin(ctx context.Context, userID int64) error
 	LogAction(ctx context.Context, userID int64, action string, details map[string]any) error

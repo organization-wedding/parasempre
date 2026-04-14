@@ -56,7 +56,7 @@ func main() {
 	// Services
 	userSvc := user.NewServiceWithTx(userRepo, guestRepo)
 
-	guestSvc := guest.NewService(guestRepo, &userCheckerAdapter{repo: userRepo}, userSvc, userSvc, txRunner)
+	guestSvc := guest.NewService(guestRepo, &userCheckerAdapter{repo: userRepo}, userSvc, userSvc, userSvc, txRunner)
 	guestHandler := guest.NewHandler(guestSvc)
 	userHandler := user.NewHandler(userSvc, cfg.AppEnv)
 
