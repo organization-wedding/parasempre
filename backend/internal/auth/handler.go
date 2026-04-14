@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
@@ -40,10 +41,6 @@ func NewHandler(otpSvc *OTPService, jwtSvc *JWTService, userFinder UserFinder, p
 	}
 }
 
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/auth/otp/send", h.HandleSendOTP)
-	mux.HandleFunc("POST /api/auth/otp/verify", h.HandleVerifyOTP)
-}
 
 func (h *Handler) HandleSendOTP(w http.ResponseWriter, r *http.Request) {
 	var input SendOTPInput
@@ -104,11 +101,17 @@ func (h *Handler) HandleVerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.loginRecorder.RecordLogin(context.Background(), userID)
+	go h.recordLoginAsync(userID)
 
 	httputil.WriteJSON(w, http.StatusOK, TokenResponse{
 		Token: token,
 		Role:  role,
 		URACF: uracf,
 	})
+}
+
+func (h *Handler) recordLoginAsync(userID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h.loginRecorder.RecordLogin(ctx, userID)
 }

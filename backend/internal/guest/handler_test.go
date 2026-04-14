@@ -43,11 +43,11 @@ func withTestClaims(req *http.Request, uracf string) *http.Request {
 
 func TestHandlerListGuests(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context) ([]Guest, error) {
-		return []Guest{sampleGuest()}, nil
+	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+		return []Guest{sampleGuest()}, 1, nil
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/guests", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/guests?page=1&limit=20", nil)
 	w := httptest.NewRecorder()
 	h.HandleList(w, req)
 
@@ -55,19 +55,22 @@ func TestHandlerListGuests(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var guests []Guest
-	if err := json.NewDecoder(w.Body).Decode(&guests); err != nil {
+	var result PagedResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
-	if len(guests) != 1 {
-		t.Fatalf("expected 1 guest, got %d", len(guests))
+	if len(result.Data) != 1 {
+		t.Fatalf("expected 1 guest, got %d", len(result.Data))
+	}
+	if result.Total != 1 {
+		t.Fatalf("expected total 1, got %d", result.Total)
 	}
 }
 
 func TestHandlerListGuestsError(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context) ([]Guest, error) {
-		return nil, errors.New("db error")
+	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+		return nil, 0, errors.New("db error")
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests", nil)
@@ -379,9 +382,17 @@ func TestHandlerImportCSV(t *testing.T) {
 	if created != 2 {
 		t.Fatalf("expected 2 guests created, got %d", created)
 	}
+
+	var resp ImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if resp.SuccessCount != 2 || resp.ErrorCount != 0 {
+		t.Fatalf("expected 2 success, 0 errors, got %+v", resp)
+	}
 }
 
-func TestHandlerImportCSVWithErrors(t *testing.T) {
+func TestHandlerImportCSVAllErrors(t *testing.T) {
 	h, repo := newTestHandler()
 	repo.createFn = func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
 		return nil, errors.New("duplicate name")
@@ -401,6 +412,51 @@ func TestHandlerImportCSVWithErrors(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp ImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if resp.ErrorCount != 1 || resp.Errors[0].Row != 2 {
+		t.Fatalf("expected 1 error on row 2, got %+v", resp)
+	}
+}
+
+func TestHandlerImportCSVPartialSuccess(t *testing.T) {
+	h, repo := newTestHandler()
+	callCount := 0
+	repo.createFn = func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+		callCount++
+		if callCount == 2 {
+			return nil, errors.New("duplicate name")
+		}
+		g := sampleGuest()
+		return &g, nil
+	}
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, _ := writer.CreateFormFile("file", "guests.csv")
+	part.Write([]byte("first_name,last_name,relationship,family_group\nJoão,Silva,P,1\nMaria,Santos,R,2\n"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	h.HandleImport(w, req)
+
+	if w.Code != http.StatusMultiStatus {
+		t.Fatalf("expected 207, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp ImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if resp.SuccessCount != 1 || resp.ErrorCount != 1 {
+		t.Fatalf("expected 1 success + 1 error, got %+v", resp)
 	}
 }
 

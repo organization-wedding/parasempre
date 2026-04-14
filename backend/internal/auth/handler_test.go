@@ -41,14 +41,8 @@ func newTestHandler() *Handler {
 		createFn: func(ctx context.Context, phone, code string, expiresAt time.Time) error {
 			return nil
 		},
-		findValidFn: func(ctx context.Context, phone, code string) (*OTPRecord, error) {
-			if code == "123456" {
-				return &OTPRecord{ID: 1, Phone: phone, Code: code, ExpiresAt: time.Now().Add(5 * time.Minute)}, nil
-			}
-			return nil, nil
-		},
-		markUsedFn: func(ctx context.Context, id int64) error {
-			return nil
+		verifyAndMarkUsedFn: func(ctx context.Context, phone, code string) (bool, error) {
+			return code == "123456", nil
 		},
 	}
 	sender := &mockSender{

@@ -2,10 +2,8 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ferjunior7/parasempre/backend/internal/database"
@@ -26,26 +24,13 @@ func (r *PostgresOTPRepository) Create(ctx context.Context, phone, code string, 
 	return err
 }
 
-func (r *PostgresOTPRepository) FindValid(ctx context.Context, phone, code string) (*OTPRecord, error) {
-	var rec OTPRecord
-	err := r.db.QueryRow(ctx,
-		`SELECT id, phone, code, expires_at, used
-		 FROM otp_codes
-		 WHERE phone = $1 AND code = $2 AND used = false AND expires_at > now()
-		 ORDER BY created_at DESC
-		 LIMIT 1`, phone, code).
-		Scan(&rec.ID, &rec.Phone, &rec.Code, &rec.ExpiresAt, &rec.Used)
+func (r *PostgresOTPRepository) VerifyAndMarkUsed(ctx context.Context, phone, code string) (bool, error) {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE otp_codes SET used = true
+		 WHERE phone = $1 AND code = $2 AND expires_at > now() AND used = false`,
+		phone, code)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
+		return false, err
 	}
-	return &rec, nil
-}
-
-func (r *PostgresOTPRepository) MarkUsed(ctx context.Context, id int64) error {
-	_, err := r.db.Exec(ctx,
-		`UPDATE otp_codes SET used = true WHERE id = $1`, id)
-	return err
+	return tag.RowsAffected() > 0, nil
 }

@@ -31,22 +31,35 @@ const (
 	envEvoAPIURL      = "EVO_API_URL"
 	envEvoAPIKey      = "EVO_API_KEY"
 	envEvoAPIInstance = "EVO_API_INSTANCE"
+
+	envDBMaxConns       = "DB_MAX_CONNS"
+	envDBMinConns       = "DB_MIN_CONNS"
+	envDBMaxConnLife     = "DB_MAX_CONN_LIFETIME"
+	envDBMaxConnIdle     = "DB_MAX_CONN_IDLE_TIME"
 )
 
 const (
 	defaultCORSOrigin = "http://localhost:3000"
 	defaultAppEnv     = "test"
 	defaultJWTExpiry  = "3h"
-	defaultDBSSLMode  = "require"
+	defaultDBSSLMode        = "require"
+	defaultDBMaxConns       = "10"
+	defaultDBMinConns       = "2"
+	defaultDBMaxConnLife    = "30m"
+	defaultDBMaxConnIdle    = "5m"
 )
 
 type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Name     string
-	SSLMode  string
+	Host            string
+	Port            string
+	User            string
+	Password        string
+	Name            string
+	SSLMode         string
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
 }
 
 type CoupleUserConfig struct {
@@ -77,14 +90,23 @@ type envField struct {
 }
 
 func Load() (Config, error) {
+	maxConns, _ := strconv.ParseInt(getEnvOrDefault(envDBMaxConns, defaultDBMaxConns), 10, 32)
+	minConns, _ := strconv.ParseInt(getEnvOrDefault(envDBMinConns, defaultDBMinConns), 10, 32)
+	maxConnLife, _ := time.ParseDuration(getEnvOrDefault(envDBMaxConnLife, defaultDBMaxConnLife))
+	maxConnIdle, _ := time.ParseDuration(getEnvOrDefault(envDBMaxConnIdle, defaultDBMaxConnIdle))
+
 	cfg := Config{
 		DB: DBConfig{
-			Host:     getEnv(envDBHost),
-			Port:     getEnv(envDBPort),
-			User:     getEnv(envDBUser),
-			Password: getEnv(envDBPassword),
-			Name:     getEnv(envDBName),
-			SSLMode:  getEnvOrDefault(envDBSSLMode, defaultDBSSLMode),
+			Host:            getEnv(envDBHost),
+			Port:            getEnv(envDBPort),
+			User:            getEnv(envDBUser),
+			Password:        getEnv(envDBPassword),
+			Name:            getEnv(envDBName),
+			SSLMode:         getEnvOrDefault(envDBSSLMode, defaultDBSSLMode),
+			MaxConns:        int32(maxConns),
+			MinConns:        int32(minConns),
+			MaxConnLifetime: maxConnLife,
+			MaxConnIdleTime: maxConnIdle,
 		},
 		CORSOrigin: getEnvOrDefault(envCORSOrigin, defaultCORSOrigin),
 		AppEnv:     getEnvOrDefault(envAppEnv, defaultAppEnv),

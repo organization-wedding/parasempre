@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -23,10 +22,10 @@ func Connect(ctx context.Context, dbCfg config.DBConfig) (*pgxpool.Pool, error) 
 		return nil, fmt.Errorf("unable to parse database config: %w", err)
 	}
 
-	pgxCfg.MaxConns = 10
-	pgxCfg.MinConns = 2
-	pgxCfg.MaxConnLifetime = 30 * time.Minute
-	pgxCfg.MaxConnIdleTime = 5 * time.Minute
+	pgxCfg.MaxConns = dbCfg.MaxConns
+	pgxCfg.MinConns = dbCfg.MinConns
+	pgxCfg.MaxConnLifetime = dbCfg.MaxConnLifetime
+	pgxCfg.MaxConnIdleTime = dbCfg.MaxConnIdleTime
 
 	pool, err := pgxpool.NewWithConfig(ctx, pgxCfg)
 	if err != nil {
