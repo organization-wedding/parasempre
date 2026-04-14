@@ -6,7 +6,6 @@ export const guestSchema = z.object({
   id: z.number(),
   first_name: z.string(),
   last_name: z.string(),
-  phone: z.string().nullable(),
   relationship: relationshipSchema,
   confirmed: z.boolean(),
   family_group: z.number().int(),
@@ -21,16 +20,15 @@ export const guestsSchema = z.array(guestSchema);
 export const createGuestInputSchema = z.object({
   first_name: z.string().trim().min(1, "Nome e sobrenome são obrigatórios."),
   last_name: z.string().trim().min(1, "Nome e sobrenome são obrigatórios."),
-  phone: z.string(),
   relationship: relationshipSchema,
   family_group: z.number().int().min(1).optional(),
+  phone: z.string().optional(),
 });
 
 export const updateGuestInputSchema = z
   .object({
     first_name: z.string().trim().min(1).optional(),
     last_name: z.string().trim().min(1).optional(),
-    phone: z.string().optional(),
     relationship: relationshipSchema.optional(),
     confirmed: z.boolean().optional(),
     family_group: z.number().int().min(1).optional(),

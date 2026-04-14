@@ -8,7 +8,6 @@ import Save from "lucide-react/dist/esm/icons/save";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import X from "lucide-react/dist/esm/icons/x";
 import { Header } from "../components/Header";
-import { getUserRacf } from "../lib/api";
 import {
   useCreateGuestMutation,
   useGuestQuery,
@@ -91,7 +90,6 @@ export function GuestFormPage({ guestId }: Props) {
     reset({
       firstName: guestQuery.data.first_name,
       lastName: guestQuery.data.last_name,
-      phone: guestQuery.data.phone ?? "",
       relationship: guestQuery.data.relationship,
       familyGroup: guestQuery.data.family_group,
       confirmed: guestQuery.data.confirmed,
@@ -164,13 +162,6 @@ export function GuestFormPage({ guestId }: Props) {
   async function onSubmit(values: GuestFormValues) {
     clearErrors("root");
 
-    if (!getUserRacf()) {
-      setError("root", {
-        message: "Configure sua identificação (RACF) na página de Lista de Presença antes de salvar.",
-      });
-      return;
-    }
-
     try {
       if (isEdit && guestId !== undefined) {
         await updateMutation.mutateAsync({
@@ -178,7 +169,6 @@ export function GuestFormPage({ guestId }: Props) {
           input: {
             first_name: values.firstName.trim(),
             last_name: values.lastName.trim(),
-            phone: values.phone.trim() || undefined,
             relationship: values.relationship,
             family_group: values.familyGroup,
             confirmed: values.confirmed,
@@ -188,9 +178,9 @@ export function GuestFormPage({ guestId }: Props) {
         await createMutation.mutateAsync({
           first_name: values.firstName.trim(),
           last_name: values.lastName.trim(),
-          phone: values.phone.trim(),
           relationship: values.relationship,
           family_group: values.familyGroup,
+          phone: values.phone.trim() || undefined,
         });
       }
 
@@ -202,8 +192,8 @@ export function GuestFormPage({ guestId }: Props) {
     }
   }
 
-  // Unauthorized guard
-  if (getUserRacf() && !roleLoading && userMe && !isAuthorized) {
+  // Unauthorized guard — user is authenticated (router guard), check role
+  if (!roleLoading && userMe && !isAuthorized) {
     return <UnauthorizedPage />;
   }
 
@@ -268,29 +258,31 @@ export function GuestFormPage({ guestId }: Props) {
               </div>
             </div>
 
-            <div className="mb-5">
-              <label className={labelClass}>Telefone</label>
-              <Controller
-                name="phone"
-                control={control}
-                render={({ field }) => (
-                  <input
-                    type="text"
-                    value={formatPhoneDisplay(field.value ?? "")}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
-                      field.onChange(digits);
-                    }}
-                    onBlur={field.onBlur}
-                    placeholder="(11) 99999-9999"
-                    maxLength={15}
-                    className={`${inputClass} font-mono tracking-wider`}
-                  />
-                )}
-              />
-              <p className="text-[0.72rem] text-hint/60 mt-1">DDD + número (11 dígitos). Opcional.</p>
-              {errors.phone?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.phone.message}</p>}
-            </div>
+            {!isEdit && (
+              <div className="mb-5">
+                <label className={labelClass}>Telefone</label>
+                <Controller
+                  name="phone"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      value={formatPhoneDisplay(field.value ?? "")}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+                        field.onChange(digits);
+                      }}
+                      onBlur={field.onBlur}
+                      placeholder="(11) 99999-9999"
+                      maxLength={15}
+                      className={`${inputClass} font-mono tracking-wider`}
+                    />
+                  )}
+                />
+                <p className="text-[0.72rem] text-hint/60 mt-1">DDD + número (11 dígitos). Opcional — usado para criar o acesso do convidado.</p>
+                {errors.phone?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.phone.message}</p>}
+              </div>
+            )}
 
             <div className="mb-5">
               <label className={labelClass}>Lado</label>
