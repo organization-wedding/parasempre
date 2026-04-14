@@ -10,7 +10,7 @@ test:
 	go test ./... -v -count=1
 
 test-integration:
-	go test ./... -v -count=1 -tags=integration
+	go test ./... -v -count=1 -tags=integration -run '^TestIntegration'
 
 test-all: test test-integration
 
