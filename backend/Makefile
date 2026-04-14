@@ -1,13 +1,18 @@
 -include ../.env .env
 export
 
-.PHONY: run test build clean migrate nuke
+.PHONY: run test test-integration test-all build clean migrate nuke
 
 run:
 	go run ./cmd/server
 
 test:
 	go test ./... -v -count=1
+
+test-integration:
+	go test ./... -v -count=1 -tags=integration -run '^TestIntegration'
+
+test-all: test test-integration
 
 build:
 	go build -o bin/server ./cmd/server

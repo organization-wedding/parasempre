@@ -30,3 +30,22 @@ type UpdateGuestInput struct {
 	Confirmed    *bool   `json:"confirmed"`
 	FamilyGroup  *int64  `json:"family_group"`
 }
+
+type PagedResponse struct {
+	Data  []Guest `json:"data"`
+	Page  int     `json:"page"`
+	Limit int     `json:"limit"`
+	Total int     `json:"total"`
+}
+
+type ImportRowError struct {
+	Row   int    `json:"row"`
+	Error string `json:"error"`
+}
+
+type ImportResponse struct {
+	SuccessCount int              `json:"success_count"`
+	ErrorCount   int              `json:"error_count"`
+	Total        int              `json:"total"`
+	Errors       []ImportRowError `json:"errors"`
+}

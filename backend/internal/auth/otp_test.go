@@ -9,21 +9,16 @@ import (
 )
 
 type mockOTPRepo struct {
-	createFn    func(ctx context.Context, phone, code string, expiresAt time.Time) error
-	findValidFn func(ctx context.Context, phone, code string) (*OTPRecord, error)
-	markUsedFn  func(ctx context.Context, id int64) error
+	createFn           func(ctx context.Context, phone, code string, expiresAt time.Time) error
+	verifyAndMarkUsedFn func(ctx context.Context, phone, code string) (bool, error)
 }
 
 func (m *mockOTPRepo) Create(ctx context.Context, phone, code string, expiresAt time.Time) error {
 	return m.createFn(ctx, phone, code, expiresAt)
 }
 
-func (m *mockOTPRepo) FindValid(ctx context.Context, phone, code string) (*OTPRecord, error) {
-	return m.findValidFn(ctx, phone, code)
-}
-
-func (m *mockOTPRepo) MarkUsed(ctx context.Context, id int64) error {
-	return m.markUsedFn(ctx, id)
+func (m *mockOTPRepo) VerifyAndMarkUsed(ctx context.Context, phone, code string) (bool, error) {
+	return m.verifyAndMarkUsedFn(ctx, phone, code)
 }
 
 type mockSender struct {
@@ -69,14 +64,9 @@ func TestSendOTP(t *testing.T) {
 }
 
 func TestVerifyOTPValid(t *testing.T) {
-	var markedID int64
 	repo := &mockOTPRepo{
-		findValidFn: func(ctx context.Context, phone, code string) (*OTPRecord, error) {
-			return &OTPRecord{ID: 1, Phone: phone, Code: code, ExpiresAt: time.Now().Add(5 * time.Minute)}, nil
-		},
-		markUsedFn: func(ctx context.Context, id int64) error {
-			markedID = id
-			return nil
+		verifyAndMarkUsedFn: func(ctx context.Context, phone, code string) (bool, error) {
+			return true, nil
 		},
 	}
 
@@ -85,15 +75,12 @@ func TestVerifyOTPValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if markedID != 1 {
-		t.Fatalf("expected mark used id 1, got %d", markedID)
-	}
 }
 
 func TestVerifyOTPInvalid(t *testing.T) {
 	repo := &mockOTPRepo{
-		findValidFn: func(ctx context.Context, phone, code string) (*OTPRecord, error) {
-			return nil, nil
+		verifyAndMarkUsedFn: func(ctx context.Context, phone, code string) (bool, error) {
+			return false, nil
 		},
 	}
 

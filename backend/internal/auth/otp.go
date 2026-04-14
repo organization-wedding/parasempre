@@ -45,18 +45,13 @@ func (s *OTPService) SendOTP(ctx context.Context, phone string) error {
 }
 
 func (s *OTPService) VerifyOTP(ctx context.Context, phone, code string) error {
-	record, err := s.repo.FindValid(ctx, phone, code)
+	verified, err := s.repo.VerifyAndMarkUsed(ctx, phone, code)
 	if err != nil {
-		slog.Error("otp: verification lookup failed", "phone", phone, "error", err)
+		slog.Error("otp: verification failed", "phone", phone, "error", err)
 		return apperror.Internal("failed to verify OTP", err)
 	}
-	if record == nil {
+	if !verified {
 		return apperror.Unauthorized("invalid or expired code")
-	}
-
-	if err := s.repo.MarkUsed(ctx, record.ID); err != nil {
-		slog.Error("otp: failed to mark used", "id", record.ID, "error", err)
-		return apperror.Internal("failed to complete verification", err)
 	}
 
 	return nil

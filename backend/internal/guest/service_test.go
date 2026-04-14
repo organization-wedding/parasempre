@@ -15,7 +15,7 @@ import (
 
 // mockRepository implements TxAwareRepository with function fields for easy stubbing.
 type mockRepository struct {
-	listFn               func(ctx context.Context) ([]Guest, error)
+	listFn               func(ctx context.Context, limit, offset int) ([]Guest, int, error)
 	getByID              func(ctx context.Context, id int64) (*Guest, error)
 	getByNameFn          func(ctx context.Context, firstName, lastName string) (*Guest, error)
 	familyGroupExistsFn  func(ctx context.Context, familyGroup int64) (bool, error)
@@ -26,8 +26,8 @@ type mockRepository struct {
 	setConfirmedFn       func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
 }
 
-func (m *mockRepository) List(ctx context.Context) ([]Guest, error) {
-	return m.listFn(ctx)
+func (m *mockRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+	return m.listFn(ctx, limit, offset)
 }
 
 func (m *mockRepository) GetByID(ctx context.Context, id int64) (*Guest, error) {
@@ -188,30 +188,62 @@ func assertAppError(t *testing.T, err error, wantCode int, wantMsg string) {
 
 func TestServiceList(t *testing.T) {
 	tests := []struct {
-		name    string
-		mockFn  func(ctx context.Context) ([]Guest, error)
-		wantLen int
-		wantErr bool
+		name      string
+		mockFn    func(ctx context.Context, limit, offset int) ([]Guest, int, error)
+		page      int
+		limit     int
+		wantLen   int
+		wantTotal int
+		wantErr   bool
 	}{
 		{
-			name: "returns guests",
-			mockFn: func(ctx context.Context) ([]Guest, error) {
-				return []Guest{sampleGuest()}, nil
+			name: "returns guests with pagination",
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+				return []Guest{sampleGuest()}, 5, nil
 			},
-			wantLen: 1,
+			page:      1,
+			limit:     20,
+			wantLen:   1,
+			wantTotal: 5,
 		},
 		{
 			name: "returns empty list",
-			mockFn: func(ctx context.Context) ([]Guest, error) {
-				return []Guest{}, nil
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+				return []Guest{}, 0, nil
 			},
+			page:    1,
+			limit:   20,
 			wantLen: 0,
 		},
 		{
-			name: "propagates error",
-			mockFn: func(ctx context.Context) ([]Guest, error) {
-				return nil, errors.New("db error")
+			name: "defaults for invalid page/limit",
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+				if limit != 20 || offset != 0 {
+					return nil, 0, errors.New("expected default limit=20, offset=0")
+				}
+				return []Guest{}, 0, nil
 			},
+			page:  0,
+			limit: 0,
+		},
+		{
+			name: "caps limit at 100",
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+				if limit != 100 {
+					return nil, 0, errors.New("expected limit capped at 100")
+				}
+				return []Guest{}, 0, nil
+			},
+			page:  1,
+			limit: 500,
+		},
+		{
+			name: "propagates error",
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+				return nil, 0, errors.New("db error")
+			},
+			page:    1,
+			limit:   20,
 			wantErr: true,
 		},
 	}
@@ -219,7 +251,7 @@ func TestServiceList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newTestService(&mockRepository{listFn: tt.mockFn}, alwaysExistsChecker(), noopUserCreator())
-			guests, err := svc.List(context.Background())
+			result, err := svc.List(context.Background(), tt.page, tt.limit)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -229,8 +261,11 @@ func TestServiceList(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(guests) != tt.wantLen {
-				t.Fatalf("expected %d guests, got %d", tt.wantLen, len(guests))
+			if len(result.Data) != tt.wantLen {
+				t.Fatalf("expected %d guests, got %d", tt.wantLen, len(result.Data))
+			}
+			if result.Total != tt.wantTotal {
+				t.Fatalf("expected total %d, got %d", tt.wantTotal, result.Total)
 			}
 		})
 	}
@@ -400,9 +435,8 @@ func TestServiceCreate(t *testing.T) {
 
 func TestServiceCreateDuplicateName(t *testing.T) {
 	repo := &mockRepository{
-		getByNameFn: func(ctx context.Context, firstName, lastName string) (*Guest, error) {
-			g := sampleGuest()
-			return &g, nil
+		createFn: func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+			return nil, apperror.Conflict("a guest named 'João Silva' already exists")
 		},
 	}
 	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
