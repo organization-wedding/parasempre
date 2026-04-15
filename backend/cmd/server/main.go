@@ -10,8 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	"github.com/ferjunior7/parasempre/backend/internal/auth"
 	"github.com/ferjunior7/parasempre/backend/internal/config"
 	"github.com/ferjunior7/parasempre/backend/internal/database"
@@ -70,20 +68,13 @@ func main() {
 		user.CoupleData{URACF: cfg.Couple.Bride.URACF, Phone: cfg.Couple.Bride.Phone},
 	)
 
-	otpMinuteLimiter := middleware.NewRateLimiter(rate.Every(time.Minute), 1)
-	defer otpMinuteLimiter.Close()
-	otpHourLimiter := middleware.NewRateLimiter(rate.Every(time.Hour/10), 10)
-	defer otpHourLimiter.Close()
-
 	mux := http.NewServeMux()
 	registerRoutes(mux, routeDeps{
-		auth:             authHandler,
-		guest:            guestHandler,
-		user:             userHandler,
-		jwt:              jwtSvc,
-		appEnv:           cfg.AppEnv,
-		otpMinuteLimiter: otpMinuteLimiter,
-		otpHourLimiter:   otpHourLimiter,
+		auth:   authHandler,
+		guest:  guestHandler,
+		user:   userHandler,
+		jwt:    jwtSvc,
+		appEnv: cfg.AppEnv,
 	})
 
 	handler := middleware.Chain(mux,

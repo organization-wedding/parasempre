@@ -10,13 +10,11 @@ import (
 )
 
 type routeDeps struct {
-	auth             *auth.Handler
-	guest            *guest.Handler
-	user             *user.Handler
-	jwt              *auth.JWTService
-	appEnv           string
-	otpMinuteLimiter *middleware.RateLimiter
-	otpHourLimiter   *middleware.RateLimiter
+	auth   *auth.Handler
+	guest  *guest.Handler
+	user   *user.Handler
+	jwt    *auth.JWTService
+	appEnv string
 }
 
 type routeGroup struct {
@@ -40,7 +38,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	authMW := middleware.RequireAuth(d.jwt)
 	coupleMW := middleware.RequireRole("groom", "bride")
 
-	otp := newGroup(mux, d.otpHourLimiter.Middleware(), d.otpMinuteLimiter.Middleware())
+	otp := newGroup(mux)
 	otp.handle("POST /api/auth/otp/send", d.auth.HandleSendOTP)
 	otp.handle("POST /api/auth/otp/verify", d.auth.HandleVerifyOTP)
 

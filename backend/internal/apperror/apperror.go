@@ -3,6 +3,7 @@ package apperror
 import (
 	"errors"
 	"net/http"
+	"time"
 )
 
 type AppError struct {
@@ -36,6 +37,18 @@ func Forbidden(msg string) *AppError {
 
 func TooManyRequests(msg string) *AppError {
 	return &AppError{Code: http.StatusTooManyRequests, Message: msg}
+}
+
+type RateLimitedError struct {
+	*AppError
+	RetryAfter time.Duration
+}
+
+func RateLimited(msg string, retryAfter time.Duration) *RateLimitedError {
+	return &RateLimitedError{
+		AppError:   &AppError{Code: http.StatusTooManyRequests, Message: msg},
+		RetryAfter: retryAfter,
+	}
 }
 
 func Internal(msg string, err error) *AppError {

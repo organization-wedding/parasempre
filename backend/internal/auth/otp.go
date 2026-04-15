@@ -23,6 +23,18 @@ func NewOTPService(repo OTPRepository, sender WhatsAppSender) *OTPService {
 }
 
 func (s *OTPService) SendOTP(ctx context.Context, phone string) error {
+	wait, err := s.repo.SendCooldown(ctx, phone)
+	if err != nil {
+		slog.Error("otp: failed to check cooldown", "phone", phone, "error", err)
+		return apperror.Internal("failed to check OTP rate limit", err)
+	}
+	if wait > 0 {
+		return apperror.RateLimited(
+			fmt.Sprintf("aguarde %d segundos para solicitar um novo código", int(wait.Seconds())),
+			wait,
+		)
+	}
+
 	code, err := generateCode()
 	if err != nil {
 		return apperror.Internal("failed to generate OTP", err)

@@ -139,16 +139,41 @@ export async function importGuests(file: File): Promise<ImportResult> {
 
 // ── Auth / OTP ──────────────────────────────────────────────
 
+export class OtpApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "OtpApiError";
+    this.status = status;
+  }
+}
+
+export class OtpRateLimitError extends OtpApiError {
+  readonly retryAfterSeconds: number;
+  constructor(message: string, retryAfterSeconds: number) {
+    super(429, message);
+    this.name = "OtpRateLimitError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 export async function sendOtp(phone: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/auth/otp/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ phone }),
   });
-  if (!res.ok) {
-    const data = (await res.json()) as { error?: string };
-    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
+  if (res.ok) return;
+
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    retry_after_seconds?: number;
+  };
+  const message = typeof data?.error === "string" ? data.error : `Erro ${res.status}`;
+  if (res.status === 429 && typeof data?.retry_after_seconds === "number") {
+    throw new OtpRateLimitError(message, data.retry_after_seconds);
   }
+  throw new OtpApiError(res.status, message);
 }
 
 export interface TokenResponse {
@@ -164,8 +189,9 @@ export async function verifyOtp(phone: string, code: string): Promise<TokenRespo
     body: JSON.stringify({ phone, code }),
   });
   if (!res.ok) {
-    const data = (await res.json()) as { error?: string };
-    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    const message = typeof data?.error === "string" ? data.error : `Erro ${res.status}`;
+    throw new OtpApiError(res.status, message);
   }
   return res.json() as Promise<TokenResponse>;
 }

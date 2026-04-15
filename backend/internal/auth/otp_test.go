@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,8 +10,9 @@ import (
 )
 
 type mockOTPRepo struct {
-	createFn           func(ctx context.Context, phone, code string, expiresAt time.Time) error
+	createFn            func(ctx context.Context, phone, code string, expiresAt time.Time) error
 	verifyAndMarkUsedFn func(ctx context.Context, phone, code string) (bool, error)
+	sendCooldownFn      func(ctx context.Context, phone string) (time.Duration, error)
 }
 
 func (m *mockOTPRepo) Create(ctx context.Context, phone, code string, expiresAt time.Time) error {
@@ -19,6 +21,13 @@ func (m *mockOTPRepo) Create(ctx context.Context, phone, code string, expiresAt 
 
 func (m *mockOTPRepo) VerifyAndMarkUsed(ctx context.Context, phone, code string) (bool, error) {
 	return m.verifyAndMarkUsedFn(ctx, phone, code)
+}
+
+func (m *mockOTPRepo) SendCooldown(ctx context.Context, phone string) (time.Duration, error) {
+	if m.sendCooldownFn == nil {
+		return 0, nil
+	}
+	return m.sendCooldownFn(ctx, phone)
 }
 
 type mockSender struct {
@@ -48,8 +57,7 @@ func TestSendOTP(t *testing.T) {
 	}
 
 	svc := NewOTPService(repo, sender)
-	err := svc.SendOTP(context.Background(), "11999999999")
-	if err != nil {
+	if err := svc.SendOTP(context.Background(), "11999999999"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if savedPhone != "11999999999" {
@@ -60,6 +68,30 @@ func TestSendOTP(t *testing.T) {
 	}
 	if sentMessage == "" {
 		t.Fatal("expected message to be sent")
+	}
+}
+
+func TestSendOTPRateLimited(t *testing.T) {
+	repo := &mockOTPRepo{
+		sendCooldownFn: func(ctx context.Context, phone string) (time.Duration, error) {
+			return 40 * time.Second, nil
+		},
+	}
+	svc := NewOTPService(repo, &mockSender{sendFn: func(phone, message string) error { return nil }})
+
+	err := svc.SendOTP(context.Background(), "11999999999")
+	if err == nil {
+		t.Fatal("expected rate limit error")
+	}
+	var rle *apperror.RateLimitedError
+	if !errors.As(err, &rle) {
+		t.Fatalf("expected *apperror.RateLimitedError, got %T", err)
+	}
+	if rle.Code != 429 {
+		t.Fatalf("expected 429, got %d", rle.Code)
+	}
+	if rle.RetryAfter != 40*time.Second {
+		t.Fatalf("expected RetryAfter 40s, got %v", rle.RetryAfter)
 	}
 }
 
