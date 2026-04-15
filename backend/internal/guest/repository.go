@@ -18,7 +18,6 @@ type Repository interface {
 	SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
 }
 
-// TxAwareRepository extends Repository with transaction support.
 type TxAwareRepository interface {
 	Repository
 	WithTx(tx pgx.Tx) Repository

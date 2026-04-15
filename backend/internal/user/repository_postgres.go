@@ -4,12 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ferjunior7/parasempre/backend/internal/database"
 )
+
+const userColumns = `id, guest_id, role, uracf, phone, last_login_at, created_at, updated_at`
+
+func scanUser(row pgx.Row) (User, error) {
+	var u User
+	err := row.Scan(&u.ID, &u.GuestID, &u.Role, &u.URACF, &u.Phone, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+	return u, err
+}
 
 type PostgresRepository struct {
 	db database.DBTX
@@ -24,30 +33,26 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 }
 
 func (r *PostgresRepository) GetByURACF(ctx context.Context, uracf string) (*User, error) {
-	var u User
-	err := r.db.QueryRow(ctx,
-		`SELECT id, guest_id, role, uracf, phone, last_login_at, created_at, updated_at
-		 FROM users WHERE uracf = $1`, uracf).
-		Scan(&u.ID, &u.GuestID, &u.Role, &u.URACF, &u.Phone, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users WHERE uracf = $1`, uracf))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		slog.Error("user.repo get_by_uracf: query failed", "uracf", uracf, "error", err)
 		return nil, err
 	}
 	return &u, nil
 }
 
 func (r *PostgresRepository) GetByGuestID(ctx context.Context, guestID int64) (*User, error) {
-	var u User
-	err := r.db.QueryRow(ctx,
-		`SELECT id, guest_id, role, uracf, phone, last_login_at, created_at, updated_at
-		 FROM users WHERE guest_id = $1`, guestID).
-		Scan(&u.ID, &u.GuestID, &u.Role, &u.URACF, &u.Phone, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users WHERE guest_id = $1`, guestID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		slog.Error("user.repo get_by_guest_id: query failed", "guest_id", guestID, "error", err)
 		return nil, err
 	}
 	return &u, nil
@@ -84,29 +89,26 @@ func (r *PostgresRepository) List(ctx context.Context) ([]UserListItem, error) {
 }
 
 func (r *PostgresRepository) GetByPhone(ctx context.Context, phone string) (*User, error) {
-	var u User
-	err := r.db.QueryRow(ctx,
-		`SELECT id, guest_id, role, uracf, phone, last_login_at, created_at, updated_at
-		 FROM users WHERE phone = $1`, phone).
-		Scan(&u.ID, &u.GuestID, &u.Role, &u.URACF, &u.Phone, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users WHERE phone = $1`, phone))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		slog.Error("user.repo get_by_phone: query failed", "phone", phone, "error", err)
 		return nil, err
 	}
 	return &u, nil
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, u *User) (*User, error) {
-	var created User
-	err := r.db.QueryRow(ctx,
+	created, err := scanUser(r.db.QueryRow(ctx,
 		`INSERT INTO users (guest_id, role, uracf, phone)
 		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, guest_id, role, uracf, phone, last_login_at, created_at, updated_at`,
-		u.GuestID, u.Role, u.URACF, u.Phone).
-		Scan(&created.ID, &created.GuestID, &created.Role, &created.URACF, &created.Phone, &created.LastLoginAt, &created.CreatedAt, &created.UpdatedAt)
+		 RETURNING `+userColumns,
+		u.GuestID, u.Role, u.URACF, u.Phone))
 	if err != nil {
+		slog.Error("user.repo create: insert failed", "uracf", u.URACF, "error", err)
 		return nil, err
 	}
 	return &created, nil
@@ -114,6 +116,9 @@ func (r *PostgresRepository) Create(ctx context.Context, u *User) (*User, error)
 
 func (r *PostgresRepository) DeleteByGuestID(ctx context.Context, guestID int64) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM users WHERE guest_id = $1`, guestID)
+	if err != nil {
+		slog.Error("user.repo delete_by_guest_id: delete failed", "guest_id", guestID, "error", err)
+	}
 	return err
 }
 

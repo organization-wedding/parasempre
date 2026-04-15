@@ -15,6 +15,14 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/database"
 )
 
+const guestColumns = `id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`
+
+func scanGuest(row pgx.Row) (Guest, error) {
+	var g Guest
+	err := row.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+	return g, err
+}
+
 type PostgresRepository struct {
 	db database.DBTX
 }
@@ -29,8 +37,7 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 
 func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at,
-		        COUNT(*) OVER() AS total
+		`SELECT `+guestColumns+`, COUNT(*) OVER() AS total
 		 FROM guests ORDER BY created_at DESC
 		 LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
@@ -58,11 +65,8 @@ func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Gue
 }
 
 func (r *PostgresRepository) GetByID(ctx context.Context, id int64) (*Guest, error) {
-	var g Guest
-	err := r.db.QueryRow(ctx,
-		`SELECT id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at
-		 FROM guests WHERE id = $1`, id).
-		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+	g, err := scanGuest(r.db.QueryRow(ctx,
+		`SELECT `+guestColumns+` FROM guests WHERE id = $1`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")
@@ -74,11 +78,8 @@ func (r *PostgresRepository) GetByID(ctx context.Context, id int64) (*Guest, err
 }
 
 func (r *PostgresRepository) GetByName(ctx context.Context, firstName, lastName string) (*Guest, error) {
-	var g Guest
-	err := r.db.QueryRow(ctx,
-		`SELECT id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at
-		 FROM guests WHERE first_name = $1 AND last_name = $2`, firstName, lastName).
-		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+	g, err := scanGuest(r.db.QueryRow(ctx,
+		`SELECT `+guestColumns+` FROM guests WHERE first_name = $1 AND last_name = $2`, firstName, lastName))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -114,13 +115,11 @@ func (r *PostgresRepository) GetNextFamilyGroup(ctx context.Context) (int64, err
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
-	var g Guest
-	err := r.db.QueryRow(ctx,
+	g, err := scanGuest(r.db.QueryRow(ctx,
 		`INSERT INTO guests (first_name, last_name, relationship, family_group, created_by, updated_by)
 		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`,
-		input.FirstName, input.LastName, input.Relationship, *input.FamilyGroup, userRACF, userRACF).
-		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+		 RETURNING `+guestColumns,
+		input.FirstName, input.LastName, input.Relationship, *input.FamilyGroup, userRACF, userRACF))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -134,8 +133,7 @@ func (r *PostgresRepository) Create(ctx context.Context, input CreateGuestInput,
 }
 
 func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error) {
-	var g Guest
-	err := r.db.QueryRow(ctx,
+	g, err := scanGuest(r.db.QueryRow(ctx,
 		`UPDATE guests SET
 			first_name = COALESCE($1, first_name),
 			last_name = COALESCE($2, last_name),
@@ -145,9 +143,8 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 			updated_by = $6,
 			updated_at = now()
 		 WHERE id = $7
-		 RETURNING id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`,
-		input.FirstName, input.LastName, input.Relationship, input.Confirmed, input.FamilyGroup, userRACF, id).
-		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+		 RETURNING `+guestColumns,
+		input.FirstName, input.LastName, input.Relationship, input.Confirmed, input.FamilyGroup, userRACF, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")
@@ -160,13 +157,11 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 }
 
 func (r *PostgresRepository) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
-	var g Guest
-	err := r.db.QueryRow(ctx,
+	g, err := scanGuest(r.db.QueryRow(ctx,
 		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
 		 WHERE id = $3
-		 RETURNING id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`,
-		confirmed, userRACF, id).
-		Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+		 RETURNING `+guestColumns,
+		confirmed, userRACF, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")

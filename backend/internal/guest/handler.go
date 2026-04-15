@@ -184,38 +184,18 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		slog.Error("import: failed to parse file", "extension", ext, "error", err)
-		httputil.WriteErrorMsg(w, http.StatusBadRequest, "failed to parse file: "+err.Error())
+		httputil.WriteErrorMsg(w, http.StatusBadRequest, "failed to parse uploaded file")
 		return
 	}
 
-	var successCount int
-	var rowErrors []ImportRowError
-	const dataRowStart = 2 // row 1 is the header in CSV/XLSX files
-	for i, input := range guests {
-		rowNumber := i + dataRowStart
-		if _, err := h.svc.Create(r.Context(), input, userRACF); err != nil {
-			slog.Warn("import: failed to create guest", "row", rowNumber, "error", err)
-			rowErrors = append(rowErrors, ImportRowError{Row: rowNumber, Error: err.Error()})
-			continue
-		}
-		successCount++
-	}
-
-	if rowErrors == nil {
-		rowErrors = []ImportRowError{}
-	}
+	result := h.svc.Import(r.Context(), guests, userRACF)
 
 	status := http.StatusOK
-	if len(rowErrors) > 0 && successCount > 0 {
+	if result.ErrorCount > 0 && result.SuccessCount > 0 {
 		status = http.StatusMultiStatus
-	} else if len(rowErrors) > 0 {
+	} else if result.ErrorCount > 0 {
 		status = http.StatusBadRequest
 	}
 
-	httputil.WriteJSON(w, status, ImportResponse{
-		SuccessCount: successCount,
-		ErrorCount:   len(rowErrors),
-		Total:        len(guests),
-		Errors:       rowErrors,
-	})
+	httputil.WriteJSON(w, status, result)
 }

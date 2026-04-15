@@ -13,8 +13,6 @@ import (
 
 var requiredColumns = []string{"first_name", "last_name", "relationship", "family_group"}
 
-// ParseCSV reads CSV data and returns a slice of CreateGuestInput.
-// Expects a header row with columns: first_name, last_name, relationship, family_group.
 func ParseCSV(r io.Reader) ([]CreateGuestInput, error) {
 	reader := csv.NewReader(r)
 
@@ -54,8 +52,6 @@ func ParseCSV(r io.Reader) ([]CreateGuestInput, error) {
 	return guests, nil
 }
 
-// ParseXLSX reads XLSX data and returns a slice of CreateGuestInput.
-// Reads the first sheet; expects a header row with columns: first_name, last_name, relationship, family_group.
 func ParseXLSX(r io.Reader) ([]CreateGuestInput, error) {
 	f, err := excelize.OpenReader(r)
 	if err != nil {
@@ -80,7 +76,6 @@ func ParseXLSX(r io.Reader) ([]CreateGuestInput, error) {
 
 	var guests []CreateGuestInput
 	for _, row := range rows[1:] {
-		// Skip rows that don't have enough columns.
 		maxIdx := 0
 		for _, idx := range colIndex {
 			if idx > maxIdx {

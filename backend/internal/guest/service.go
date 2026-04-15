@@ -12,37 +12,21 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
 
-// UserChecker verifies whether a RACF belongs to a registered user.
-type UserChecker interface {
+type UserBridge interface {
 	UserExistsByURACF(ctx context.Context, uracf string) (bool, error)
-}
-
-// UserCreator creates a user linked to a guest within a transaction.
-type UserCreator interface {
 	CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
-}
-
-// UserDeleter deletes a user linked to a guest within a transaction.
-type UserDeleter interface {
 	DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error
-}
-
-// UserPhoneLookup resolves a phone number to a guest_id via the users table.
-type UserPhoneLookup interface {
 	GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error)
 }
 
 type Service struct {
-	repo            TxAwareRepository
-	userChecker     UserChecker
-	userCreator     UserCreator
-	userDeleter     UserDeleter
-	userPhoneLookup UserPhoneLookup
-	txRunner        database.TxRunner
+	repo     TxAwareRepository
+	users    UserBridge
+	txRunner database.TxRunner
 }
 
-func NewService(repo TxAwareRepository, userChecker UserChecker, userCreator UserCreator, userDeleter UserDeleter, userPhoneLookup UserPhoneLookup, txRunner database.TxRunner) *Service {
-	return &Service{repo: repo, userChecker: userChecker, userCreator: userCreator, userDeleter: userDeleter, userPhoneLookup: userPhoneLookup, txRunner: txRunner}
+func NewService(repo TxAwareRepository, users UserBridge, txRunner database.TxRunner) *Service {
+	return &Service{repo: repo, users: users, txRunner: txRunner}
 }
 
 func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, error) {
@@ -73,11 +57,7 @@ func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, er
 func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {
 	guest, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service get_by_id: failed", "id", id, "error", err)
-		return nil, apperror.Internal("failed to get guest", err)
+		return nil, apperror.WrapIfNotApp("failed to get guest", err)
 	}
 	return guest, nil
 }
@@ -87,7 +67,7 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 		return nil, err
 	}
 
-	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
+	exists, err := s.users.UserExistsByURACF(ctx, userRACF)
 	if err != nil {
 		slog.Error("guest.service create: user check failed", "user_racf", userRACF, "error", err)
 		return nil, apperror.Internal("failed to verify user", err)
@@ -123,16 +103,12 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 		}
 		created = g
 
-		if err := s.userCreator.CreateGuestUserTx(ctx, tx, g.ID, input.Phone); err != nil {
+		if err := s.users.CreateGuestUserTx(ctx, tx, g.ID, input.Phone); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service create: transaction failed", "error", err)
-		return nil, apperror.Internal("failed to create guest", err)
+		return nil, apperror.WrapIfNotApp("failed to create guest", err)
 	}
 
 	slog.Info("guest.service create: guest+user created", "id", created.ID, "user_racf", userRACF)
@@ -144,7 +120,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 		return nil, err
 	}
 
-	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
+	exists, err := s.users.UserExistsByURACF(ctx, userRACF)
 	if err != nil {
 		slog.Error("guest.service update: user check failed", "error", err)
 		return nil, apperror.Internal("failed to verify user", err)
@@ -178,11 +154,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 
 	guest, err := s.repo.Update(ctx, id, input, userRACF)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service update: repository update failed", "error", err)
-		return nil, apperror.Internal("failed to update guest", err)
+		return nil, apperror.WrapIfNotApp("failed to update guest", err)
 	}
 	slog.Info("guest.service update: guest updated", "id", guest.ID, "user_racf", userRACF)
 	return guest, nil
@@ -205,7 +177,7 @@ func (s *Service) CancelByPhone(ctx context.Context, phone string, userRACF stri
 }
 
 func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
-	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
+	exists, err := s.users.UserExistsByURACF(ctx, userRACF)
 	if err != nil {
 		slog.Error("guest.service set_confirmed: user check failed", "id", id, "user_racf", userRACF, "error", err)
 		return nil, apperror.Internal("failed to verify user", err)
@@ -214,16 +186,9 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 		return nil, apperror.Validation("user-racf does not match any registered user")
 	}
 
-	// Idempotência: se o guest já está no estado desejado, retorna sem fazer UPDATE.
-	// Evita escrita desnecessária e atualização de updated_at em chamadas repetidas
-	// (ex: bot WhatsApp reprocessando a mesma mensagem).
 	current, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service set_confirmed: failed to fetch guest", "id", id, "error", err)
-		return nil, apperror.Internal("failed to fetch guest", err)
+		return nil, apperror.WrapIfNotApp("failed to fetch guest", err)
 	}
 	if current.Confirmed == confirmed {
 		slog.Info("guest.service set_confirmed: already in desired state, skipping update", "id", id, "confirmed", confirmed)
@@ -232,21 +197,14 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 
 	guest, err := s.repo.SetConfirmed(ctx, id, confirmed, userRACF)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service set_confirmed: failed", "id", id, "error", err)
-		return nil, apperror.Internal("failed to update confirmation", err)
+		return nil, apperror.WrapIfNotApp("failed to update confirmation", err)
 	}
 	slog.Info("guest.service set_confirmed: success", "id", guest.ID, "confirmed", confirmed, "user_racf", userRACF)
 	return guest, nil
 }
 
-// setConfirmedByPhone busca o guest_id via tabela users (que possui o phone)
-// e delega para setConfirmed. Permite que o bot WhatsApp confirme presença
-// usando apenas o número de telefone do convidado.
 func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirmed bool, userRACF string) (*Guest, error) {
-	guestID, err := s.userPhoneLookup.GetGuestIDByPhone(ctx, phone)
+	guestID, err := s.users.GetGuestIDByPhone(ctx, phone)
 	if err != nil {
 		slog.Error("guest.service set_confirmed_by_phone: phone lookup failed", "phone", phone, "error", err)
 		return nil, apperror.Internal("failed to find guest by phone", err)
@@ -258,19 +216,39 @@ func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirm
 	return s.setConfirmed(ctx, *guestID, confirmed, userRACF)
 }
 
+func (s *Service) Import(ctx context.Context, guests []CreateGuestInput, userRACF string) ImportResponse {
+	var successCount int
+	var rowErrors []ImportRowError
+	const dataRowStart = 2
+	for i, input := range guests {
+		rowNumber := i + dataRowStart
+		if _, err := s.Create(ctx, input, userRACF); err != nil {
+			slog.Warn("guest.service import: row failed", "row", rowNumber, "error", err)
+			rowErrors = append(rowErrors, ImportRowError{Row: rowNumber, Error: err.Error()})
+			continue
+		}
+		successCount++
+	}
+	if rowErrors == nil {
+		rowErrors = []ImportRowError{}
+	}
+	return ImportResponse{
+		SuccessCount: successCount,
+		ErrorCount:   len(rowErrors),
+		Total:        len(guests),
+		Errors:       rowErrors,
+	}
+}
+
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
-		if err := s.userDeleter.DeleteGuestUserTx(ctx, tx, id); err != nil {
+		if err := s.users.DeleteGuestUserTx(ctx, tx, id); err != nil {
 			return err
 		}
 		txRepo := s.repo.WithTx(tx)
 		return txRepo.Delete(ctx, id)
 	}); err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return err
-		}
-		slog.Error("guest.service delete: failed", "id", id, "error", err)
-		return apperror.Internal("failed to delete guest", err)
+		return apperror.WrapIfNotApp("failed to delete guest", err)
 	}
 	slog.Info("guest.service delete: guest deleted", "id", id)
 	return nil

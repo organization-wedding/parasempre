@@ -13,7 +13,6 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
 
-// TxAwareRepository extends Repository with transaction support.
 type TxAwareRepository interface {
 	Repository
 	WithTx(tx pgx.Tx) Repository
@@ -38,7 +37,6 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*User, err
 		return nil, err
 	}
 
-	// Find user by phone (phone is now on users table only)
 	existing, err := s.repo.GetByPhone(ctx, input.Phone)
 	if err != nil {
 		slog.Error("user.service register: user lookup failed", "phone", input.Phone, "error", err)
@@ -122,12 +120,10 @@ func (s *Service) FindOrCreateByPhone(ctx context.Context, phone string) (int64,
 	return 0, "", "", apperror.NotFound("no user found with this phone")
 }
 
-// GetGuestIDByPhone implements guest.UserPhoneLookup.
-// Busca um user pelo phone e retorna o guest_id associado.
 func (s *Service) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error) {
 	u, err := s.repo.GetByPhone(ctx, phone)
 	if err != nil {
-		return nil, err
+		return nil, apperror.WrapIfNotApp("failed to find guest by phone", err)
 	}
 	if u == nil || u.GuestID == nil {
 		return nil, nil
@@ -135,10 +131,18 @@ func (s *Service) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, 
 	return u.GuestID, nil
 }
 
+func (s *Service) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
+	u, err := s.repo.GetByURACF(ctx, uracf)
+	if err != nil {
+		return false, apperror.WrapIfNotApp("failed to check user existence", err)
+	}
+	return u != nil, nil
+}
+
 func (s *Service) PhoneExists(ctx context.Context, phone string) (bool, error) {
 	u, err := s.repo.GetByPhone(ctx, phone)
 	if err != nil {
-		return false, err
+		return false, apperror.WrapIfNotApp("failed to check phone existence", err)
 	}
 	return u != nil, nil
 }
@@ -152,7 +156,6 @@ func (s *Service) RecordLogin(ctx context.Context, userID int64) {
 	}
 }
 
-// CreateGuestUserTx creates a user linked to a guest within an existing transaction.
 func (s *Service) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error {
 	uracf, err := GenerateURACF()
 	if err != nil {
@@ -177,7 +180,6 @@ func (s *Service) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int6
 	return nil
 }
 
-// DeleteGuestUserTx deletes the user linked to a guest within an existing transaction.
 func (s *Service) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error {
 	txRepo := s.txRepo.WithTx(tx)
 	if err := txRepo.DeleteByGuestID(ctx, guestID); err != nil {
@@ -190,7 +192,6 @@ func (s *Service) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int6
 
 const uracfChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-// GenerateURACF generates a random 5-character uppercase alphanumeric string.
 func GenerateURACF() (string, error) {
 	result := make([]byte, 5)
 	for i := range result {

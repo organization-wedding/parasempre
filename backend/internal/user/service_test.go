@@ -14,7 +14,6 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
 )
 
-// mockUserRepo implements user.Repository with function fields.
 type mockUserRepo struct {
 	getByURACF      func(ctx context.Context, uracf string) (*User, error)
 	getByGuestID    func(ctx context.Context, guestID int64) (*User, error)
@@ -72,12 +71,10 @@ func (m *mockUserRepo) LogAction(ctx context.Context, userID int64, action strin
 	return nil
 }
 
-// WithTx returns itself (mock ignores transactions).
 func (m *mockUserRepo) WithTx(_ pgx.Tx) Repository {
 	return m
 }
 
-// mockGuestRepo implements guest.Repository with function fields.
 type mockGuestRepo struct {
 	listFn               func(ctx context.Context, limit, offset int) ([]guest.Guest, int, error)
 	getByID              func(ctx context.Context, id int64) (*guest.Guest, error)
@@ -149,7 +146,6 @@ func (m *mockGuestRepo) SetConfirmed(ctx context.Context, id int64, confirmed bo
 	return nil, nil
 }
 
-// WithTx returns itself (mock ignores transactions).
 func (m *mockGuestRepo) WithTx(_ pgx.Tx) guest.Repository {
 	return m
 }
@@ -472,7 +468,6 @@ func TestServiceSeedCouple(t *testing.T) {
 		}
 
 		svc := NewService(userRepo, &mockGuestRepo{})
-		// Should not panic
 		svc.SeedCouple(context.Background(),
 			CoupleData{URACF: "GRM01"},
 			CoupleData{URACF: "BRD01"},
@@ -559,7 +554,6 @@ func TestServiceRecordLogin(t *testing.T) {
 		}
 
 		svc := NewService(userRepo, &mockGuestRepo{})
-		// Should not panic
 		svc.RecordLogin(context.Background(), 42)
 	})
 }
@@ -604,7 +598,6 @@ func TestServiceCreateGuestUserTx(t *testing.T) {
 		if len(createdUser.URACF) != 5 {
 			t.Fatalf("expected URACF of length 5, got %q (%d)", createdUser.URACF, len(createdUser.URACF))
 		}
-		// Verify URACF is uppercase alphanumeric
 		for _, c := range createdUser.URACF {
 			if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
 				t.Fatalf("URACF contains invalid char %q in %q", string(c), createdUser.URACF)
@@ -671,7 +664,6 @@ func TestGenerateURACF(t *testing.T) {
 		}
 	}
 
-	// Generate multiple to check uniqueness (probabilistic)
 	seen := make(map[string]bool)
 	for i := 0; i < 100; i++ {
 		u, err := GenerateURACF()
