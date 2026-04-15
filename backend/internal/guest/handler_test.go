@@ -27,7 +27,7 @@ func registerTestRoutes(mux *http.ServeMux, h *Handler) {
 
 func newTestHandler() (*Handler, *mockRepository) {
 	repo := &mockRepository{}
-	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	svc := newTestService(repo, defaultUserBridge())
 	return NewHandler(svc), repo
 }
 

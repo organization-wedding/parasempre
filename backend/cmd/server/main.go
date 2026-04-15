@@ -56,7 +56,7 @@ func main() {
 	// Services
 	userSvc := user.NewServiceWithTx(userRepo, guestRepo)
 
-	guestSvc := guest.NewService(guestRepo, &userCheckerAdapter{repo: userRepo}, userSvc, userSvc, userSvc, txRunner)
+	guestSvc := guest.NewService(guestRepo, userSvc, txRunner)
 	guestHandler := guest.NewHandler(guestSvc)
 	userHandler := user.NewHandler(userSvc, cfg.AppEnv)
 
@@ -194,18 +194,6 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 	slog.Info("server stopped")
-}
-
-type userCheckerAdapter struct {
-	repo user.Repository
-}
-
-func (a *userCheckerAdapter) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
-	u, err := a.repo.GetByURACF(ctx, uracf)
-	if err != nil {
-		return false, err
-	}
-	return u != nil, nil
 }
 
 type logSender struct{}

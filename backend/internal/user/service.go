@@ -13,7 +13,6 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
 
-// TxAwareRepository extends Repository with transaction support.
 type TxAwareRepository interface {
 	Repository
 	WithTx(tx pgx.Tx) Repository
@@ -133,6 +132,14 @@ func (s *Service) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, 
 		return nil, nil
 	}
 	return u.GuestID, nil
+}
+
+func (s *Service) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
+	u, err := s.repo.GetByURACF(ctx, uracf)
+	if err != nil {
+		return false, err
+	}
+	return u != nil, nil
 }
 
 func (s *Service) PhoneExists(ctx context.Context, phone string) (bool, error) {

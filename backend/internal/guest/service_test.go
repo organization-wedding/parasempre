@@ -70,68 +70,45 @@ func (m *mockRepository) SetConfirmed(ctx context.Context, id int64, confirmed b
 	return m.setConfirmedFn(ctx, id, confirmed, userRACF)
 }
 
-// WithTx returns itself (mock ignores transactions).
 func (m *mockRepository) WithTx(_ pgx.Tx) Repository {
 	return m
 }
 
-// mockUserChecker implements UserChecker for tests.
-type mockUserChecker struct {
-	existsFn func(ctx context.Context, uracf string) (bool, error)
+type mockUserBridge struct {
+	existsFn            func(ctx context.Context, uracf string) (bool, error)
+	createFn            func(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
+	deleteFn            func(ctx context.Context, tx pgx.Tx, guestID int64) error
+	getGuestIDByPhoneFn func(ctx context.Context, phone string) (*int64, error)
 }
 
-func (m *mockUserChecker) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
+func (m *mockUserBridge) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
 	if m.existsFn != nil {
 		return m.existsFn(ctx, uracf)
 	}
 	return true, nil
 }
 
-// mockUserCreator implements UserCreator for tests.
-type mockUserCreator struct {
-	createFn func(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
-}
-
-func (m *mockUserCreator) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error {
+func (m *mockUserBridge) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error {
 	if m.createFn != nil {
 		return m.createFn(ctx, tx, guestID, phone)
 	}
 	return nil
 }
 
-// mockUserDeleter implements UserDeleter for tests.
-type mockUserDeleter struct {
-	deleteFn func(ctx context.Context, tx pgx.Tx, guestID int64) error
-}
-
-func (m *mockUserDeleter) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error {
+func (m *mockUserBridge) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error {
 	if m.deleteFn != nil {
 		return m.deleteFn(ctx, tx, guestID)
 	}
 	return nil
 }
 
-func noopUserDeleter() *mockUserDeleter {
-	return &mockUserDeleter{}
-}
-
-// mockUserPhoneLookup implements UserPhoneLookup for tests.
-type mockUserPhoneLookup struct {
-	getGuestIDByPhoneFn func(ctx context.Context, phone string) (*int64, error)
-}
-
-func (m *mockUserPhoneLookup) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error) {
+func (m *mockUserBridge) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error) {
 	if m.getGuestIDByPhoneFn != nil {
 		return m.getGuestIDByPhoneFn(ctx, phone)
 	}
 	return nil, nil
 }
 
-func noopPhoneLookup() *mockUserPhoneLookup {
-	return &mockUserPhoneLookup{}
-}
-
-// mockTxRunner implements database.TxRunner by running fn with a nil tx (pass-through).
 type mockTxRunner struct{}
 
 func (m *mockTxRunner) RunInTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
@@ -157,31 +134,15 @@ func sampleGuest() Guest {
 	}
 }
 
-// alwaysExistsChecker returns a UserChecker that always reports the user exists.
-func alwaysExistsChecker() *mockUserChecker {
-	return &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
-		return true, nil
-	}}
+func defaultUserBridge() *mockUserBridge {
+	return &mockUserBridge{}
 }
 
-func noopUserCreator() *mockUserCreator {
-	return &mockUserCreator{}
-}
-
-// newTestService creates a Service wired with mocks. The mockTxRunner calls fn(nil)
-// so WithTx returns the mock itself, and all repo calls go through the mockRepository.
-func newTestService(repo *mockRepository, checker *mockUserChecker, creator *mockUserCreator) *Service {
-	return newTestServiceWithPhone(repo, checker, creator, noopPhoneLookup())
-}
-
-func newTestServiceWithPhone(repo *mockRepository, checker *mockUserChecker, creator *mockUserCreator, phoneLookup *mockUserPhoneLookup) *Service {
+func newTestService(repo *mockRepository, users *mockUserBridge) *Service {
 	return &Service{
-		repo:            repo,
-		userChecker:     checker,
-		userCreator:     creator,
-		userDeleter:     noopUserDeleter(),
-		userPhoneLookup: phoneLookup,
-		txRunner:        &mockTxRunner{},
+		repo:     repo,
+		users:    users,
+		txRunner: &mockTxRunner{},
 	}
 }
 
@@ -266,7 +227,7 @@ func TestServiceList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := newTestService(&mockRepository{listFn: tt.mockFn}, alwaysExistsChecker(), noopUserCreator())
+			svc := newTestService(&mockRepository{listFn: tt.mockFn}, defaultUserBridge())
 			result, err := svc.List(context.Background(), tt.page, tt.limit)
 			if tt.wantErr {
 				if err == nil {
@@ -314,7 +275,7 @@ func TestServiceGetByID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := newTestService(&mockRepository{getByID: tt.mockFn}, alwaysExistsChecker(), noopUserCreator())
+			svc := newTestService(&mockRepository{getByID: tt.mockFn}, defaultUserBridge())
 			guest, err := svc.GetByID(context.Background(), tt.id)
 			if tt.wantErr {
 				if err == nil {
@@ -436,7 +397,7 @@ func TestServiceCreate(t *testing.T) {
 					return &g, nil
 				},
 			}
-			svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+			svc := newTestService(repo, defaultUserBridge())
 			_, err := svc.Create(context.Background(), tt.input, "TST01")
 			if tt.wantErr {
 				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
@@ -455,7 +416,7 @@ func TestServiceCreateDuplicateName(t *testing.T) {
 			return nil, apperror.Conflict("a guest named 'João Silva' already exists")
 		},
 	}
-	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	svc := newTestService(repo, defaultUserBridge())
 
 	_, err := svc.Create(context.Background(), CreateGuestInput{
 		FirstName:    "João",
@@ -476,7 +437,7 @@ func TestServiceCreateFamilyGroupNotFound(t *testing.T) {
 			return false, nil
 		},
 	}
-	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	svc := newTestService(repo, defaultUserBridge())
 
 	_, err := svc.Create(context.Background(), CreateGuestInput{
 		FirstName:    "Maria",
@@ -505,7 +466,7 @@ func TestServiceCreateAutoAssignFamilyGroup(t *testing.T) {
 			return &g, nil
 		},
 	}
-	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	svc := newTestService(repo, defaultUserBridge())
 
 	_, err := svc.Create(context.Background(), CreateGuestInput{
 		FirstName:    "Maria",
@@ -520,10 +481,10 @@ func TestServiceCreateAutoAssignFamilyGroup(t *testing.T) {
 
 func TestServiceCreateUserRACFNotFound(t *testing.T) {
 	repo := &mockRepository{}
-	checker := &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
+	users := &mockUserBridge{existsFn: func(ctx context.Context, uracf string) (bool, error) {
 		return false, nil
 	}}
-	svc := newTestService(repo, checker, noopUserCreator())
+	svc := newTestService(repo, users)
 
 	_, err := svc.Create(context.Background(), CreateGuestInput{
 		FirstName:    "Maria",
@@ -547,7 +508,7 @@ func TestServiceCreateWithUser(t *testing.T) {
 			return &g, nil
 		},
 	}
-	creator := &mockUserCreator{
+	users := &mockUserBridge{
 		createFn: func(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error {
 			userCreated = true
 			capturedGuestID = guestID
@@ -557,7 +518,7 @@ func TestServiceCreateWithUser(t *testing.T) {
 	}
 
 	phone := "11999999999"
-	svc := newTestService(repo, alwaysExistsChecker(), creator)
+	svc := newTestService(repo, users)
 	g, err := svc.Create(context.Background(), CreateGuestInput{
 		FirstName:    "Maria",
 		LastName:     "Santos",
@@ -590,13 +551,13 @@ func TestServiceCreateUserFails(t *testing.T) {
 			return &g, nil
 		},
 	}
-	creator := &mockUserCreator{
+	users := &mockUserBridge{
 		createFn: func(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error {
 			return apperror.Internal("user creation failed", errors.New("db error"))
 		},
 	}
 
-	svc := newTestService(repo, alwaysExistsChecker(), creator)
+	svc := newTestService(repo, users)
 	_, err := svc.Create(context.Background(), CreateGuestInput{
 		FirstName:    "Maria",
 		LastName:     "Santos",
@@ -607,7 +568,6 @@ func TestServiceCreateUserFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	// The error should propagate — in a real scenario the tx would have been rolled back
 	assertAppError(t, err, http.StatusInternalServerError, "user creation failed")
 }
 
@@ -651,7 +611,7 @@ func TestServiceUpdate(t *testing.T) {
 					return &g, nil
 				},
 			}
-			svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+			svc := newTestService(repo, defaultUserBridge())
 			_, err := svc.Update(context.Background(), 1, tt.input, "TST01")
 			if tt.wantErr {
 				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
@@ -666,10 +626,10 @@ func TestServiceUpdate(t *testing.T) {
 
 func TestServiceUpdateUserRACFNotFound(t *testing.T) {
 	repo := &mockRepository{}
-	checker := &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
+	users := &mockUserBridge{existsFn: func(ctx context.Context, uracf string) (bool, error) {
 		return false, nil
 	}}
-	svc := newTestService(repo, checker, noopUserCreator())
+	svc := newTestService(repo, users)
 
 	relP := "P"
 	_, err := svc.Update(context.Background(), 1, UpdateGuestInput{Relationship: &relP}, "TST01")
@@ -688,7 +648,7 @@ func TestServiceConfirm(t *testing.T) {
 		{
 			name: "success",
 			getByIDFn: func(ctx context.Context, id int64) (*Guest, error) {
-				g := sampleGuest() // Confirmed: false
+				g := sampleGuest()
 				return &g, nil
 			},
 			setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
@@ -716,10 +676,10 @@ func TestServiceConfirm(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockRepository{getByID: tt.getByIDFn, setConfirmedFn: tt.setConfirmedFn}
-			checker := &mockUserChecker{existsFn: func(ctx context.Context, uracf string) (bool, error) {
+			users := &mockUserBridge{existsFn: func(ctx context.Context, uracf string) (bool, error) {
 				return tt.userExists, nil
 			}}
-			svc := newTestService(repo, checker, noopUserCreator())
+			svc := newTestService(repo, users)
 			guest, err := svc.Confirm(context.Background(), 1, "TST01")
 			if tt.wantErr {
 				if err == nil {
@@ -742,7 +702,7 @@ func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
 	repo := &mockRepository{
 		getByID: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = true // já confirmado
+			g.Confirmed = true
 			return &g, nil
 		},
 		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
@@ -750,7 +710,7 @@ func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
 			return nil, nil
 		},
 	}
-	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	svc := newTestService(repo, defaultUserBridge())
 	guest, err := svc.Confirm(context.Background(), 1, "TST01")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -767,7 +727,7 @@ func TestServiceCancel(t *testing.T) {
 	repo := &mockRepository{
 		getByID: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = true // está confirmado, cancel deve executar
+			g.Confirmed = true
 			return &g, nil
 		},
 		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
@@ -776,7 +736,7 @@ func TestServiceCancel(t *testing.T) {
 			return &g, nil
 		},
 	}
-	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	svc := newTestService(repo, defaultUserBridge())
 	guest, err := svc.Cancel(context.Background(), 1, "TST01")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -790,7 +750,7 @@ func TestServiceCancelAlreadyCancelled(t *testing.T) {
 	setConfirmedCalled := false
 	repo := &mockRepository{
 		getByID: func(ctx context.Context, id int64) (*Guest, error) {
-			g := sampleGuest() // Confirmed: false — já cancelado
+			g := sampleGuest()
 			return &g, nil
 		},
 		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
@@ -798,7 +758,7 @@ func TestServiceCancelAlreadyCancelled(t *testing.T) {
 			return nil, nil
 		},
 	}
-	svc := newTestService(repo, alwaysExistsChecker(), noopUserCreator())
+	svc := newTestService(repo, defaultUserBridge())
 	guest, err := svc.Cancel(context.Background(), 1, "TST01")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -841,7 +801,7 @@ func TestServiceConfirmByPhone(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockRepository{
 				getByID: func(ctx context.Context, id int64) (*Guest, error) {
-					g := sampleGuest() // Confirmed: false → confirm vai executar
+					g := sampleGuest()
 					return &g, nil
 				},
 				setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
@@ -850,8 +810,8 @@ func TestServiceConfirmByPhone(t *testing.T) {
 					return &g, nil
 				},
 			}
-			phoneLookup := &mockUserPhoneLookup{getGuestIDByPhoneFn: tt.phoneLookup}
-			svc := newTestServiceWithPhone(repo, alwaysExistsChecker(), noopUserCreator(), phoneLookup)
+			users := &mockUserBridge{getGuestIDByPhoneFn: tt.phoneLookup}
+			svc := newTestService(repo, users)
 
 			guest, err := svc.ConfirmByPhone(context.Background(), "43999999999", "TST01")
 			if tt.wantErr {
@@ -872,7 +832,7 @@ func TestServiceCancelByPhone(t *testing.T) {
 	repo := &mockRepository{
 		getByID: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = true // está confirmado, cancel deve executar
+			g.Confirmed = true
 			return &g, nil
 		},
 		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
@@ -881,13 +841,13 @@ func TestServiceCancelByPhone(t *testing.T) {
 			return &g, nil
 		},
 	}
-	phoneLookup := &mockUserPhoneLookup{
+	users := &mockUserBridge{
 		getGuestIDByPhoneFn: func(ctx context.Context, phone string) (*int64, error) {
 			id := int64(1)
 			return &id, nil
 		},
 	}
-	svc := newTestServiceWithPhone(repo, alwaysExistsChecker(), noopUserCreator(), phoneLookup)
+	svc := newTestService(repo, users)
 
 	guest, err := svc.CancelByPhone(context.Background(), "43999999999", "TST01")
 	if err != nil {
@@ -921,7 +881,7 @@ func TestServiceDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := newTestService(&mockRepository{deleteFn: tt.mockFn}, alwaysExistsChecker(), noopUserCreator())
+			svc := newTestService(&mockRepository{deleteFn: tt.mockFn}, defaultUserBridge())
 			err := svc.Delete(context.Background(), 1)
 			if tt.wantErr {
 				if err == nil {
