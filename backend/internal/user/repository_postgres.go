@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,6 +39,7 @@ func (r *PostgresRepository) GetByURACF(ctx context.Context, uracf string) (*Use
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		slog.Error("user.repo get_by_uracf: query failed", "uracf", uracf, "error", err)
 		return nil, err
 	}
 	return &u, nil
@@ -50,6 +52,7 @@ func (r *PostgresRepository) GetByGuestID(ctx context.Context, guestID int64) (*
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		slog.Error("user.repo get_by_guest_id: query failed", "guest_id", guestID, "error", err)
 		return nil, err
 	}
 	return &u, nil
@@ -92,6 +95,7 @@ func (r *PostgresRepository) GetByPhone(ctx context.Context, phone string) (*Use
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		slog.Error("user.repo get_by_phone: query failed", "phone", phone, "error", err)
 		return nil, err
 	}
 	return &u, nil
@@ -104,6 +108,7 @@ func (r *PostgresRepository) Create(ctx context.Context, u *User) (*User, error)
 		 RETURNING `+userColumns,
 		u.GuestID, u.Role, u.URACF, u.Phone))
 	if err != nil {
+		slog.Error("user.repo create: insert failed", "uracf", u.URACF, "error", err)
 		return nil, err
 	}
 	return &created, nil
@@ -111,6 +116,9 @@ func (r *PostgresRepository) Create(ctx context.Context, u *User) (*User, error)
 
 func (r *PostgresRepository) DeleteByGuestID(ctx context.Context, guestID int64) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM users WHERE guest_id = $1`, guestID)
+	if err != nil {
+		slog.Error("user.repo delete_by_guest_id: delete failed", "guest_id", guestID, "error", err)
+	}
 	return err
 }
 

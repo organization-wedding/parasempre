@@ -57,11 +57,7 @@ func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, er
 func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {
 	guest, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service get_by_id: failed", "id", id, "error", err)
-		return nil, apperror.Internal("failed to get guest", err)
+		return nil, apperror.WrapIfNotApp("failed to get guest", err)
 	}
 	return guest, nil
 }
@@ -112,11 +108,7 @@ func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF s
 		}
 		return nil
 	}); err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service create: transaction failed", "error", err)
-		return nil, apperror.Internal("failed to create guest", err)
+		return nil, apperror.WrapIfNotApp("failed to create guest", err)
 	}
 
 	slog.Info("guest.service create: guest+user created", "id", created.ID, "user_racf", userRACF)
@@ -162,11 +154,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 
 	guest, err := s.repo.Update(ctx, id, input, userRACF)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service update: repository update failed", "error", err)
-		return nil, apperror.Internal("failed to update guest", err)
+		return nil, apperror.WrapIfNotApp("failed to update guest", err)
 	}
 	slog.Info("guest.service update: guest updated", "id", guest.ID, "user_racf", userRACF)
 	return guest, nil
@@ -203,11 +191,7 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 	// (ex: bot WhatsApp reprocessando a mesma mensagem).
 	current, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service set_confirmed: failed to fetch guest", "id", id, "error", err)
-		return nil, apperror.Internal("failed to fetch guest", err)
+		return nil, apperror.WrapIfNotApp("failed to fetch guest", err)
 	}
 	if current.Confirmed == confirmed {
 		slog.Info("guest.service set_confirmed: already in desired state, skipping update", "id", id, "confirmed", confirmed)
@@ -216,11 +200,7 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 
 	guest, err := s.repo.SetConfirmed(ctx, id, confirmed, userRACF)
 	if err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return nil, err
-		}
-		slog.Error("guest.service set_confirmed: failed", "id", id, "error", err)
-		return nil, apperror.Internal("failed to update confirmation", err)
+		return nil, apperror.WrapIfNotApp("failed to update confirmation", err)
 	}
 	slog.Info("guest.service set_confirmed: success", "id", guest.ID, "confirmed", confirmed, "user_racf", userRACF)
 	return guest, nil
@@ -250,11 +230,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 		txRepo := s.repo.WithTx(tx)
 		return txRepo.Delete(ctx, id)
 	}); err != nil {
-		if _, ok := apperror.IsAppError(err); ok {
-			return err
-		}
-		slog.Error("guest.service delete: failed", "id", id, "error", err)
-		return apperror.Internal("failed to delete guest", err)
+		return apperror.WrapIfNotApp("failed to delete guest", err)
 	}
 	slog.Info("guest.service delete: guest deleted", "id", id)
 	return nil
