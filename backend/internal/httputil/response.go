@@ -16,6 +16,15 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 }
 
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	var rle *apperror.RateLimitedError
+	if errors.As(err, &rle) {
+		WriteJSON(w, rle.Code, map[string]any{
+			"error":               rle.Message,
+			"retry_after_seconds": int(rle.RetryAfter.Seconds()),
+		})
+		return
+	}
+
 	var appErr *apperror.AppError
 	if errors.As(err, &appErr) {
 		if appErr.Code >= 500 && appErr.Err != nil {

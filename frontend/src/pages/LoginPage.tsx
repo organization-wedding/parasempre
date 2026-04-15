@@ -3,10 +3,20 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import Phone from "lucide-react/dist/esm/icons/phone";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
-import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import Loader from "lucide-react/dist/esm/icons/loader-circle";
 import { setAuth } from "../lib/auth";
 import { useSendOtpMutation, useVerifyOtpMutation } from "../lib/auth-queries";
+import { OtpApiError, OtpRateLimitError } from "../lib/api";
+import { Toast } from "../components/Toast";
+
+function titleForStatus(status: number): string {
+  if (status === 400) return "Dados inválidos";
+  if (status === 401) return "Código inválido";
+  if (status === 404) return "Telefone não encontrado";
+  if (status === 429) return "Muitas tentativas";
+  if (status >= 500) return "Erro do servidor";
+  return "Erro";
+}
 
 function formatPhoneDisplay(digits: string): string {
   if (digits.length === 0) return "";
@@ -70,12 +80,24 @@ export function LoginPage() {
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ id: number; title: string; message: string } | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const codeInputRef = useRef<HTMLInputElement>(null);
   const sendOtp = useSendOtpMutation();
   const verifyOtp = useVerifyOtpMutation();
+
+  function showToast(title: string, message: string) {
+    setToast({ id: Date.now(), title, message });
+  }
+
+  function showErrorToast(err: unknown, fallback: string) {
+    if (err instanceof OtpApiError) {
+      showToast(titleForStatus(err.status), err.message);
+      return;
+    }
+    showToast("Erro", err instanceof Error ? err.message : fallback);
+  }
 
   // Resend cooldown timer
   useEffect(() => {
@@ -92,9 +114,8 @@ export function LoginPage() {
   }, [step]);
 
   async function handleSendOtp() {
-    setError(null);
     if (phone.length !== 11) {
-      setError("Informe um telefone válido com DDD (11 dígitos).");
+      showToast("Dados inválidos", "Informe um telefone válido com DDD (11 dígitos).");
       return;
     }
     try {
@@ -103,43 +124,46 @@ export function LoginPage() {
       setCode("");
       setResendCooldown(RESEND_COOLDOWN);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao enviar código");
+      if (err instanceof OtpRateLimitError) {
+        setResendCooldown(err.retryAfterSeconds);
+        setStep("code");
+      }
+      showErrorToast(err, "Erro ao enviar código");
     }
   }
 
   async function handleVerifyOtp() {
-    setError(null);
     if (code.length !== 6) {
-      setError("Informe o código de 6 dígitos.");
+      showToast("Dados inválidos", "Informe o código de 6 dígitos.");
       return;
     }
     try {
       const result = await verifyOtp.mutateAsync({ phone, code });
       setAuth(result.token, result.role, result.uracf);
 
-      // Validate redirect is a relative path
       const target = redirectTo.startsWith("/") ? redirectTo : "/dashboard";
       void navigate({ to: target });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Código inválido ou expirado");
+      showErrorToast(err, "Código inválido ou expirado");
     }
   }
 
   async function handleResend() {
-    setError(null);
     try {
       await sendOtp.mutateAsync(phone);
       setResendCooldown(RESEND_COOLDOWN);
       setCode("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao reenviar código");
+      if (err instanceof OtpRateLimitError) {
+        setResendCooldown(err.retryAfterSeconds);
+      }
+      showErrorToast(err, "Erro ao reenviar código");
     }
   }
 
   function handleBackToPhone() {
     setStep("phone");
     setCode("");
-    setError(null);
   }
 
   const isLoading = sendOtp.isPending || verifyOtp.isPending;
@@ -179,14 +203,6 @@ export function LoginPage() {
                 </>
               )}
         </p>
-
-        {/* Error */}
-        {error && (
-          <div className="mb-5 flex items-center gap-3 border border-[#c25550]/30 bg-[#c25550]/10 px-4 py-3 rounded-[2px]">
-            <AlertTriangle size={16} className="text-[#c25550] shrink-0" />
-            <span className="text-[0.82rem] text-[#fca5a5] flex-1">{error}</span>
-          </div>
-        )}
 
         {/* Step 1: Phone */}
         {step === "phone" && (
@@ -310,6 +326,15 @@ export function LoginPage() {
 
       {/* Bottom decorative line */}
       <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-gold/40 to-transparent" />
+
+      {toast && (
+        <Toast
+          key={toast.id}
+          title={toast.title}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
