@@ -222,6 +222,30 @@ func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirm
 	return s.setConfirmed(ctx, *guestID, confirmed, userRACF)
 }
 
+func (s *Service) Import(ctx context.Context, guests []CreateGuestInput, userRACF string) ImportResponse {
+	var successCount int
+	var rowErrors []ImportRowError
+	const dataRowStart = 2
+	for i, input := range guests {
+		rowNumber := i + dataRowStart
+		if _, err := s.Create(ctx, input, userRACF); err != nil {
+			slog.Warn("guest.service import: row failed", "row", rowNumber, "error", err)
+			rowErrors = append(rowErrors, ImportRowError{Row: rowNumber, Error: err.Error()})
+			continue
+		}
+		successCount++
+	}
+	if rowErrors == nil {
+		rowErrors = []ImportRowError{}
+	}
+	return ImportResponse{
+		SuccessCount: successCount,
+		ErrorCount:   len(rowErrors),
+		Total:        len(guests),
+		Errors:       rowErrors,
+	}
+}
+
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
 		if err := s.users.DeleteGuestUserTx(ctx, tx, id); err != nil {
