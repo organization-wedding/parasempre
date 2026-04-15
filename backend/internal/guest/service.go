@@ -186,9 +186,6 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 		return nil, apperror.Validation("user-racf does not match any registered user")
 	}
 
-	// Idempotência: se o guest já está no estado desejado, retorna sem fazer UPDATE.
-	// Evita escrita desnecessária e atualização de updated_at em chamadas repetidas
-	// (ex: bot WhatsApp reprocessando a mesma mensagem).
 	current, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to fetch guest", err)
@@ -206,9 +203,6 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 	return guest, nil
 }
 
-// setConfirmedByPhone busca o guest_id via tabela users (que possui o phone)
-// e delega para setConfirmed. Permite que o bot WhatsApp confirme presença
-// usando apenas o número de telefone do convidado.
 func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirmed bool, userRACF string) (*Guest, error) {
 	guestID, err := s.users.GetGuestIDByPhone(ctx, phone)
 	if err != nil {

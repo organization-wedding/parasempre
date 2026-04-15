@@ -38,29 +38,22 @@ func main() {
 	defer pool.Close()
 	slog.Info("connected to database")
 
-	// Repositories
 	guestRepo := guest.NewPostgresRepository(pool)
 	userRepo := user.NewPostgresRepository(pool)
 	otpRepo := auth.NewPostgresOTPRepository(pool)
-
-	// Transaction runner
 	txRunner := database.NewTxRunner(pool)
 
-	// JWT
 	jwtExpiry, err := time.ParseDuration(cfg.JWTExpiry)
 	if err != nil {
 		jwtExpiry = 720 * time.Hour
 	}
 	jwtSvc := auth.NewJWTService(cfg.JWTSecret, jwtExpiry)
 
-	// Services
 	userSvc := user.NewServiceWithTx(userRepo, guestRepo)
-
 	guestSvc := guest.NewService(guestRepo, userSvc, txRunner)
 	guestHandler := guest.NewHandler(guestSvc)
 	userHandler := user.NewHandler(userSvc, cfg.AppEnv)
 
-	// Auth
 	var whatsappSender auth.WhatsAppSender
 	if cfg.EvoAPIURL != "" && cfg.EvoAPIKey != "" {
 		whatsappSender = auth.NewEvoAPISender(cfg.EvoAPIURL, cfg.EvoAPIKey, cfg.EvoAPIInstance)
@@ -69,6 +62,7 @@ func main() {
 	}
 	otpSvc := auth.NewOTPService(otpRepo, whatsappSender)
 	authHandler := auth.NewHandler(otpSvc, jwtSvc, userSvc, userSvc, userSvc)
+
 	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer seedCancel()
 	userSvc.SeedCouple(seedCtx,
@@ -82,83 +76,16 @@ func main() {
 	defer otpHourLimiter.Close()
 
 	mux := http.NewServeMux()
+	registerRoutes(mux, routeDeps{
+		auth:             authHandler,
+		guest:            guestHandler,
+		user:             userHandler,
+		jwt:              jwtSvc,
+		appEnv:           cfg.AppEnv,
+		otpMinuteLimiter: otpMinuteLimiter,
+		otpHourLimiter:   otpHourLimiter,
+	})
 
-	mux.Handle("POST /api/auth/otp/send", middleware.Chain(
-		http.HandlerFunc(authHandler.HandleSendOTP),
-		otpHourLimiter.Middleware(),
-		otpMinuteLimiter.Middleware(),
-	))
-	mux.Handle("POST /api/auth/otp/verify", middleware.Chain(
-		http.HandlerFunc(authHandler.HandleVerifyOTP),
-		otpHourLimiter.Middleware(),
-		otpMinuteLimiter.Middleware(),
-	))
-	mux.HandleFunc("GET /api/users/check", userHandler.HandleCheck)
-
-	mux.Handle("GET /api/guests", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleList),
-		middleware.RequireAuth(jwtSvc),
-	))
-	mux.Handle("GET /api/guests/{id}", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleGet),
-		middleware.RequireAuth(jwtSvc),
-	))
-	mux.Handle("GET /api/users/me", middleware.Chain(
-		http.HandlerFunc(userHandler.HandleMe),
-		middleware.RequireAuth(jwtSvc),
-	))
-
-	// Authenticated + groom/bride only
-	mux.Handle("POST /api/guests", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleCreate),
-		middleware.RequireAuth(jwtSvc),
-		middleware.RequireRole("groom", "bride"),
-	))
-	mux.Handle("PUT /api/guests/{id}", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleUpdate),
-		middleware.RequireAuth(jwtSvc),
-		middleware.RequireRole("groom", "bride"),
-	))
-	mux.Handle("DELETE /api/guests/{id}", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleDelete),
-		middleware.RequireAuth(jwtSvc),
-		middleware.RequireRole("groom", "bride"),
-	))
-	mux.Handle("POST /api/guests/import", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleImport),
-		middleware.RequireAuth(jwtSvc),
-		middleware.RequireRole("groom", "bride"),
-	))
-
-	// Confirm/Cancel presence (any authenticated role)
-	mux.Handle("PATCH /api/guests/{id}/confirm", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleConfirm),
-		middleware.RequireAuth(jwtSvc),
-	))
-	mux.Handle("PATCH /api/guests/{id}/cancel", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleCancel),
-		middleware.RequireAuth(jwtSvc),
-	))
-	mux.Handle("PATCH /api/guests/phone/{phone}/confirm", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleConfirmByPhone),
-		middleware.RequireAuth(jwtSvc),
-	))
-	mux.Handle("PATCH /api/guests/phone/{phone}/cancel", middleware.Chain(
-		http.HandlerFunc(guestHandler.HandleCancelByPhone),
-		middleware.RequireAuth(jwtSvc),
-	))
-
-	// Dev only
-	mux.Handle("GET /api/users", middleware.Chain(
-		http.HandlerFunc(userHandler.HandleList),
-		middleware.DevOnly(cfg.AppEnv),
-	))
-	mux.Handle("POST /api/users", middleware.Chain(
-		http.HandlerFunc(userHandler.HandleRegister),
-		middleware.DevOnly(cfg.AppEnv),
-	))
-
-	// Global middleware
 	handler := middleware.Chain(mux,
 		middleware.Recovery,
 		middleware.Logger,

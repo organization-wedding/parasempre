@@ -261,7 +261,7 @@ func TestHandlerDeleteGuestNotFound(t *testing.T) {
 func TestHandlerConfirmGuest(t *testing.T) {
 	h, repo := newTestHandler()
 	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
-		g := sampleGuest() // Confirmed: false — estado diferente, confirm executa
+		g := sampleGuest()
 		return &g, nil
 	}
 	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
@@ -314,7 +314,7 @@ func TestHandlerCancelGuest(t *testing.T) {
 	h, repo := newTestHandler()
 	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
 		g := sampleGuest()
-		g.Confirmed = true // está confirmado, cancel deve executar
+		g.Confirmed = true
 		return &g, nil
 	}
 	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {

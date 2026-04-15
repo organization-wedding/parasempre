@@ -37,7 +37,6 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*User, err
 		return nil, err
 	}
 
-	// Find user by phone (phone is now on users table only)
 	existing, err := s.repo.GetByPhone(ctx, input.Phone)
 	if err != nil {
 		slog.Error("user.service register: user lookup failed", "phone", input.Phone, "error", err)
@@ -157,7 +156,6 @@ func (s *Service) RecordLogin(ctx context.Context, userID int64) {
 	}
 }
 
-// CreateGuestUserTx creates a user linked to a guest within an existing transaction.
 func (s *Service) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error {
 	uracf, err := GenerateURACF()
 	if err != nil {
@@ -182,7 +180,6 @@ func (s *Service) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int6
 	return nil
 }
 
-// DeleteGuestUserTx deletes the user linked to a guest within an existing transaction.
 func (s *Service) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error {
 	txRepo := s.txRepo.WithTx(tx)
 	if err := txRepo.DeleteByGuestID(ctx, guestID); err != nil {
@@ -195,7 +192,6 @@ func (s *Service) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int6
 
 const uracfChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-// GenerateURACF generates a random 5-character uppercase alphanumeric string.
 func GenerateURACF() (string, error) {
 	result := make([]byte, 5)
 	for i := range result {

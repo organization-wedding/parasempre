@@ -94,8 +94,6 @@ func TestParseCSVFieldMapping(t *testing.T) {
 }
 
 func TestParseXLSX(t *testing.T) {
-	// XLSX parsing is tested via integration with excelize.
-	// We test error handling for invalid input here.
 	_, err := ParseXLSX(strings.NewReader("not a valid xlsx"))
 	if err == nil {
 		t.Fatal("expected error for invalid XLSX, got nil")
