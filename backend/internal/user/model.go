@@ -35,10 +35,3 @@ type CoupleData struct {
 	Phone string
 }
 
-type AuditEntry struct {
-	ID        int64           `json:"id"`
-	UserID    int64           `json:"user_id"`
-	Action    string          `json:"action"`
-	Details   *map[string]any `json:"details,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
-}

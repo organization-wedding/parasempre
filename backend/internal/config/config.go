@@ -90,10 +90,22 @@ type envField struct {
 }
 
 func Load() (Config, error) {
-	maxConns, _ := strconv.ParseInt(getEnvOrDefault(envDBMaxConns, defaultDBMaxConns), 10, 32)
-	minConns, _ := strconv.ParseInt(getEnvOrDefault(envDBMinConns, defaultDBMinConns), 10, 32)
-	maxConnLife, _ := time.ParseDuration(getEnvOrDefault(envDBMaxConnLife, defaultDBMaxConnLife))
-	maxConnIdle, _ := time.ParseDuration(getEnvOrDefault(envDBMaxConnIdle, defaultDBMaxConnIdle))
+	maxConns, err := strconv.ParseInt(getEnvOrDefault(envDBMaxConns, defaultDBMaxConns), 10, 32)
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMaxConns, err)
+	}
+	minConns, err := strconv.ParseInt(getEnvOrDefault(envDBMinConns, defaultDBMinConns), 10, 32)
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMinConns, err)
+	}
+	maxConnLife, err := time.ParseDuration(getEnvOrDefault(envDBMaxConnLife, defaultDBMaxConnLife))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMaxConnLife, err)
+	}
+	maxConnIdle, err := time.ParseDuration(getEnvOrDefault(envDBMaxConnIdle, defaultDBMaxConnIdle))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMaxConnIdle, err)
+	}
 
 	cfg := Config{
 		DB: DBConfig{

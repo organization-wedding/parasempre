@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -37,7 +38,9 @@ func (r *poolTxRunner) RunInTx(ctx context.Context, fn func(tx pgx.Tx) error) er
 	}
 
 	if err := fn(tx); err != nil {
-		_ = tx.Rollback(ctx)
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			slog.Error("tx rollback failed", "rollback_error", rbErr, "original_error", err)
+		}
 		return err
 	}
 

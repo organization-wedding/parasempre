@@ -110,8 +110,10 @@ func (h *Handler) HandleVerifyOTP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const loginRecordTimeout = 5 * time.Second
+
 func (h *Handler) recordLoginAsync(userID int64) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), loginRecordTimeout)
 	defer cancel()
 	h.loginRecorder.RecordLogin(ctx, userID)
 }

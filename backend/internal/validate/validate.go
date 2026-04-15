@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/go-playground/validator/v10"
 
@@ -14,24 +15,28 @@ var (
 	brPhoneRegex = regexp.MustCompile(`^\d{2}9\d{8}$`)
 	uracfRegex   = regexp.MustCompile(`^[A-Z0-9]{5}$`)
 
-	v *validator.Validate
+	instance *validator.Validate
+	once     sync.Once
 )
 
-func init() {
-	v = validator.New()
+func getValidator() *validator.Validate {
+	once.Do(func() {
+		instance = validator.New()
 
-	v.RegisterValidation("brphone", func(fl validator.FieldLevel) bool {
-		return brPhoneRegex.MatchString(fl.Field().String())
-	})
+		instance.RegisterValidation("brphone", func(fl validator.FieldLevel) bool {
+			return brPhoneRegex.MatchString(fl.Field().String())
+		})
 
-	v.RegisterValidation("uracf", func(fl validator.FieldLevel) bool {
-		return uracfRegex.MatchString(fl.Field().String())
-	})
+		instance.RegisterValidation("uracf", func(fl validator.FieldLevel) bool {
+			return uracfRegex.MatchString(fl.Field().String())
+		})
 
-	v.RegisterValidation("relationship", func(fl validator.FieldLevel) bool {
-		val := fl.Field().String()
-		return val == "P" || val == "R"
+		instance.RegisterValidation("relationship", func(fl validator.FieldLevel) bool {
+			val := fl.Field().String()
+			return val == "P" || val == "R"
+		})
 	})
+	return instance
 }
 
 var fieldMessages = map[string]map[string]string{
@@ -45,7 +50,7 @@ var fieldMessages = map[string]map[string]string{
 }
 
 func Struct(s any) error {
-	err := v.Struct(s)
+	err := getValidator().Struct(s)
 	if err == nil {
 		return nil
 	}
