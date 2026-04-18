@@ -7,17 +7,17 @@ import {
   listGuests,
   updateGuest,
 } from "./api";
-import type { CreateGuestInput, UpdateGuestInput } from "../types/guest";
+import type { CreateGuestInput, UpdateGuestInput, PagedGuestResponse } from "../types/guest";
 
 export const guestQueryKeys = {
-  all: ["guests"] as const,
+  all: (params?: { page?: number; limit?: number }) => ["guests", params] as const,
   detail: (id: number) => ["guest", id] as const,
 };
 
-export function useGuestsQuery() {
+export function useGuestsQuery(params?: { page?: number; limit?: number }) {
   return useQuery({
-    queryKey: guestQueryKeys.all,
-    queryFn: listGuests,
+    queryKey: guestQueryKeys.all(params),
+    queryFn: () => listGuests(params),
   });
 }
 
@@ -34,7 +34,7 @@ export function useCreateGuestMutation() {
   return useMutation({
     mutationFn: (input: CreateGuestInput) => createGuest(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all() });
     },
   });
 }
@@ -45,7 +45,7 @@ export function useUpdateGuestMutation() {
     mutationFn: ({ id, input }: { id: number; input: UpdateGuestInput }) => updateGuest(id, input),
     onSuccess: (guest) => {
       queryClient.setQueryData(guestQueryKeys.detail(guest.id), guest);
-      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all() });
     },
   });
 }
@@ -56,7 +56,7 @@ export function useDeleteGuestMutation() {
     mutationFn: (id: number) => deleteGuest(id),
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: guestQueryKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all() });
     },
   });
 }
@@ -68,7 +68,7 @@ export function useDeleteGuestsMutation() {
       await Promise.all(ids.map((id) => deleteGuest(id)));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all() });
     },
   });
 }
@@ -78,7 +78,7 @@ export function useImportGuestsMutation() {
   return useMutation({
     mutationFn: (file: File) => importGuests(file),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: guestQueryKeys.all() });
     },
   });
 }
