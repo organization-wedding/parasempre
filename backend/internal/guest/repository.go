@@ -7,8 +7,8 @@ import (
 )
 
 type Repository interface {
-	List(ctx context.Context, limit, offset int) ([]Guest, int, error)
-	GetByID(ctx context.Context, id int64) (*Guest, error)
+	List(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error)
+	GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error)
 	GetByName(ctx context.Context, firstName, lastName string) (*Guest, error)
 	FamilyGroupExists(ctx context.Context, familyGroup int64) (bool, error)
 	GetNextFamilyGroup(ctx context.Context) (int64, error)

@@ -101,7 +101,7 @@ func (s *Service) CheckByPhone(ctx context.Context, phone string) (*CheckRespons
 		return nil, apperror.Internal("failed to check phone", err)
 	}
 	if u != nil {
-		return &CheckResponse{Exists: true, Role: u.Role}, nil
+		return &CheckResponse{Exists: true}, nil
 	}
 
 	return &CheckResponse{Exists: false}, nil
@@ -215,6 +215,16 @@ func (s *Service) seedPerson(ctx context.Context, data CoupleData, role string) 
 		return
 	}
 
+	existingRole, err := s.repo.GetByRole(ctx, role)
+	if err != nil {
+		slog.Error("seed: failed to check existing role", "role", role, "error", err)
+		return
+	}
+	if existingRole != nil {
+		slog.Info("seed: skipping, role already exists", "role", role, "existing_uracf", existingRole.URACF)
+		return
+	}
+
 	existing, err := s.repo.GetByURACF(ctx, data.URACF)
 	if err != nil {
 		return
@@ -237,4 +247,73 @@ func (s *Service) seedPerson(ctx context.Context, data CoupleData, role string) 
 		return
 	}
 	slog.Info("seed: user created", "role", role, "id", created.ID)
+}
+
+func (s *Service) Update(ctx context.Context, id int64, input UpdateInput) (*User, error) {
+	if err := validate.Struct(input); err != nil {
+		return nil, err
+	}
+
+	existing, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		slog.Error("user.service update: lookup failed", "id", id, "error", err)
+		return nil, apperror.Internal("failed to lookup user", err)
+	}
+	if existing == nil {
+		return nil, apperror.NotFound("user not found")
+	}
+
+	if input.Phone != nil && *input.Phone != "" {
+		phoneUser, err := s.repo.GetByPhone(ctx, *input.Phone)
+		if err != nil {
+			slog.Error("user.service update: phone lookup failed", "phone", *input.Phone, "error", err)
+			return nil, apperror.Internal("failed to check phone", err)
+		}
+		if phoneUser != nil && phoneUser.ID != id {
+			return nil, apperror.Conflict("phone already in use")
+		}
+	}
+
+	if input.Role != nil && (*input.Role == "groom" || *input.Role == "bride") {
+		existingRole, err := s.repo.GetByRole(ctx, *input.Role)
+		if err != nil {
+			slog.Error("user.service update: role lookup failed", "role", *input.Role, "error", err)
+			return nil, apperror.Internal("failed to check role", err)
+		}
+		if existingRole != nil && existingRole.ID != id {
+			return nil, apperror.Conflict(*input.Role + " already exists")
+		}
+	}
+
+	updated, err := s.repo.Update(ctx, id, input)
+	if err != nil {
+		slog.Error("user.service update: update failed", "id", id, "error", err)
+		return nil, apperror.Internal("failed to update user", err)
+	}
+
+	slog.Info("user.service update: user updated", "id", id)
+	return updated, nil
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	existing, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		slog.Error("user.service delete: lookup failed", "id", id, "error", err)
+		return apperror.Internal("failed to lookup user", err)
+	}
+	if existing == nil {
+		return apperror.NotFound("user not found")
+	}
+
+	if existing.Role == "groom" || existing.Role == "bride" {
+		return apperror.Forbidden("cannot delete groom or bride users")
+	}
+
+	if err := s.repo.Delete(ctx, id); err != nil {
+		slog.Error("user.service delete: delete failed", "id", id, "error", err)
+		return apperror.Internal("failed to delete user", err)
+	}
+
+	slog.Info("user.service delete: user deleted", "id", id)
+	return nil
 }

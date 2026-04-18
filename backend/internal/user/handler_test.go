@@ -150,9 +150,6 @@ func TestHandlerCheckExists(t *testing.T) {
 	if !resp.Exists {
 		t.Fatal("expected exists=true")
 	}
-	if resp.Role != "guest" {
-		t.Fatalf("expected role=guest, got %q", resp.Role)
-	}
 }
 
 func TestHandlerCheckNotExists(t *testing.T) {

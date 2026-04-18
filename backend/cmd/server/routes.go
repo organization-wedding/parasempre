@@ -56,12 +56,11 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	guestsAdmin.handle("DELETE /api/guests/{id}", d.guest.HandleDelete)
 	guestsAdmin.handle("POST /api/guests/import", d.guest.HandleImport)
 
-	mux.HandleFunc("GET /api/users/check", d.user.HandleCheck)
-
 	users := newGroup(mux, authMW)
 	users.handle("GET /api/users/me", d.user.HandleMe)
 
-	usersDev := newGroup(mux, middleware.DevOnly(d.appEnv))
-	usersDev.handle("GET /api/users", d.user.HandleList)
-	usersDev.handle("POST /api/users", d.user.HandleRegister)
+	usersAdmin := newGroup(mux, authMW, coupleMW)
+	usersAdmin.handle("GET /api/users/check", d.user.HandleCheck)
+	usersAdmin.handle("PATCH /api/users/{id}", d.user.HandleUpdate)
+	usersAdmin.handle("DELETE /api/users/{id}", d.user.HandleDelete)
 }

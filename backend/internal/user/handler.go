@@ -66,3 +66,38 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"role": u.Role})
 }
+
+func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+
+	var input UpdateInput
+	if err := httputil.DecodeJSON(r, &input); err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+
+	u, err := h.svc.Update(r.Context(), id, input)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, u)
+}
+
+func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+
+	if err := h.svc.Delete(r.Context(), id); err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

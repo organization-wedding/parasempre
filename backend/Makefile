@@ -25,6 +25,7 @@ migrate:
 	@PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/002_create_users.sql
 	@PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/003_create_otp_codes.sql
 	@PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/004_create_audit_log.sql
+	@PGPASSWORD=${DB_PASSWORD} psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/005_single_groom_bride.sql
 
 nuke:
 	@if [ "$(APP_ENV)" != "test" ]; then \
