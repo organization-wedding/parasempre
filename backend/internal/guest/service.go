@@ -29,7 +29,7 @@ func NewService(repo TxAwareRepository, users UserBridge, txRunner database.TxRu
 	return &Service{repo: repo, users: users, txRunner: txRunner}
 }
 
-func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, error) {
+func (s *Service) List(ctx context.Context, page, limit int, userRACF string) (*PagedResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -41,7 +41,7 @@ func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, er
 	}
 
 	offset := (page - 1) * limit
-	guests, total, err := s.repo.List(ctx, limit, offset)
+	guests, total, err := s.repo.List(ctx, limit, offset, userRACF)
 	if err != nil {
 		slog.Error("guest.service list: failed", "error", err)
 		return nil, apperror.Internal("failed to list guests", err)
@@ -54,8 +54,8 @@ func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, er
 	}, nil
 }
 
-func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {
-	guest, err := s.repo.GetByID(ctx, id)
+func (s *Service) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	guest, err := s.repo.GetByID(ctx, id, userRACF)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to get guest", err)
 	}
@@ -130,7 +130,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 	}
 
 	if input.FirstName != nil || input.LastName != nil {
-		current, err := s.repo.GetByID(ctx, id)
+		current, err := s.repo.GetByID(ctx, id, userRACF)
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +186,7 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 		return nil, apperror.Validation("user-racf does not match any registered user")
 	}
 
-	current, err := s.repo.GetByID(ctx, id)
+	current, err := s.repo.GetByID(ctx, id, userRACF)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to fetch guest", err)
 	}

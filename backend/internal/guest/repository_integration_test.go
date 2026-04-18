@@ -35,7 +35,7 @@ func TestIntegrationCreateAndGet(t *testing.T) {
 		t.Fatalf("expected first_name João, got %q", created.FirstName)
 	}
 
-	fetched, err := repo.GetByID(ctx, created.ID)
+	fetched, err := repo.GetByID(ctx, created.ID, "TST01")
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestIntegrationListPagination(t *testing.T) {
 		}
 	}
 
-	guests, total, err := repo.List(ctx, 2, 0)
+	guests, total, err := repo.List(ctx, 2, 0, "TST01")
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}

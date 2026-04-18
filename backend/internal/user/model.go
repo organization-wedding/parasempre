@@ -19,8 +19,7 @@ type RegisterInput struct {
 }
 
 type CheckResponse struct {
-	Exists bool   `json:"exists"`
-	Role   string `json:"role,omitempty"`
+	Exists bool `json:"exists"`
 }
 
 type UserListItem struct {
@@ -35,3 +34,7 @@ type CoupleData struct {
 	Phone string
 }
 
+type UpdateInput struct {
+	Role  *string `json:"role" validate:"omitempty,oneof=guest groom bride"`
+	Phone *string `json:"phone" validate:"omitempty,brphone"`
+}

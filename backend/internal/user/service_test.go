@@ -18,7 +18,11 @@ type mockUserRepo struct {
 	getByURACF      func(ctx context.Context, uracf string) (*User, error)
 	getByGuestID    func(ctx context.Context, guestID int64) (*User, error)
 	getByPhone      func(ctx context.Context, phone string) (*User, error)
+	getByID         func(ctx context.Context, id int64) (*User, error)
+	getByRole       func(ctx context.Context, role string) (*User, error)
 	createFn        func(ctx context.Context, u *User) (*User, error)
+	updateFn        func(ctx context.Context, id int64, input UpdateInput) (*User, error)
+	deleteFn        func(ctx context.Context, id int64) error
 	listFn          func(ctx context.Context) ([]UserListItem, error)
 	updateLastLogin func(ctx context.Context, userID int64) error
 	logAction       func(ctx context.Context, userID int64, action string, details map[string]any) error
@@ -60,6 +64,34 @@ func (m *mockUserRepo) UpdateLastLogin(ctx context.Context, userID int64) error 
 	return nil
 }
 
+func (m *mockUserRepo) GetByID(ctx context.Context, id int64) (*User, error) {
+	if m.getByID != nil {
+		return m.getByID(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *mockUserRepo) GetByRole(ctx context.Context, role string) (*User, error) {
+	if m.getByRole != nil {
+		return m.getByRole(ctx, role)
+	}
+	return nil, nil
+}
+
+func (m *mockUserRepo) Update(ctx context.Context, id int64, input UpdateInput) (*User, error) {
+	if m.updateFn != nil {
+		return m.updateFn(ctx, id, input)
+	}
+	return nil, nil
+}
+
+func (m *mockUserRepo) Delete(ctx context.Context, id int64) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, id)
+	}
+	return nil
+}
+
 func (m *mockUserRepo) DeleteByGuestID(ctx context.Context, guestID int64) error {
 	return nil
 }
@@ -76,8 +108,8 @@ func (m *mockUserRepo) WithTx(_ pgx.Tx) Repository {
 }
 
 type mockGuestRepo struct {
-	listFn               func(ctx context.Context, limit, offset int) ([]guest.Guest, int, error)
-	getByID              func(ctx context.Context, id int64) (*guest.Guest, error)
+	listFn               func(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error)
+	getByID              func(ctx context.Context, id int64, userRACF string) (*guest.Guest, error)
 	getByName            func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
 	familyGroupExistsFn  func(ctx context.Context, familyGroup int64) (bool, error)
 	getNextFamilyGroupFn func(ctx context.Context) (int64, error)
@@ -86,16 +118,16 @@ type mockGuestRepo struct {
 	deleteFn             func(ctx context.Context, id int64) error
 }
 
-func (m *mockGuestRepo) List(ctx context.Context, limit, offset int) ([]guest.Guest, int, error) {
+func (m *mockGuestRepo) List(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, limit, offset)
+		return m.listFn(ctx, limit, offset, userRACF)
 	}
 	return []guest.Guest{}, 0, nil
 }
 
-func (m *mockGuestRepo) GetByID(ctx context.Context, id int64) (*guest.Guest, error) {
+func (m *mockGuestRepo) GetByID(ctx context.Context, id int64, userRACF string) (*guest.Guest, error) {
 	if m.getByID != nil {
-		return m.getByID(ctx, id)
+		return m.getByID(ctx, id, userRACF)
 	}
 	return nil, nil
 }
@@ -291,7 +323,6 @@ func TestServiceCheckByPhone(t *testing.T) {
 		phone       string
 		userFound   bool
 		wantExists  bool
-		wantRole    string
 		wantErr     bool
 		wantErrMsg  string
 		wantErrCode int
@@ -301,7 +332,6 @@ func TestServiceCheckByPhone(t *testing.T) {
 			phone:      "11999999999",
 			userFound:  true,
 			wantExists: true,
-			wantRole:   "guest",
 		},
 		{
 			name:       "user not found",
@@ -347,9 +377,6 @@ func TestServiceCheckByPhone(t *testing.T) {
 			}
 			if resp.Exists != tt.wantExists {
 				t.Fatalf("expected exists=%v, got %v", tt.wantExists, resp.Exists)
-			}
-			if resp.Role != tt.wantRole {
-				t.Fatalf("expected role=%q, got %q", tt.wantRole, resp.Role)
 			}
 		})
 	}

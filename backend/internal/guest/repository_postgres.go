@@ -35,11 +35,11 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 	return &PostgresRepository{db: tx}
 }
 
-func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+func (r *PostgresRepository) List(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+guestColumns+`, COUNT(*) OVER() AS total
-		 FROM guests ORDER BY created_at DESC
-		 LIMIT $1 OFFSET $2`, limit, offset)
+		 FROM guests WHERE created_by = $1 ORDER BY created_at DESC
+		 LIMIT $2 OFFSET $3`, userRACF, limit, offset)
 	if err != nil {
 		slog.Error("guest.repo list: query failed", "error", err)
 		return nil, 0, err
@@ -64,9 +64,9 @@ func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Gue
 	return guests, total, rows.Err()
 }
 
-func (r *PostgresRepository) GetByID(ctx context.Context, id int64) (*Guest, error) {
+func (r *PostgresRepository) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 	g, err := scanGuest(r.db.QueryRow(ctx,
-		`SELECT `+guestColumns+` FROM guests WHERE id = $1`, id))
+		`SELECT `+guestColumns+` FROM guests WHERE id = $1 AND created_by = $2`, id, userRACF))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")
@@ -159,9 +159,9 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 func (r *PostgresRepository) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
 	g, err := scanGuest(r.db.QueryRow(ctx,
 		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
-		 WHERE id = $3
+		 WHERE id = $3 AND created_by = $4
 		 RETURNING `+guestColumns,
-		confirmed, userRACF, id))
+		confirmed, userRACF, id, userRACF))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")

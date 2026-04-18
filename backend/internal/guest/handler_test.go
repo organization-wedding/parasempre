@@ -43,11 +43,12 @@ func withTestClaims(req *http.Request, uracf string) *http.Request {
 
 func TestHandlerListGuests(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
 		return []Guest{sampleGuest()}, 1, nil
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests?page=1&limit=20", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	h.HandleList(w, req)
 
@@ -69,11 +70,12 @@ func TestHandlerListGuests(t *testing.T) {
 
 func TestHandlerListGuestsError(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
 		return nil, 0, errors.New("db error")
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	h.HandleList(w, req)
 
@@ -84,7 +86,7 @@ func TestHandlerListGuestsError(t *testing.T) {
 
 func TestHandlerGetGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 		g := sampleGuest()
 		return &g, nil
 	}
@@ -93,6 +95,7 @@ func TestHandlerGetGuest(t *testing.T) {
 	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests/1", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -103,7 +106,7 @@ func TestHandlerGetGuest(t *testing.T) {
 
 func TestHandlerGetGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
@@ -111,6 +114,7 @@ func TestHandlerGetGuestNotFound(t *testing.T) {
 	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests/999", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -260,7 +264,7 @@ func TestHandlerDeleteGuestNotFound(t *testing.T) {
 
 func TestHandlerConfirmGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 		g := sampleGuest()
 		return &g, nil
 	}
@@ -293,7 +297,7 @@ func TestHandlerConfirmGuest(t *testing.T) {
 
 func TestHandlerConfirmGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
@@ -312,7 +316,7 @@ func TestHandlerConfirmGuestNotFound(t *testing.T) {
 
 func TestHandlerCancelGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 		g := sampleGuest()
 		g.Confirmed = true
 		return &g, nil
@@ -338,7 +342,7 @@ func TestHandlerCancelGuest(t *testing.T) {
 
 func TestHandlerCancelGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
