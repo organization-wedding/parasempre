@@ -3,4 +3,5 @@ export type {
   CreateGuestInput,
   UpdateGuestInput,
   ImportResult,
+  PagedGuestResponse,
 } from "../schemas/guest";

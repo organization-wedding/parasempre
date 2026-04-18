@@ -47,3 +47,12 @@ export type Guest = z.infer<typeof guestSchema>;
 export type CreateGuestInput = z.infer<typeof createGuestInputSchema>;
 export type UpdateGuestInput = z.infer<typeof updateGuestInputSchema>;
 export type ImportResult = z.infer<typeof importResultSchema>;
+
+export const paginatedGuestsSchema = z.object({
+  data: z.array(guestSchema),
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+});
+
+export type PagedGuestResponse = z.infer<typeof paginatedGuestsSchema>;

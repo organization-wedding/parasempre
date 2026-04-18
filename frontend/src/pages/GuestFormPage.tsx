@@ -51,7 +51,8 @@ export function GuestFormPage({ guestId }: Props) {
   const createMutation = useCreateGuestMutation();
   const updateMutation = useUpdateGuestMutation();
   const guestQuery = useGuestQuery(guestId ?? 0, isEdit);
-  const { data: allGuests = [] } = useGuestsQuery();
+  const guestsResponse = useGuestsQuery({ limit: 1000 });
+  const allGuests = guestsResponse.data?.data ?? [];
   const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
   const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
 

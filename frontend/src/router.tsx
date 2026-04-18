@@ -10,7 +10,6 @@ import { GuestListPage } from "./pages/GuestListPage";
 import { GuestFormPage } from "./pages/GuestFormPage";
 import { LoginPage } from "./pages/LoginPage";
 import { UnderConstruction } from "./pages/UnderConstruction";
-import { ImpersonationModal } from "./components/ImpersonationModal";
 import { isAuthenticated } from "./lib/auth";
 import "./index.css";
 
@@ -24,12 +23,7 @@ function requireAuth({ location }: { location: { pathname: string } }) {
 }
 
 function RootLayout() {
-  return (
-    <>
-      <Outlet />
-      <ImpersonationModal />
-    </>
-  );
+  return <Outlet />;
 }
 
 const rootRoute = createRootRoute({

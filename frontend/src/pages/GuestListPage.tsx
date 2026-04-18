@@ -12,6 +12,8 @@ import Users from "lucide-react/dist/esm/icons/users";
 import FileSpreadsheet from "lucide-react/dist/esm/icons/file-spreadsheet";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
+import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { Header } from "../components/Header";
 import {
   useDeleteGuestMutation,
@@ -23,11 +25,18 @@ import { useUserMeQuery } from "../lib/user-queries";
 import { UnauthorizedPage } from "./UnauthorizedPage";
 import type { Guest, ImportResult } from "../types/guest";
 
+const PAGE_SIZE = 20;
+
 type RelationshipFilter = "" | "P" | "R";
 type ConfirmedFilter = "" | "yes" | "no";
 
 export function GuestListPage() {
-  const { data: guests = [], isLoading, error, refetch } = useGuestsQuery();
+  const [page, setPage] = useState(1);
+  const { data: pagedData, isLoading, error, refetch } = useGuestsQuery({ page, limit: PAGE_SIZE });
+  const guests = pagedData?.data ?? [];
+  const total = pagedData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   const deleteMutation = useDeleteGuestMutation();
   const deletesMutation = useDeleteGuestsMutation();
   const importMutation = useImportGuestsMutation();
@@ -43,12 +52,10 @@ export function GuestListPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
-  // Role check — user is already authenticated (router guard)
   const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
   const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
 
@@ -68,11 +75,11 @@ export function GuestListPage() {
 
   const stats = useMemo(
     () => ({
-      total: guests.length,
+      total,
       confirmed: guests.filter((g) => g.confirmed).length,
       pending: guests.filter((g) => !g.confirmed).length,
     }),
-    [guests],
+    [guests, total],
   );
 
   const activeFilterCount = (filterRel !== "" ? 1 : 0) + (filterConf !== "" ? 1 : 0);
@@ -89,7 +96,10 @@ export function GuestListPage() {
     setSelectedIds(new Set());
   }, [search, filterRel, filterConf]);
 
-  // Close filter dropdown on outside click
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterRel, filterConf]);
+
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
@@ -164,10 +174,12 @@ export function GuestListPage() {
     setImportOpen(true);
   }
 
-  // Unauthorized — show when role check finished and user is not groom/bride
   if (!roleLoading && !isAuthorized) {
     return <UnauthorizedPage />;
   }
+
+  const startRange = (page - 1) * PAGE_SIZE + 1;
+  const endRange = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="min-h-dvh bg-parchment">
@@ -181,7 +193,6 @@ export function GuestListPage() {
           </div>
         ) : (
         <>
-        {/* Page header */}
         <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">Gerenciar Convidados</h1>
@@ -220,7 +231,6 @@ export function GuestListPage() {
           </div>
         </div>
 
-        {/* Search + Filter button */}
         <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-hint/50 pointer-events-none" />
@@ -233,7 +243,6 @@ export function GuestListPage() {
             />
           </div>
 
-          {/* Filter dropdown */}
           <div ref={filterRef} className="relative shrink-0">
             <button
               type="button"
@@ -255,7 +264,6 @@ export function GuestListPage() {
 
             {filterOpen && (
               <div className="absolute top-full right-0 mt-1 z-[60] bg-ivory border border-gold-muted/50 shadow-[0_8px_24px_rgba(28,20,16,0.12)] w-64 p-4">
-                {/* Lado */}
                 <div className="mb-4">
                   <p className="font-heading text-[0.65rem] font-semibold tracking-[0.1em] uppercase text-hint mb-2">
                     Lado
@@ -278,7 +286,6 @@ export function GuestListPage() {
                   </div>
                 </div>
 
-                {/* Status */}
                 <div className="mb-4">
                   <p className="font-heading text-[0.65rem] font-semibold tracking-[0.1em] uppercase text-hint mb-2">
                     Status
@@ -330,7 +337,7 @@ export function GuestListPage() {
             <div className="w-8 h-8 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin mb-4" />
             <span className="text-[0.85rem]">Carregando convidados...</span>
           </div>
-        ) : guests.length === 0 ? (
+        ) : total === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Users size={48} className="text-gold-muted/40 mb-4" />
             <h2 className="font-heading text-[1rem] font-semibold text-dark-warm mb-2">Nenhum convidado cadastrado</h2>
@@ -364,9 +371,11 @@ export function GuestListPage() {
           <>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[0.75rem] text-dark-warm/60">
-                {filtered.length === guests.length
-                  ? `${filtered.length} convidados`
-                  : `${filtered.length} de ${guests.length} convidados`}
+                {filtered.length === guests.length && !search && !filterRel && !filterConf
+                  ? total > PAGE_SIZE
+                    ? `${startRange}–${endRange} de ${total} convidados`
+                    : `${total} convidados`
+                  : `${filtered.length} de ${guests.length} na página`}
               </span>
               {selectedIds.size > 0 && (
                 <div className="flex items-center gap-3">
@@ -483,13 +492,41 @@ export function GuestListPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="inline-flex items-center gap-1.5 font-heading text-[0.7rem] font-semibold tracking-[0.06em] uppercase py-2 px-4 border border-gold-muted/50 bg-ivory text-dark-warm hover:border-burgundy hover:text-burgundy transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={14} />
+                  Anterior
+                </button>
+
+                <span className="text-[0.8rem] text-dark-warm/60">
+                  Página {page} de {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="inline-flex items-center gap-1.5 font-heading text-[0.7rem] font-semibold tracking-[0.06em] uppercase py-2 px-4 border border-gold-muted/50 bg-ivory text-dark-warm hover:border-burgundy hover:text-burgundy transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Próxima
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
           </>
         )}
       </>
       )}
       </main>
 
-      {/* Single delete modal */}
       {deleteTarget && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-dark/50 backdrop-blur-[2px]" onClick={() => !deleteMutation.isPending && setDeleteTarget(null)} />
@@ -517,7 +554,6 @@ export function GuestListPage() {
         </div>
       )}
 
-      {/* Bulk delete modal */}
       {bulkDeleteOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-dark/50 backdrop-blur-[2px]" onClick={() => !deletesMutation.isPending && setBulkDeleteOpen(false)} />
@@ -545,7 +581,6 @@ export function GuestListPage() {
         </div>
       )}
 
-      {/* Import modal */}
       {importOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-dark/50 backdrop-blur-[2px]" onClick={() => !importMutation.isPending && closeImportModal()} />
