@@ -15,3 +15,5 @@ CREATE TABLE IF NOT EXISTS guests (
     CONSTRAINT guests_created_by_racf CHECK (created_by ~ '^[A-Z0-9]{5}$'),
     CONSTRAINT guests_updated_by_racf CHECK (updated_by ~ '^[A-Z0-9]{5}$')
 );
+
+ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
