@@ -5,12 +5,14 @@ import type {
   CreateGuestInput,
   UpdateGuestInput,
   ImportResult,
+  PagedGuestResponse,
 } from "../types/guest";
 import {
   createGuestInputSchema,
   guestSchema,
   guestsSchema,
   importResultSchema,
+  paginatedGuestsSchema,
   updateGuestInputSchema,
 } from "../schemas/guest";
 
@@ -45,22 +47,6 @@ async function handleResponse<T>(res: Response, schema: { parse: (value: unknown
   return schema.parse(data);
 }
 
-export interface UserListItem {
-  uracf: string;
-  role: string;
-  first_name: string;
-  last_name: string;
-}
-
-export async function listUsers(): Promise<UserListItem[]> {
-  const res = await fetch(`${API_BASE}/api/users`);
-  if (!res.ok) {
-    const data = (await res.json()) as { error?: string };
-    throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
-  }
-  return res.json() as Promise<UserListItem[]>;
-}
-
 export async function getUserMe(): Promise<{ role: string } | null> {
   const token = getToken();
   if (!token) return null;
@@ -79,11 +65,15 @@ export async function getUserMe(): Promise<{ role: string } | null> {
   return res.json() as Promise<{ role: string }>;
 }
 
-export async function listGuests(): Promise<Guest[]> {
-  const res = await fetch(`${API_BASE}/api/guests`, {
+export async function listGuests(params?: { page?: number; limit?: number }): Promise<PagedGuestResponse> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const url = query.toString() ? `${API_BASE}/api/guests?${query.toString()}` : `${API_BASE}/api/guests`;
+  const res = await fetch(url, {
     headers: authHeaders(),
   });
-  return handleResponse(res, guestsSchema);
+  return handleResponse(res, paginatedGuestsSchema);
 }
 
 export async function getGuest(id: number): Promise<Guest> {
