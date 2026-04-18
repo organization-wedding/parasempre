@@ -201,15 +201,19 @@ func TestIntegrationDeleteIsSoftAndRowPersists(t *testing.T) {
 	}
 
 	var deletedAt *time.Time
+	var deletedBy *string
 	var updatedBy string
 	err = pool.QueryRow(ctx,
-		`SELECT deleted_at, updated_by FROM gifts WHERE id = $1`, created.ID).
-		Scan(&deletedAt, &updatedBy)
+		`SELECT deleted_at, deleted_by, updated_by FROM gifts WHERE id = $1`, created.ID).
+		Scan(&deletedAt, &deletedBy, &updatedBy)
 	if err != nil {
 		t.Fatalf("row should still exist after soft-delete: %v", err)
 	}
 	if deletedAt == nil {
 		t.Fatal("expected deleted_at to be set after soft-delete")
+	}
+	if deletedBy == nil || *deletedBy != "TST02" {
+		t.Fatalf("expected deleted_by 'TST02' after soft-delete, got %v", deletedBy)
 	}
 	if updatedBy != "TST02" {
 		t.Fatalf("expected updated_by 'TST02' after soft-delete, got %q", updatedBy)

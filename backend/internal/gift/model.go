@@ -13,6 +13,7 @@ type Gift struct {
 	DedupeKey   string     `json:"dedupe_key"`
 	CreatedBy   string     `json:"created_by"`
 	UpdatedBy   string     `json:"updated_by"`
+	DeletedBy   *string    `json:"deleted_by,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`

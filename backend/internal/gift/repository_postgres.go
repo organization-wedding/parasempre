@@ -15,11 +15,11 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/database"
 )
 
-const giftColumns = `id, name, description, price_cents, image_url, store_url, status, dedupe_key, created_by, updated_by, created_at, updated_at, deleted_at`
+const giftColumns = `id, name, description, price_cents, image_url, store_url, status, dedupe_key, created_by, updated_by, deleted_by, created_at, updated_at, deleted_at`
 
 func scanGift(row pgx.Row) (Gift, error) {
 	var g Gift
-	err := row.Scan(&g.ID, &g.Name, &g.Description, &g.PriceCents, &g.ImageURL, &g.StoreURL, &g.Status, &g.DedupeKey, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt, &g.DeletedAt)
+	err := row.Scan(&g.ID, &g.Name, &g.Description, &g.PriceCents, &g.ImageURL, &g.StoreURL, &g.Status, &g.DedupeKey, &g.CreatedBy, &g.UpdatedBy, &g.DeletedBy, &g.CreatedAt, &g.UpdatedAt, &g.DeletedAt)
 	return g, err
 }
 
@@ -56,7 +56,7 @@ func (r *PostgresRepository) List(ctx context.Context, limit, offset int, status
 	var total int
 	for rows.Next() {
 		var g Gift
-		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.PriceCents, &g.ImageURL, &g.StoreURL, &g.Status, &g.DedupeKey, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt, &g.DeletedAt, &total); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.PriceCents, &g.ImageURL, &g.StoreURL, &g.Status, &g.DedupeKey, &g.CreatedBy, &g.UpdatedBy, &g.DeletedBy, &g.CreatedAt, &g.UpdatedAt, &g.DeletedAt, &total); err != nil {
 			slog.Error("gift.repo list: scan failed", "error", err)
 			return nil, 0, err
 		}
@@ -136,7 +136,7 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 
 func (r *PostgresRepository) Delete(ctx context.Context, id int64, userRACF string) error {
 	tag, err := r.db.Exec(ctx,
-		`UPDATE gifts SET deleted_at = now(), updated_by = $1, updated_at = now(), status = 'inactive'
+		`UPDATE gifts SET deleted_at = now(), deleted_by = $1, updated_by = $1, updated_at = now(), status = 'inactive'
 		 WHERE id = $2 AND deleted_at IS NULL`,
 		userRACF, id)
 	if err != nil {

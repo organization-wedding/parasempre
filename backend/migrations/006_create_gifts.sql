@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS gifts (
     dedupe_key TEXT NOT NULL,
     created_by TEXT NOT NULL,
     updated_by TEXT NOT NULL,
+    deleted_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS gifts (
     CONSTRAINT gifts_status_check CHECK (status IN ('active', 'inactive')),
     CONSTRAINT gifts_created_by_racf CHECK (created_by ~ '^[A-Z0-9]{5}$'),
     CONSTRAINT gifts_updated_by_racf CHECK (updated_by ~ '^[A-Z0-9]{5}$'),
+    CONSTRAINT gifts_deleted_by_racf CHECK (deleted_by IS NULL OR deleted_by ~ '^[A-Z0-9]{5}$'),
     CONSTRAINT gifts_image_url_https CHECK (image_url IS NULL OR image_url ~* '^https://'),
     CONSTRAINT gifts_store_url_https CHECK (store_url IS NULL OR store_url ~* '^https://')
 );
@@ -29,6 +31,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS gifts_dedupe_key_active_unique
 
 CREATE INDEX IF NOT EXISTS gifts_status_idx ON gifts (status);
 CREATE INDEX IF NOT EXISTS gifts_deleted_at_idx ON gifts (deleted_at);
+
+ALTER TABLE gifts ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS gift_transactions (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -51,3 +55,5 @@ CREATE TABLE IF NOT EXISTS gift_transactions (
 CREATE INDEX IF NOT EXISTS gift_transactions_gift_id_idx ON gift_transactions (gift_id);
 CREATE INDEX IF NOT EXISTS gift_transactions_user_id_idx ON gift_transactions (user_id);
 CREATE INDEX IF NOT EXISTS gift_transactions_status_idx ON gift_transactions (status);
+
+ALTER TABLE gift_transactions ENABLE ROW LEVEL SECURITY;
