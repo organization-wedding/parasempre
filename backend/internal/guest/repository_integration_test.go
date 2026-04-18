@@ -12,8 +12,8 @@ import (
 
 func TestIntegrationCreateAndGet(t *testing.T) {
 	pool := database.NewTestPool(t)
-	database.CleanTable(t, pool, "guests")
-	repo := NewPostgresRepository(pool)
+	tx := database.BeginTestTx(t, pool)
+	repo := NewPostgresRepository(pool).WithTx(tx)
 	ctx := context.Background()
 
 	fg := int64(1)
@@ -46,8 +46,8 @@ func TestIntegrationCreateAndGet(t *testing.T) {
 
 func TestIntegrationUniqueConstraint(t *testing.T) {
 	pool := database.NewTestPool(t)
-	database.CleanTable(t, pool, "guests")
-	repo := NewPostgresRepository(pool)
+	tx := database.BeginTestTx(t, pool)
+	repo := NewPostgresRepository(pool).WithTx(tx)
 	ctx := context.Background()
 
 	fg := int64(1)
@@ -71,8 +71,8 @@ func TestIntegrationUniqueConstraint(t *testing.T) {
 
 func TestIntegrationListPagination(t *testing.T) {
 	pool := database.NewTestPool(t)
-	database.CleanTable(t, pool, "guests")
-	repo := NewPostgresRepository(pool)
+	tx := database.BeginTestTx(t, pool)
+	repo := NewPostgresRepository(pool).WithTx(tx)
 	ctx := context.Background()
 
 	for i := range 5 {

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -40,6 +41,19 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 
 	t.Cleanup(func() { pool.Close() })
 	return pool
+}
+
+func BeginTestTx(t *testing.T, pool *pgxpool.Pool) pgx.Tx {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("failed to begin test transaction: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = tx.Rollback(context.Background())
+	})
+	return tx
 }
 
 func CleanTable(t *testing.T, pool *pgxpool.Pool, table string) {
