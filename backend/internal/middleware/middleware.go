@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
 )
 
@@ -46,7 +47,7 @@ func Recovery(next http.Handler) http.Handler {
 					"error", fmt.Sprint(err),
 					"stack", string(debug.Stack()),
 				)
-				httputil.WriteErrorMsg(w, http.StatusInternalServerError, "internal server error")
+				httputil.WriteError(w, r, apperror.Internal("internal server error", fmt.Errorf("%v", err)))
 			}
 		}()
 		next.ServeHTTP(w, r)
