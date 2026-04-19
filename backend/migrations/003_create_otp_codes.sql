@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS otp_codes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_otp_codes_phone ON otp_codes (phone);
+
+ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;

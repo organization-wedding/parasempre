@@ -8,3 +8,5 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX ON audit_log (user_id);
 CREATE INDEX ON audit_log (action);
+
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
