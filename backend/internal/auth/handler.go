@@ -45,11 +45,11 @@ func NewHandler(otpSvc *OTPService, jwtSvc *JWTService, userFinder UserFinder, p
 func (h *Handler) HandleSendOTP(w http.ResponseWriter, r *http.Request) {
 	var input SendOTPInput
 	if err := httputil.DecodeJSON(r, &input); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid OTP payload", err))
 		return
 	}
 	if err := validate.Struct(input); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid OTP input", err))
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *Handler) HandleSendOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.otpSvc.SendOTP(r.Context(), input.Phone); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to send OTP", err))
 		return
 	}
 
@@ -75,22 +75,22 @@ func (h *Handler) HandleSendOTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleVerifyOTP(w http.ResponseWriter, r *http.Request) {
 	var input VerifyOTPInput
 	if err := httputil.DecodeJSON(r, &input); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid verification payload", err))
 		return
 	}
 	if err := validate.Struct(input); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid verification input", err))
 		return
 	}
 
 	if err := h.otpSvc.VerifyOTP(r.Context(), input.Phone, input.Code); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to verify OTP", err))
 		return
 	}
 
 	userID, uracf, role, err := h.userFinder.FindOrCreateByPhone(r.Context(), input.Phone)
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to find or create user", err))
 		return
 	}
 

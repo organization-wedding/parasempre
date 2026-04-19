@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 	"github.com/ferjunior7/parasempre/backend/internal/auth"
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
 )
@@ -18,19 +19,19 @@ func RequireAuth(jwtSvc *auth.JWTService) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			if header == "" {
-				httputil.WriteErrorMsg(w, http.StatusUnauthorized, "authorization header required")
+				httputil.WriteError(w, r, apperror.Unauthorized("authorization header required"))
 				return
 			}
 
 			tokenStr := strings.TrimPrefix(header, "Bearer ")
 			if tokenStr == header {
-				httputil.WriteErrorMsg(w, http.StatusUnauthorized, "invalid authorization format")
+				httputil.WriteError(w, r, apperror.Unauthorized("invalid authorization format"))
 				return
 			}
 
 			claims, err := jwtSvc.Parse(tokenStr)
 			if err != nil {
-				httputil.WriteError(w, r, err)
+				httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid token", err))
 				return
 			}
 
@@ -50,12 +51,12 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := ClaimsFromContext(r.Context())
 			if claims == nil {
-				httputil.WriteErrorMsg(w, http.StatusUnauthorized, "authentication required")
+				httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
 				return
 			}
 
 			if !allowed[claims.Role] {
-				httputil.WriteErrorMsg(w, http.StatusForbidden, "insufficient permissions")
+				httputil.WriteError(w, r, apperror.Forbidden("insufficient permissions"))
 				return
 			}
 
@@ -68,7 +69,7 @@ func DevOnly(appEnv string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if appEnv == "production" {
-				httputil.WriteErrorMsg(w, http.StatusForbidden, "this endpoint is not available in production")
+				httputil.WriteError(w, r, apperror.Forbidden("this endpoint is not available in production"))
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ferjunior7/parasempre/backend/internal/auth"
+	"github.com/ferjunior7/parasempre/backend/internal/gift"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 	"github.com/ferjunior7/parasempre/backend/internal/user"
@@ -12,6 +13,7 @@ import (
 type routeDeps struct {
 	auth   *auth.Handler
 	guest  *guest.Handler
+	gift   *gift.Handler
 	user   *user.Handler
 	jwt    *auth.JWTService
 	appEnv string
@@ -55,6 +57,15 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	guestsAdmin.handle("PUT /api/guests/{id}", d.guest.HandleUpdate)
 	guestsAdmin.handle("DELETE /api/guests/{id}", d.guest.HandleDelete)
 	guestsAdmin.handle("POST /api/guests/import", d.guest.HandleImport)
+
+	giftsPublic := newGroup(mux)
+	giftsPublic.handle("GET /api/gifts", d.gift.HandleList)
+	giftsPublic.handle("GET /api/gifts/{id}", d.gift.HandleGet)
+
+	giftsAdmin := newGroup(mux, authMW, coupleMW)
+	giftsAdmin.handle("POST /api/gifts", d.gift.HandleCreate)
+	giftsAdmin.handle("PUT /api/gifts/{id}", d.gift.HandleUpdate)
+	giftsAdmin.handle("DELETE /api/gifts/{id}", d.gift.HandleDelete)
 
 	users := newGroup(mux, authMW)
 	users.handle("GET /api/users/me", d.user.HandleMe)

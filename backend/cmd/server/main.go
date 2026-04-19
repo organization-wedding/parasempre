@@ -13,6 +13,7 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/auth"
 	"github.com/ferjunior7/parasempre/backend/internal/config"
 	"github.com/ferjunior7/parasempre/backend/internal/database"
+	"github.com/ferjunior7/parasempre/backend/internal/gift"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 	"github.com/ferjunior7/parasempre/backend/internal/user"
@@ -37,6 +38,7 @@ func main() {
 	slog.Info("connected to database")
 
 	guestRepo := guest.NewPostgresRepository(pool)
+	giftRepo := gift.NewPostgresRepository(pool)
 	userRepo := user.NewPostgresRepository(pool)
 	otpRepo := auth.NewPostgresOTPRepository(pool)
 	txRunner := database.NewTxRunner(pool)
@@ -50,6 +52,8 @@ func main() {
 	userSvc := user.NewServiceWithTx(userRepo, guestRepo)
 	guestSvc := guest.NewService(guestRepo, userSvc, txRunner)
 	guestHandler := guest.NewHandler(guestSvc)
+	giftSvc := gift.NewService(giftRepo)
+	giftHandler := gift.NewHandler(giftSvc)
 	userHandler := user.NewHandler(userSvc, cfg.AppEnv)
 
 	var whatsappSender auth.WhatsAppSender
@@ -72,6 +76,7 @@ func main() {
 	registerRoutes(mux, routeDeps{
 		auth:   authHandler,
 		guest:  guestHandler,
+		gift:   giftHandler,
 		user:   userHandler,
 		jwt:    jwtSvc,
 		appEnv: cfg.AppEnv,

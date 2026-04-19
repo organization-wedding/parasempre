@@ -35,6 +35,11 @@ func getValidator() *validator.Validate {
 			val := fl.Field().String()
 			return val == "P" || val == "R"
 		})
+
+		instance.RegisterValidation("giftstatus", func(fl validator.FieldLevel) bool {
+			val := fl.Field().String()
+			return val == "active" || val == "inactive"
+		})
 	})
 	return instance
 }
@@ -47,6 +52,12 @@ var fieldMessages = map[string]map[string]string{
 	"FamilyGroup":  {"gt": "family_group must be greater than 0"},
 	"URACF":        {"required": "uracf is required", "uracf": "uracf must be exactly 5 uppercase alphanumeric characters"},
 	"Code":         {"required": "code is required", "len": "code must be exactly 6 digits"},
+	"Name":         {"required": "name is required", "min": "name must not be empty", "max": "name must be at most 200 characters"},
+	"Description":  {"max": "description must be at most 2000 characters"},
+	"PriceCents":   {"required": "price_cents is required", "gt": "price_cents must be greater than 0"},
+	"ImageURL":     {"url": "image_url must be a valid URL", "startswith": "image_url must start with https://"},
+	"StoreURL":     {"url": "store_url must be a valid URL", "startswith": "store_url must start with https://"},
+	"Status":       {"giftstatus": "status must be 'active' or 'inactive'"},
 }
 
 func Struct(s any) error {

@@ -3,6 +3,7 @@ package user
 import (
 	"net/http"
 
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 )
@@ -19,13 +20,13 @@ func NewHandler(svc *Service, appEnv string) *Handler {
 func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	var input RegisterInput
 	if err := httputil.DecodeJSON(r, &input); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid registration payload", err))
 		return
 	}
 
 	u, err := h.svc.Register(r.Context(), input)
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to register user", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, u)
@@ -36,7 +37,7 @@ func (h *Handler) HandleCheck(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.svc.CheckByPhone(r.Context(), phone)
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to check user", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
@@ -45,7 +46,7 @@ func (h *Handler) HandleCheck(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	users, err := h.svc.List(r.Context())
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to list users", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, users)
@@ -56,11 +57,11 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 
 	u, err := h.svc.GetMe(r.Context(), uracf)
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to get user", err))
 		return
 	}
 	if u == nil {
-		httputil.WriteErrorMsg(w, http.StatusNotFound, "user not found")
+		httputil.WriteError(w, r, apperror.NotFound("user not found"))
 		return
 	}
 
@@ -70,19 +71,19 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	id, err := httputil.PathID(r)
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid user id", err))
 		return
 	}
 
 	var input UpdateInput
 	if err := httputil.DecodeJSON(r, &input); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid user payload", err))
 		return
 	}
 
 	u, err := h.svc.Update(r.Context(), id, input)
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to update user", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, u)
@@ -91,12 +92,12 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := httputil.PathID(r)
 	if err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid user id", err))
 		return
 	}
 
 	if err := h.svc.Delete(r.Context(), id); err != nil {
-		httputil.WriteError(w, r, err)
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to delete user", err))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
