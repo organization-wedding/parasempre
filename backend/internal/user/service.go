@@ -131,6 +131,17 @@ func (s *Service) GetGuestIDByPhone(ctx context.Context, phone string) (*int64, 
 	return u.GuestID, nil
 }
 
+func (s *Service) GetGuestIDByUserID(ctx context.Context, userID int64) (*int64, error) {
+	u, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to find user", err)
+	}
+	if u == nil || u.GuestID == nil {
+		return nil, nil
+	}
+	return u.GuestID, nil
+}
+
 func (s *Service) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
 	u, err := s.repo.GetByURACF(ctx, uracf)
 	if err != nil {

@@ -108,14 +108,17 @@ func (m *mockUserRepo) WithTx(_ pgx.Tx) Repository {
 }
 
 type mockGuestRepo struct {
-	listFn               func(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error)
-	getByID              func(ctx context.Context, id int64, userRACF string) (*guest.Guest, error)
-	getByName            func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
-	familyGroupExistsFn  func(ctx context.Context, familyGroup int64) (bool, error)
-	getNextFamilyGroupFn func(ctx context.Context) (int64, error)
-	createFn             func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
-	updateFn             func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
-	deleteFn             func(ctx context.Context, id int64) error
+	listFn                       func(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error)
+	getByID                      func(ctx context.Context, id int64, userRACF string) (*guest.Guest, error)
+	getByNameFn                  func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
+	familyGroupExistsFn          func(ctx context.Context, familyGroup int64) (bool, error)
+	getNextFamilyGroupFn         func(ctx context.Context) (int64, error)
+	createFn                     func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
+	updateFn                     func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
+	deleteFn                     func(ctx context.Context, id int64) error
+	setConfirmedFn               func(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error)
+	setConfirmedByFamilyGroupFn  func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error)
+	getFamilyGroupByPhoneFn      func(ctx context.Context, phone string) (*int64, error)
 }
 
 func (m *mockGuestRepo) List(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error) {
@@ -133,8 +136,8 @@ func (m *mockGuestRepo) GetByID(ctx context.Context, id int64, userRACF string) 
 }
 
 func (m *mockGuestRepo) GetByName(ctx context.Context, firstName, lastName string) (*guest.Guest, error) {
-	if m.getByName != nil {
-		return m.getByName(ctx, firstName, lastName)
+	if m.getByNameFn != nil {
+		return m.getByNameFn(ctx, firstName, lastName)
 	}
 	return nil, nil
 }
@@ -175,6 +178,20 @@ func (m *mockGuestRepo) Delete(ctx context.Context, id int64) error {
 }
 
 func (m *mockGuestRepo) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error) {
+	return nil, nil
+}
+
+func (m *mockGuestRepo) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error) {
+	if m.setConfirmedByFamilyGroupFn != nil {
+		return m.setConfirmedByFamilyGroupFn(ctx, familyGroup, confirmed, userRACF)
+	}
+	return []guest.Guest{}, nil
+}
+
+func (m *mockGuestRepo) GetFamilyGroupByPhone(ctx context.Context, phone string) (*int64, error) {
+	if m.getFamilyGroupByPhoneFn != nil {
+		return m.getFamilyGroupByPhoneFn(ctx, phone)
+	}
 	return nil, nil
 }
 

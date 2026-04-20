@@ -51,6 +51,10 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	guests.handle("PATCH /api/guests/{id}/cancel", d.guest.HandleCancel)
 	guests.handle("PATCH /api/guests/phone/{phone}/confirm", d.guest.HandleConfirmByPhone)
 	guests.handle("PATCH /api/guests/phone/{phone}/cancel", d.guest.HandleCancelByPhone)
+	guests.handle("PATCH /api/guests/family/{familyGroup}/confirm", d.guest.HandleConfirmFamily)
+	guests.handle("PATCH /api/guests/family/{familyGroup}/cancel", d.guest.HandleCancelFamily)
+	guests.handle("PATCH /api/guests/family/phone/{phone}/confirm", d.guest.HandleConfirmFamilyByPhone)
+	guests.handle("PATCH /api/guests/family/phone/{phone}/cancel", d.guest.HandleCancelFamilyByPhone)
 
 	guestsAdmin := newGroup(mux, authMW, coupleMW)
 	guestsAdmin.handle("POST /api/guests", d.guest.HandleCreate)

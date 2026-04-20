@@ -93,3 +93,11 @@ func UserRACFFromContext(ctx context.Context) string {
 	}
 	return claims.URACF
 }
+
+func UserIDFromContext(ctx context.Context) int64 {
+	claims := ClaimsFromContext(ctx)
+	if claims == nil {
+		return 0
+	}
+	return claims.UserID
+}

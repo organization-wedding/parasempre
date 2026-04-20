@@ -14,15 +14,17 @@ import (
 )
 
 type mockRepository struct {
-	listFn               func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error)
-	getByID              func(ctx context.Context, id int64, userRACF string) (*Guest, error)
-	getByNameFn          func(ctx context.Context, firstName, lastName string) (*Guest, error)
-	familyGroupExistsFn  func(ctx context.Context, familyGroup int64) (bool, error)
-	getNextFamilyGroupFn func(ctx context.Context) (int64, error)
-	createFn             func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
-	updateFn             func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
-	deleteFn             func(ctx context.Context, id int64) error
-	setConfirmedFn       func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
+	listFn                       func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error)
+	getByID                      func(ctx context.Context, id int64, userRACF string) (*Guest, error)
+	getByNameFn                  func(ctx context.Context, firstName, lastName string) (*Guest, error)
+	familyGroupExistsFn          func(ctx context.Context, familyGroup int64) (bool, error)
+	getNextFamilyGroupFn         func(ctx context.Context) (int64, error)
+	createFn                     func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
+	updateFn                     func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
+	deleteFn                     func(ctx context.Context, id int64) error
+	setConfirmedFn               func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
+	setConfirmedByFamilyGroupFn  func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error)
+	getFamilyGroupByPhoneFn      func(ctx context.Context, phone string) (*int64, error)
 }
 
 func (m *mockRepository) List(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
@@ -70,15 +72,30 @@ func (m *mockRepository) SetConfirmed(ctx context.Context, id int64, confirmed b
 	return m.setConfirmedFn(ctx, id, confirmed, userRACF)
 }
 
+func (m *mockRepository) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error) {
+	if m.setConfirmedByFamilyGroupFn != nil {
+		return m.setConfirmedByFamilyGroupFn(ctx, familyGroup, confirmed, userRACF)
+	}
+	return []Guest{}, nil
+}
+
+func (m *mockRepository) GetFamilyGroupByPhone(ctx context.Context, phone string) (*int64, error) {
+	if m.getFamilyGroupByPhoneFn != nil {
+		return m.getFamilyGroupByPhoneFn(ctx, phone)
+	}
+	return nil, nil
+}
+
 func (m *mockRepository) WithTx(_ pgx.Tx) Repository {
 	return m
 }
 
 type mockUserBridge struct {
-	existsFn            func(ctx context.Context, uracf string) (bool, error)
-	createFn            func(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
-	deleteFn            func(ctx context.Context, tx pgx.Tx, guestID int64) error
-	getGuestIDByPhoneFn func(ctx context.Context, phone string) (*int64, error)
+	existsFn             func(ctx context.Context, uracf string) (bool, error)
+	createFn             func(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
+	deleteFn             func(ctx context.Context, tx pgx.Tx, guestID int64) error
+	getGuestIDByPhoneFn  func(ctx context.Context, phone string) (*int64, error)
+	getGuestIDByUserIDFn func(ctx context.Context, userID int64) (*int64, error)
 }
 
 func (m *mockUserBridge) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
@@ -109,6 +126,13 @@ func (m *mockUserBridge) GetGuestIDByPhone(ctx context.Context, phone string) (*
 	return nil, nil
 }
 
+func (m *mockUserBridge) GetGuestIDByUserID(ctx context.Context, userID int64) (*int64, error) {
+	if m.getGuestIDByUserIDFn != nil {
+		return m.getGuestIDByUserIDFn(ctx, userID)
+	}
+	return nil, nil
+}
+
 type mockTxRunner struct{}
 
 func (m *mockTxRunner) RunInTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
@@ -135,7 +159,12 @@ func sampleGuest() Guest {
 }
 
 func defaultUserBridge() *mockUserBridge {
-	return &mockUserBridge{}
+	return &mockUserBridge{
+		getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+			guestID := int64(1)
+			return &guestID, nil
+		},
+	}
 }
 
 func newTestService(repo *mockRepository, users *mockUserBridge) *Service {
@@ -676,11 +705,15 @@ func TestServiceConfirm(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockRepository{getByID: tt.getByIDFn, setConfirmedFn: tt.setConfirmedFn}
-			users := &mockUserBridge{existsFn: func(ctx context.Context, uracf string) (bool, error) {
-				return tt.userExists, nil
+			users := &mockUserBridge{getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+				if tt.userExists {
+					guestID := int64(1)
+					return &guestID, nil
+				}
+				return nil, nil
 			}}
 			svc := newTestService(repo, users)
-			guest, err := svc.Confirm(context.Background(), 1, "TST01")
+			guest, err := svc.Confirm(context.Background(), 1, 1)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -710,8 +743,12 @@ func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
 			return nil, nil
 		},
 	}
-	svc := newTestService(repo, defaultUserBridge())
-	guest, err := svc.Confirm(context.Background(), 1, "TST01")
+	users := &mockUserBridge{getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+		guestID := int64(1)
+		return &guestID, nil
+	}}
+	svc := newTestService(repo, users)
+	guest, err := svc.Confirm(context.Background(), 1, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -736,8 +773,12 @@ func TestServiceCancel(t *testing.T) {
 			return &g, nil
 		},
 	}
-	svc := newTestService(repo, defaultUserBridge())
-	guest, err := svc.Cancel(context.Background(), 1, "TST01")
+	users := &mockUserBridge{getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+		guestID := int64(1)
+		return &guestID, nil
+	}}
+	svc := newTestService(repo, users)
+	guest, err := svc.Cancel(context.Background(), 1, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -758,8 +799,12 @@ func TestServiceCancelAlreadyCancelled(t *testing.T) {
 			return nil, nil
 		},
 	}
-	svc := newTestService(repo, defaultUserBridge())
-	guest, err := svc.Cancel(context.Background(), 1, "TST01")
+	users := &mockUserBridge{getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+		guestID := int64(1)
+		return &guestID, nil
+	}}
+	svc := newTestService(repo, users)
+	guest, err := svc.Cancel(context.Background(), 1, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -773,11 +818,12 @@ func TestServiceCancelAlreadyCancelled(t *testing.T) {
 
 func TestServiceConfirmByPhone(t *testing.T) {
 	tests := []struct {
-		name        string
-		phoneLookup func(ctx context.Context, phone string) (*int64, error)
-		wantErr     bool
-		wantErrCode int
-		wantErrMsg  string
+		name         string
+		phoneLookup  func(ctx context.Context, phone string) (*int64, error)
+		userIDLookup func(ctx context.Context, userID int64) (*int64, error)
+		wantErr      bool
+		wantErrCode  int
+		wantErrMsg   string
 	}{
 		{
 			name: "success",
@@ -785,10 +831,17 @@ func TestServiceConfirmByPhone(t *testing.T) {
 				id := int64(1)
 				return &id, nil
 			},
+			userIDLookup: func(ctx context.Context, userID int64) (*int64, error) {
+				id := int64(1)
+				return &id, nil
+			},
 		},
 		{
 			name: "phone not found",
 			phoneLookup: func(ctx context.Context, phone string) (*int64, error) {
+				return nil, nil
+			},
+			userIDLookup: func(ctx context.Context, userID int64) (*int64, error) {
 				return nil, nil
 			},
 			wantErr:     true,
@@ -810,10 +863,13 @@ func TestServiceConfirmByPhone(t *testing.T) {
 					return &g, nil
 				},
 			}
-			users := &mockUserBridge{getGuestIDByPhoneFn: tt.phoneLookup}
+			users := &mockUserBridge{
+				getGuestIDByPhoneFn:  tt.phoneLookup,
+				getGuestIDByUserIDFn: tt.userIDLookup,
+			}
 			svc := newTestService(repo, users)
 
-			guest, err := svc.ConfirmByPhone(context.Background(), "43999999999", "TST01")
+			guest, err := svc.ConfirmByPhone(context.Background(), "43999999999", 1)
 			if tt.wantErr {
 				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
 				return
@@ -846,10 +902,14 @@ func TestServiceCancelByPhone(t *testing.T) {
 			id := int64(1)
 			return &id, nil
 		},
+		getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+			id := int64(1)
+			return &id, nil
+		},
 	}
 	svc := newTestService(repo, users)
 
-	guest, err := svc.CancelByPhone(context.Background(), "43999999999", "TST01")
+	guest, err := svc.CancelByPhone(context.Background(), "43999999999", 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
