@@ -159,9 +159,9 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 func (r *PostgresRepository) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
 	g, err := scanGuest(r.db.QueryRow(ctx,
 		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
-		 WHERE id = $3 AND created_by = $4
+		 WHERE id = $3
 		 RETURNING `+guestColumns,
-		confirmed, userRACF, id, userRACF))
+		confirmed, userRACF, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")
@@ -171,6 +171,36 @@ func (r *PostgresRepository) SetConfirmed(ctx context.Context, id int64, confirm
 	}
 	slog.Info("guest.repo set_confirmed: guest updated", "id", g.ID, "confirmed", confirmed)
 	return &g, nil
+}
+
+func (r *PostgresRepository) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error) {
+	rows, err := r.db.Query(ctx,
+		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
+		 WHERE family_group = $3
+		 RETURNING `+guestColumns,
+		confirmed, userRACF, familyGroup)
+	if err != nil {
+		slog.Error("guest.repo set_confirmed_by_family_group: update failed", "family_group", familyGroup, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var guests []Guest
+	for rows.Next() {
+		var g Guest
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			slog.Error("guest.repo set_confirmed_by_family_group: scan failed", "error", err)
+			return nil, err
+		}
+		guests = append(guests, g)
+	}
+
+	if guests == nil {
+		guests = []Guest{}
+	}
+
+	slog.Info("guest.repo set_confirmed_by_family_group: guests updated", "family_group", familyGroup, "confirmed", confirmed, "count", len(guests))
+	return guests, rows.Err()
 }
 
 func (r *PostgresRepository) Delete(ctx context.Context, id int64) error {
@@ -184,4 +214,20 @@ func (r *PostgresRepository) Delete(ctx context.Context, id int64) error {
 	}
 	slog.Info("guest.repo delete: guest deleted", "id", id)
 	return nil
+}
+
+func (r *PostgresRepository) GetFamilyGroupByPhone(ctx context.Context, phone string) (*int64, error) {
+	var familyGroup int64
+	err := r.db.QueryRow(ctx,
+		`SELECT g.family_group FROM guests g
+		 JOIN guest_users u ON u.guest_id = g.id
+		 WHERE u.phone = $1`, phone).Scan(&familyGroup)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		slog.Error("guest.repo get_family_group_by_phone: query failed", "phone", phone, "error", err)
+		return nil, err
+	}
+	return &familyGroup, nil
 }

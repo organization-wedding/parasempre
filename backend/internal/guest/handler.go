@@ -105,7 +105,11 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleConfirm(w http.ResponseWriter, r *http.Request) {
-	userRACF := middleware.UserRACFFromContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
 
 	id, err := httputil.PathID(r)
 	if err != nil {
@@ -113,7 +117,7 @@ func (h *Handler) HandleConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	guest, err := h.svc.Confirm(r.Context(), id, userRACF)
+	guest, err := h.svc.Confirm(r.Context(), id, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm guest", err))
 		return
@@ -122,7 +126,11 @@ func (h *Handler) HandleConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
-	userRACF := middleware.UserRACFFromContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
 
 	id, err := httputil.PathID(r)
 	if err != nil {
@@ -130,7 +138,7 @@ func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	guest, err := h.svc.Cancel(r.Context(), id, userRACF)
+	guest, err := h.svc.Cancel(r.Context(), id, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel guest", err))
 		return
@@ -139,10 +147,14 @@ func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleConfirmByPhone(w http.ResponseWriter, r *http.Request) {
-	userRACF := middleware.UserRACFFromContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
 
 	phone := r.PathValue("phone")
-	guest, err := h.svc.ConfirmByPhone(r.Context(), phone, userRACF)
+	guest, err := h.svc.ConfirmByPhone(r.Context(), phone, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm guest by phone", err))
 		return
@@ -151,15 +163,95 @@ func (h *Handler) HandleConfirmByPhone(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleCancelByPhone(w http.ResponseWriter, r *http.Request) {
-	userRACF := middleware.UserRACFFromContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
 
 	phone := r.PathValue("phone")
-	guest, err := h.svc.CancelByPhone(r.Context(), phone, userRACF)
+	guest, err := h.svc.CancelByPhone(r.Context(), phone, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel guest by phone", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleConfirmFamily(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	familyGroupStr := r.PathValue("familyGroup")
+	familyGroup, err := strconv.ParseInt(familyGroupStr, 10, 64)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid family group", err))
+		return
+	}
+
+	guests, err := h.svc.ConfirmFamily(r.Context(), familyGroup, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm family group", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleCancelFamily(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	familyGroupStr := r.PathValue("familyGroup")
+	familyGroup, err := strconv.ParseInt(familyGroupStr, 10, 64)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid family group", err))
+		return
+	}
+
+	guests, err := h.svc.CancelFamily(r.Context(), familyGroup, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel family group", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleConfirmFamilyByPhone(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	phone := r.PathValue("phone")
+	guests, err := h.svc.ConfirmFamilyByPhone(r.Context(), phone, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm family by phone", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleCancelFamilyByPhone(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	phone := r.PathValue("phone")
+	guests, err := h.svc.CancelFamilyByPhone(r.Context(), phone, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel family by phone", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
 }
 
 func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
