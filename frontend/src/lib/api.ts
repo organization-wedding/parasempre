@@ -7,6 +7,12 @@ import type {
   ImportResult,
   PagedGuestResponse,
 } from "../types/guest";
+import type {
+  PublicGift,
+  PagedGiftResponse,
+  CreateGiftInput,
+  UpdateGiftInput,
+} from "../types/gift";
 import {
   createGuestInputSchema,
   guestSchema,
@@ -15,6 +21,12 @@ import {
   paginatedGuestsSchema,
   updateGuestInputSchema,
 } from "../schemas/guest";
+import {
+  publicGiftSchema,
+  paginatedGiftsSchema,
+  createGiftInputSchema,
+  updateGiftInputSchema,
+} from "../schemas/gift";
 
 function authHeaders(): Record<string, string> {
   const token = getToken();
@@ -31,6 +43,10 @@ async function parseApiError(res: Response): Promise<string> {
     }
   }
   return `Erro ${res.status}`;
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  return error instanceof Error && /not found|não encontrad/i.test(error.message);
 }
 
 async function handleResponse<T>(res: Response, schema: { parse: (value: unknown) => T }): Promise<T> {
@@ -125,6 +141,57 @@ export async function importGuests(file: File): Promise<ImportResult> {
     body: form,
   });
   return handleResponse(res, importResultSchema);
+}
+
+// ── Gifts (pública) ─────────────────────────────────────────
+
+export async function listGifts(params?: {
+  page?: number;
+  limit?: number;
+}): Promise<PagedGiftResponse> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const url = query.toString()
+    ? `${API_BASE}/api/gifts?${query.toString()}`
+    : `${API_BASE}/api/gifts`;
+  const res = await fetch(url);
+  return handleResponse(res, paginatedGiftsSchema);
+}
+
+export async function getGift(id: number): Promise<PublicGift> {
+  const res = await fetch(`${API_BASE}/api/gifts/${id}`);
+  return handleResponse(res, publicGiftSchema);
+}
+
+export async function createGift(input: CreateGiftInput): Promise<PublicGift> {
+  const payload = createGiftInputSchema.parse(input);
+  const res = await fetch(`${API_BASE}/api/gifts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, publicGiftSchema);
+}
+
+export async function updateGift(id: number, input: UpdateGiftInput): Promise<PublicGift> {
+  const payload = updateGiftInputSchema.parse(input);
+  const res = await fetch(`${API_BASE}/api/gifts/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, publicGiftSchema);
+}
+
+export async function deleteGift(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/gifts/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
 }
 
 // ── Auth / OTP ──────────────────────────────────────────────
