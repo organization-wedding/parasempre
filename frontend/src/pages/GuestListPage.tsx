@@ -193,6 +193,17 @@ export function GuestListPage() {
           </div>
         ) : (
         <>
+        <nav className="mb-6 flex gap-6 border-b border-gold-muted/30">
+          <span className="font-heading text-[0.72rem] font-semibold tracking-[0.12em] uppercase text-burgundy py-2 border-b-2 border-burgundy -mb-px">
+            Convidados
+          </span>
+          <Link
+            to="/dashboard/presentes"
+            className="font-heading text-[0.72rem] font-semibold tracking-[0.12em] uppercase text-hint py-2 no-underline transition-colors hover:text-burgundy"
+          >
+            Presentes
+          </Link>
+        </nav>
         <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">Gerenciar Convidados</h1>
