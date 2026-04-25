@@ -76,3 +76,52 @@ type PublicPagedResponse struct {
 	Limit int          `json:"limit"`
 	Total int          `json:"total"`
 }
+
+type CSVRowStatus string
+
+const (
+	CSVRowStatusNew       CSVRowStatus = "new"
+	CSVRowStatusDuplicate CSVRowStatus = "duplicate"
+	CSVRowStatusInvalid   CSVRowStatus = "invalid"
+)
+
+type CSVPreviewRow struct {
+	LineNumber int             `json:"line_number"`
+	Status     CSVRowStatus    `json:"status"`
+	Errors     []string        `json:"errors,omitempty"`
+	Input      CreateGiftInput `json:"input"`
+	DedupeKey  string          `json:"dedupe_key,omitempty"`
+}
+
+type CSVSummary struct {
+	Total     int `json:"total"`
+	New       int `json:"new"`
+	Duplicate int `json:"duplicate"`
+	Invalid   int `json:"invalid"`
+}
+
+type CSVPreview struct {
+	Rows    []CSVPreviewRow `json:"rows"`
+	Summary CSVSummary      `json:"summary"`
+}
+
+type CommitImportRequest struct {
+	Rows []CreateGiftInput `json:"rows" validate:"required,min=1,dive"`
+}
+
+type CommitImportResponse struct {
+	Created int      `json:"created"`
+	Skipped []string `json:"skipped,omitempty"`
+}
+
+type ScrapePreviewRequest struct {
+	URL string `json:"url" validate:"required,url,startswith=https://"`
+}
+
+type ScrapePreviewResponse struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	PriceCents  int64  `json:"price_cents"`
+	ImageURL    string `json:"image_url,omitempty"`
+	StoreURL    string `json:"store_url"`
+}

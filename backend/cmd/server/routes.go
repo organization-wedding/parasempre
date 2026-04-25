@@ -70,6 +70,9 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	giftsAdmin.handle("POST /api/gifts", d.gift.HandleCreate)
 	giftsAdmin.handle("PUT /api/gifts/{id}", d.gift.HandleUpdate)
 	giftsAdmin.handle("DELETE /api/gifts/{id}", d.gift.HandleDelete)
+	giftsAdmin.handle("POST /api/gifts/import/preview", d.gift.HandlePreviewImport)
+	giftsAdmin.handle("POST /api/gifts/import/commit", d.gift.HandleCommitImport)
+	giftsAdmin.handle("POST /api/gifts/scrape-preview", d.gift.HandleScrapePreview)
 
 	users := newGroup(mux, authMW)
 	users.handle("GET /api/users/me", d.user.HandleMe)

@@ -14,10 +14,11 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 )
 
-func newTestHandler() (*Handler, *mockRepository) {
+func newTestHandler() (*Handler, *mockRepository, *mockScraper) {
 	repo := &mockRepository{}
-	svc := NewService(repo)
-	return NewHandler(svc), repo
+	scraper := &mockScraper{}
+	svc := NewService(repo, &mockTxRunner{}, scraper)
+	return NewHandler(svc), repo, scraper
 }
 
 func withTestClaims(req *http.Request, uracf string) *http.Request {
@@ -39,7 +40,7 @@ func registerTestRoutes(mux *http.ServeMux, h *Handler) {
 }
 
 func TestHandlerListGifts(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	var gotStatus *string
 	repo.listFn = func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
 		gotStatus = statusFilter
@@ -70,7 +71,7 @@ func TestHandlerListGifts(t *testing.T) {
 }
 
 func TestHandlerListGiftsDoesNotLeakInternalFields(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.listFn = func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
 		return []Gift{sampleGift()}, 1, nil
 	}
@@ -88,7 +89,7 @@ func TestHandlerListGiftsDoesNotLeakInternalFields(t *testing.T) {
 }
 
 func TestHandlerGetGiftDoesNotLeakInternalFields(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.getByIDFn = func(ctx context.Context, id int64) (*Gift, error) {
 		g := sampleGift()
 		return &g, nil
@@ -110,7 +111,7 @@ func TestHandlerGetGiftDoesNotLeakInternalFields(t *testing.T) {
 }
 
 func TestHandlerListGiftsIgnoresUserProvidedStatus(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	var gotStatus *string
 	repo.listFn = func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
 		gotStatus = statusFilter
@@ -127,7 +128,7 @@ func TestHandlerListGiftsIgnoresUserProvidedStatus(t *testing.T) {
 }
 
 func TestHandlerGetGift(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.getByIDFn = func(ctx context.Context, id int64) (*Gift, error) {
 		g := sampleGift()
 		return &g, nil
@@ -146,7 +147,7 @@ func TestHandlerGetGift(t *testing.T) {
 }
 
 func TestHandlerGetGiftInactiveReturns404(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.getByIDFn = func(ctx context.Context, id int64) (*Gift, error) {
 		g := sampleGift()
 		g.Status = "inactive"
@@ -166,7 +167,7 @@ func TestHandlerGetGiftInactiveReturns404(t *testing.T) {
 }
 
 func TestHandlerGetGiftNotFound(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.getByIDFn = func(ctx context.Context, id int64) (*Gift, error) {
 		return nil, apperror.NotFound("gift not found")
 	}
@@ -184,7 +185,7 @@ func TestHandlerGetGiftNotFound(t *testing.T) {
 }
 
 func TestHandlerGetGiftInvalidID(t *testing.T) {
-	h, _ := newTestHandler()
+	h, _, _ := newTestHandler()
 
 	mux := http.NewServeMux()
 	registerTestRoutes(mux, h)
@@ -199,7 +200,7 @@ func TestHandlerGetGiftInvalidID(t *testing.T) {
 }
 
 func TestHandlerCreateGift(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.createFn = func(ctx context.Context, input CreateGiftInput, dedupeKey, userRACF string) (*Gift, error) {
 		g := sampleGift()
 		g.Name = input.Name
@@ -223,7 +224,7 @@ func TestHandlerCreateGift(t *testing.T) {
 }
 
 func TestHandlerCreateGiftInvalidJSON(t *testing.T) {
-	h, _ := newTestHandler()
+	h, _, _ := newTestHandler()
 
 	body := `{"name":`
 	req := httptest.NewRequest(http.MethodPost, "/api/gifts", bytes.NewBufferString(body))
@@ -238,7 +239,7 @@ func TestHandlerCreateGiftInvalidJSON(t *testing.T) {
 }
 
 func TestHandlerCreateGiftValidationError(t *testing.T) {
-	h, _ := newTestHandler()
+	h, _, _ := newTestHandler()
 
 	body := `{"name":"","price_cents":0}`
 	req := httptest.NewRequest(http.MethodPost, "/api/gifts", bytes.NewBufferString(body))
@@ -253,7 +254,7 @@ func TestHandlerCreateGiftValidationError(t *testing.T) {
 }
 
 func TestHandlerCreateGiftOversizedBody(t *testing.T) {
-	h, _ := newTestHandler()
+	h, _, _ := newTestHandler()
 
 	huge := strings.Repeat("a", (1<<20)+1024)
 	body := `{"name":"Panela","price_cents":19990,"description":"` + huge + `"}`
@@ -269,9 +270,9 @@ func TestHandlerCreateGiftOversizedBody(t *testing.T) {
 }
 
 func TestHandlerCreateGiftConflict(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.createFn = func(ctx context.Context, input CreateGiftInput, dedupeKey, userRACF string) (*Gift, error) {
-		return nil, apperror.Conflict("a gift with this name already exists")
+		return nil, apperror.Conflict("Já existe um presente com esse nome.")
 	}
 
 	body := `{"name":"Panela","price_cents":19990}`
@@ -287,7 +288,7 @@ func TestHandlerCreateGiftConflict(t *testing.T) {
 }
 
 func TestHandlerUpdateGift(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.updateFn = func(ctx context.Context, id int64, input UpdateGiftInput, dedupeKey *string, userRACF string) (*Gift, error) {
 		g := sampleGift()
 		return &g, nil
@@ -309,7 +310,7 @@ func TestHandlerUpdateGift(t *testing.T) {
 }
 
 func TestHandlerUpdateGiftNotFound(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.updateFn = func(ctx context.Context, id int64, input UpdateGiftInput, dedupeKey *string, userRACF string) (*Gift, error) {
 		return nil, apperror.NotFound("gift not found")
 	}
@@ -330,7 +331,7 @@ func TestHandlerUpdateGiftNotFound(t *testing.T) {
 }
 
 func TestHandlerDeleteGift(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.deleteFn = func(ctx context.Context, id int64, userRACF string) error {
 		return nil
 	}
@@ -348,8 +349,75 @@ func TestHandlerDeleteGift(t *testing.T) {
 	}
 }
 
+func TestHandlerScrapePreview(t *testing.T) {
+	h, _, scraper := newTestHandler()
+	scraper.scrapeProductFn = func(ctx context.Context, url string) (*ScrapedProduct, error) {
+		return &ScrapedProduct{
+			Name:     "Air Fryer",
+			PriceBRL: "599,90",
+			ImageURL: "https://shop.example.com/img.jpg",
+		}, nil
+	}
+
+	body := `{"url":"https://shop.example.com/p/123"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/gifts/scrape-preview", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	h.HandleScrapePreview(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp ScrapePreviewResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Name != "Air Fryer" || resp.PriceCents != 59990 || resp.ImageURL == "" {
+		t.Errorf("unexpected response: %+v", resp)
+	}
+	if resp.StoreURL != "https://shop.example.com/p/123" {
+		t.Errorf("StoreURL: got %q", resp.StoreURL)
+	}
+}
+
+func TestHandlerScrapePreviewValidationError(t *testing.T) {
+	h, _, _ := newTestHandler()
+
+	body := `{"url":"not-a-url"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/gifts/scrape-preview", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	h.HandleScrapePreview(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandlerScrapePreviewServiceUnavailableWhenScraperNil(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo, &mockTxRunner{}, nil)
+	h := NewHandler(svc)
+
+	body := `{"url":"https://shop.example.com/p/1"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/gifts/scrape-preview", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	h.HandleScrapePreview(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Busca por link não está configurada") {
+		t.Errorf("expected user-facing message, got %s", w.Body.String())
+	}
+}
+
 func TestHandlerDeleteGiftNotFound(t *testing.T) {
-	h, repo := newTestHandler()
+	h, repo, _ := newTestHandler()
 	repo.deleteFn = func(ctx context.Context, id int64, userRACF string) error {
 		return apperror.NotFound("gift not found")
 	}

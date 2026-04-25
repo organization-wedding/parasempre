@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  commitGiftImport,
   createGift,
   deleteGift,
   getGift,
   isNotFoundError,
   listGifts,
+  previewGiftImport,
+  scrapeGiftURL,
   updateGift,
 } from "./api";
 import type { CreateGiftInput, UpdateGiftInput } from "../types/gift";
@@ -63,5 +66,29 @@ export function useDeleteGiftMutation() {
       queryClient.removeQueries({ queryKey: giftQueryKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: ["gifts"] });
     },
+  });
+}
+
+export function usePreviewGiftImportMutation() {
+  return useMutation({
+    mutationFn: (file: File) => previewGiftImport(file),
+  });
+}
+
+export function useCommitGiftImportMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rows: CreateGiftInput[]) => commitGiftImport(rows),
+    onSuccess: (resp) => {
+      if (resp.created > 0) {
+        queryClient.invalidateQueries({ queryKey: ["gifts"] });
+      }
+    },
+  });
+}
+
+export function useScrapeGiftURLMutation() {
+  return useMutation({
+    mutationFn: (url: string) => scrapeGiftURL(url),
   });
 }

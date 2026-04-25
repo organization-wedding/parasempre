@@ -12,6 +12,9 @@ import type {
   PagedGiftResponse,
   CreateGiftInput,
   UpdateGiftInput,
+  CSVPreview,
+  CommitImportResponse,
+  ScrapePreviewResponse,
 } from "../types/gift";
 import {
   createGuestInputSchema,
@@ -26,6 +29,9 @@ import {
   paginatedGiftsSchema,
   createGiftInputSchema,
   updateGiftInputSchema,
+  csvPreviewSchema,
+  commitImportResponseSchema,
+  scrapePreviewResponseSchema,
 } from "../schemas/gift";
 
 function authHeaders(): Record<string, string> {
@@ -192,6 +198,37 @@ export async function deleteGift(id: number): Promise<void> {
   if (!res.ok) {
     throw new Error(await parseApiError(res));
   }
+}
+
+export async function previewGiftImport(file: File): Promise<CSVPreview> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/gifts/import/preview`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+  return handleResponse(res, csvPreviewSchema);
+}
+
+export async function commitGiftImport(
+  rows: CreateGiftInput[],
+): Promise<CommitImportResponse> {
+  const res = await fetch(`${API_BASE}/api/gifts/import/commit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ rows }),
+  });
+  return handleResponse(res, commitImportResponseSchema);
+}
+
+export async function scrapeGiftURL(url: string): Promise<ScrapePreviewResponse> {
+  const res = await fetch(`${API_BASE}/api/gifts/scrape-preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ url }),
+  });
+  return handleResponse(res, scrapePreviewResponseSchema);
 }
 
 // ── Auth / OTP ──────────────────────────────────────────────
