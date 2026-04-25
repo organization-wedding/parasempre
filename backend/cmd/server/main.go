@@ -54,11 +54,12 @@ func main() {
 	guestHandler := guest.NewHandler(guestSvc)
 
 	var firecrawlClient gift.ProductScraper
-	if cfg.FirecrawlAPIKey != "" {
+	const defaultFirecrawlURL = "https://api.firecrawl.dev"
+	if cfg.FirecrawlAPIKey != "" || cfg.FirecrawlURL != defaultFirecrawlURL {
 		firecrawlClient = gift.NewFirecrawlClient(cfg.FirecrawlAPIKey, cfg.FirecrawlURL)
-		slog.Info("firecrawl: enabled", "url", cfg.FirecrawlURL)
+		slog.Info("firecrawl: enabled", "url", cfg.FirecrawlURL, "auth", cfg.FirecrawlAPIKey != "")
 	} else {
-		slog.Warn("firecrawl: disabled (FIRECRAWL_API_KEY not set)")
+		slog.Warn("firecrawl: disabled (set FIRECRAWL_API_KEY for cloud or FIRECRAWL_URL for self-host)")
 	}
 	giftSvc := gift.NewService(giftRepo, txRunner, firecrawlClient)
 	giftHandler := gift.NewHandler(giftSvc)

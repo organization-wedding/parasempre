@@ -170,6 +170,21 @@ func TestFirecrawlClientScrapeProduct_EmptyExtraction(t *testing.T) {
 	}
 }
 
+func TestFirecrawlClientScrapeProduct_NoAuthHeaderWhenKeyEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Errorf("expected no Authorization header, got %q", got)
+		}
+		_, _ = io.WriteString(w, `{"success": true, "data": {"json": {"name": "X"}}}`)
+	}))
+	defer server.Close()
+
+	c := NewFirecrawlClient("", server.URL)
+	if _, err := c.ScrapeProduct(context.Background(), "https://x.com/p"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestNewFirecrawlClientTrimsTrailingSlash(t *testing.T) {
 	c := NewFirecrawlClient("k", "https://example.com/")
 	if c.baseURL != "https://example.com" {

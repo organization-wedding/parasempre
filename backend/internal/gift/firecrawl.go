@@ -103,7 +103,9 @@ func (c *FirecrawlClient) ScrapeProduct(ctx context.Context, url string) (*Scrap
 	if err != nil {
 		return nil, apperror.Internal("failed to create Firecrawl request", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)
@@ -140,7 +142,11 @@ func (c *FirecrawlClient) ScrapeProduct(ctx context.Context, url string) (*Scrap
 		extraction = parsed.Data.LLMExtraction
 	}
 	if extraction == nil {
-		slog.Warn("firecrawl: no extraction in response", "url", url, "warning", parsed.Data.Warning)
+		slog.Warn("firecrawl: no extraction in response",
+			"url", url,
+			"warning", parsed.Data.Warning,
+			"raw_body", truncate(string(respBody), 2000),
+		)
 		return &ScrapedProduct{}, nil
 	}
 
