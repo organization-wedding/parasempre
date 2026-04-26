@@ -11,14 +11,13 @@ export const VENUE = {
     "https://maps.google.com/maps?q=Chacara+Fenix,Cambe,PR,Brazil&t=&z=14&ie=UTF8&iwloc=&output=embed",
 };
 
-declare const __API_BASE__: string;
-export const API_BASE: string = (() => {
-  try {
-    return __API_BASE__;
-  } catch {
-    return "http://localhost:8080";
-  }
-})();
+// Env vars come from src/_runtime-env.ts, regenerated from .env on every
+// dev/build startup (see index.ts and build.ts). Single mechanism for dev
+// and prod so they can't drift.
+import { RUNTIME_ENV } from "./_runtime-env";
+
+export const API_BASE: string = RUNTIME_ENV.API_BASE || "http://localhost:8080";
+export const MERCADO_PAGO_PUBLIC_KEY: string = RUNTIME_ENV.MERCADO_PAGO_PUBLIC_KEY ?? "";
 
 export const IS_DEV = API_BASE.includes("localhost") || API_BASE.includes("teste");
 

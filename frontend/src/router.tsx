@@ -12,9 +12,12 @@ import { LoginPage } from "./pages/LoginPage";
 import { UnderConstruction } from "./pages/UnderConstruction";
 import { GiftListPage } from "./pages/GiftListPage";
 import { GiftDetailPage } from "./pages/GiftDetailPage";
+import { GiftCheckoutPage } from "./pages/GiftCheckoutPage";
 import { GiftAdminPage } from "./pages/GiftAdminPage";
 import { GiftFormPage } from "./pages/GiftFormPage";
 import { GiftImportPage } from "./pages/GiftImportPage";
+import { MyGiftsPage } from "./pages/MyGiftsPage";
+import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
 import { isAuthenticated } from "./lib/auth";
 import "./index.css";
 
@@ -96,8 +99,14 @@ const giftDetailRoute = createRoute({
 const giftPurchaseRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/lista-presentes/$giftId/comprar",
-  component: UnderConstruction,
+  component: GiftCheckoutRoute,
+  beforeLoad: requireAuth,
 });
+
+function GiftCheckoutRoute() {
+  const { giftId } = giftPurchaseRoute.useParams();
+  return <GiftCheckoutPage giftId={Number(giftId)} />;
+}
 
 const giftAdminRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -127,6 +136,24 @@ const giftAdminEditRoute = createRoute({
   beforeLoad: requireAuth,
 });
 
+const myGiftsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/meus-presentes",
+  component: MyGiftsRoute,
+  beforeLoad: requireAuth,
+  validateSearch: (search: Record<string, unknown>) => {
+    const n = Number(search.page);
+    return { page: Number.isFinite(n) && n > 1 ? n : undefined };
+  },
+});
+
+const adminTransactionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard/pagamentos",
+  component: AdminTransactionsPage,
+  beforeLoad: requireAuth,
+});
+
 function GuestEditRoute() {
   const { guestId } = guestEditRoute.useParams();
   return <GuestFormPage guestId={Number(guestId)} />;
@@ -147,6 +174,11 @@ function GiftDetailRoute() {
   return <GiftDetailPage giftId={Number(giftId)} />;
 }
 
+function MyGiftsRoute() {
+  const { page } = myGiftsRoute.useSearch();
+  return <MyGiftsPage page={page ?? 1} />;
+}
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
@@ -161,6 +193,8 @@ const routeTree = rootRoute.addChildren([
   giftAdminCreateRoute,
   giftAdminImportRoute,
   giftAdminEditRoute,
+  myGiftsRoute,
+  adminTransactionsRoute,
 ]);
 
 export const router = createRouter({

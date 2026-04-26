@@ -3,6 +3,9 @@ import plugin from "bun-plugin-tailwind";
 import { existsSync } from "fs";
 import { rm } from "fs/promises";
 import path from "path";
+import { syncRuntimeEnv } from "./scripts/sync-runtime-env";
+
+syncRuntimeEnv(path.join(import.meta.dir, "src"));
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`
@@ -131,7 +134,6 @@ const result = await Bun.build({
   sourcemap: "linked",
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
-    __API_BASE__: JSON.stringify(process.env.API_BASE || "http://localhost:8080"),
   },
   ...cliConfig,
 });

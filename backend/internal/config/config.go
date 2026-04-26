@@ -35,23 +35,29 @@ const (
 	envFirecrawlAPIKey = "FIRECRAWL_API_KEY"
 	envFirecrawlURL    = "FIRECRAWL_URL"
 
-	envDBMaxConns       = "DB_MAX_CONNS"
-	envDBMinConns       = "DB_MIN_CONNS"
-	envDBMaxConnLife     = "DB_MAX_CONN_LIFETIME"
-	envDBMaxConnIdle     = "DB_MAX_CONN_IDLE_TIME"
+	envMPAccessToken   = "MERCADO_PAGO_ACCESS_TOKEN"
+	envMPPublicKey     = "MERCADO_PAGO_PUBLIC_KEY"
+	envMPWebhookSecret = "MERCADO_PAGO_WEBHOOK_SECRET"
+	envMPBaseURL       = "MERCADO_PAGO_BASE_URL"
+
+	envDBMaxConns    = "DB_MAX_CONNS"
+	envDBMinConns    = "DB_MIN_CONNS"
+	envDBMaxConnLife = "DB_MAX_CONN_LIFETIME"
+	envDBMaxConnIdle = "DB_MAX_CONN_IDLE_TIME"
 )
 
 const (
-	defaultCORSOrigin = "http://localhost:3000"
-	defaultAppEnv     = "test"
-	defaultJWTExpiry  = "3h"
-	defaultDBSSLMode        = "require"
-	defaultDBMaxConns       = "10"
-	defaultDBMinConns       = "2"
-	defaultDBMaxConnLife    = "30m"
-	defaultDBMaxConnIdle    = "5m"
+	defaultCORSOrigin    = "http://localhost:3000"
+	defaultAppEnv        = "test"
+	defaultJWTExpiry     = "3h"
+	defaultDBSSLMode     = "require"
+	defaultDBMaxConns    = "10"
+	defaultDBMinConns    = "2"
+	defaultDBMaxConnLife = "30m"
+	defaultDBMaxConnIdle = "5m"
 
 	defaultFirecrawlURL = "https://api.firecrawl.dev"
+	defaultMPBaseURL    = "https://api.mercadopago.com"
 )
 
 type DBConfig struct {
@@ -78,17 +84,21 @@ type CoupleConfig struct {
 }
 
 type Config struct {
-	DB             DBConfig
-	CORSOrigin     string
-	AppEnv         string
-	Couple         CoupleConfig
-	JWTSecret      string
-	JWTExpiry      string
-	EvoAPIURL      string
-	EvoAPIKey      string
-	EvoAPIInstance string
-	FirecrawlAPIKey string
-	FirecrawlURL    string
+	DB                       DBConfig
+	CORSOrigin               string
+	AppEnv                   string
+	Couple                   CoupleConfig
+	JWTSecret                string
+	JWTExpiry                string
+	EvoAPIURL                string
+	EvoAPIKey                string
+	EvoAPIInstance           string
+	FirecrawlAPIKey          string
+	FirecrawlURL             string
+	MercadoPagoAccessToken   string
+	MercadoPagoPublicKey     string
+	MercadoPagoWebhookSecret string
+	MercadoPagoBaseURL       string
 }
 
 type envField struct {
@@ -139,13 +149,17 @@ func Load() (Config, error) {
 				URACF: getEnv(envBrideURACF),
 			},
 		},
-		JWTSecret:      getEnv(envJWTSecret),
-		JWTExpiry:      getEnvOrDefault(envJWTExpiry, defaultJWTExpiry),
-		EvoAPIURL:      getEnv(envEvoAPIURL),
-		EvoAPIKey:      getEnv(envEvoAPIKey),
-		EvoAPIInstance: getEnv(envEvoAPIInstance),
-		FirecrawlAPIKey: getEnv(envFirecrawlAPIKey),
-		FirecrawlURL:    getEnvOrDefault(envFirecrawlURL, defaultFirecrawlURL),
+		JWTSecret:                getEnv(envJWTSecret),
+		JWTExpiry:                getEnvOrDefault(envJWTExpiry, defaultJWTExpiry),
+		EvoAPIURL:                getEnv(envEvoAPIURL),
+		EvoAPIKey:                getEnv(envEvoAPIKey),
+		EvoAPIInstance:           getEnv(envEvoAPIInstance),
+		FirecrawlAPIKey:          getEnv(envFirecrawlAPIKey),
+		FirecrawlURL:             getEnvOrDefault(envFirecrawlURL, defaultFirecrawlURL),
+		MercadoPagoAccessToken:   getEnv(envMPAccessToken),
+		MercadoPagoPublicKey:     getEnv(envMPPublicKey),
+		MercadoPagoWebhookSecret: getEnv(envMPWebhookSecret),
+		MercadoPagoBaseURL:       getEnvOrDefault(envMPBaseURL, defaultMPBaseURL),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -188,6 +202,27 @@ func (c Config) validate() error {
 	}
 	if err := validateEvoConfig(c.EvoAPIURL); err != nil {
 		issues = append(issues, err.Error())
+	}
+
+	if c.MercadoPagoAccessToken != "" {
+		if c.MercadoPagoWebhookSecret == "" {
+			issues = append(issues, fmt.Sprintf("%s is required when %s is set (webhooks would be unverifiable)", envMPWebhookSecret, envMPAccessToken))
+		}
+		if c.MercadoPagoPublicKey == "" {
+			issues = append(issues, fmt.Sprintf("%s is required when %s is set (frontend Brick needs the public key)", envMPPublicKey, envMPAccessToken))
+		}
+		// Cross-check env vs credential prefix to catch deploys with the wrong
+		// keys. MP production tokens start with APP_USR-, sandbox with TEST-.
+		isSandbox := strings.HasPrefix(c.MercadoPagoAccessToken, "TEST-") ||
+			strings.HasPrefix(c.MercadoPagoPublicKey, "TEST-")
+		isProdCred := strings.HasPrefix(c.MercadoPagoAccessToken, "APP_USR-") ||
+			strings.HasPrefix(c.MercadoPagoPublicKey, "APP_USR-")
+		if c.AppEnv == "production" && isSandbox {
+			issues = append(issues, fmt.Sprintf("%s is set to a SANDBOX credential (TEST-...) but %s=production — purchases would not be real", envMPAccessToken, envAppEnv))
+		}
+		if c.AppEnv != "production" && isProdCred {
+			issues = append(issues, fmt.Sprintf("%s is set to a PRODUCTION credential (APP_USR-...) but %s=%s — risk of charging real cards in non-prod", envMPAccessToken, envAppEnv, c.AppEnv))
+		}
 	}
 
 	if len(issues) > 0 {

@@ -111,3 +111,38 @@ func TestStatusWriterDefaultStatus(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 }
+
+func TestSecurityHeaders(t *testing.T) {
+	noop := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	t.Run("baseline headers always set", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		SecurityHeaders("test")(noop).ServeHTTP(w, req)
+
+		if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+		}
+		if got := w.Header().Get("Referrer-Policy"); got != "strict-origin-when-cross-origin" {
+			t.Errorf("Referrer-Policy = %q", got)
+		}
+		if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("X-Frame-Options = %q", got)
+		}
+	})
+
+	t.Run("HSTS only in production", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		SecurityHeaders("test")(noop).ServeHTTP(w, req)
+		if got := w.Header().Get("Strict-Transport-Security"); got != "" {
+			t.Errorf("HSTS should be empty in non-prod, got %q", got)
+		}
+
+		w = httptest.NewRecorder()
+		SecurityHeaders("production")(noop).ServeHTTP(w, req)
+		if got := w.Header().Get("Strict-Transport-Security"); got == "" {
+			t.Errorf("HSTS should be set in prod")
+		}
+	})
+}

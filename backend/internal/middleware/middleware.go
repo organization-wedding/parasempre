@@ -54,6 +54,27 @@ func Recovery(next http.Handler) http.Handler {
 	})
 }
 
+// SecurityHeaders applies baseline hardening for an API server. CSP is
+// intentionally absent here — this is an API, not HTML. The frontend server
+// owns CSP for its own responses (see frontend/src/index.ts).
+//
+// HSTS only set in production: dev runs over plain HTTP and the header
+// would brick local browsers for the API hostname.
+func SecurityHeaders(appEnv string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			h.Set("X-Frame-Options", "DENY")
+			if appEnv == "production" {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func CORS(origin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
