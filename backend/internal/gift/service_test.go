@@ -53,6 +53,41 @@ func (m *mockRepository) WithTx(_ pgx.Tx) Repository {
 	return m
 }
 
+func (m *mockRepository) BulkCreate(ctx context.Context, inputs []CreateGiftInput, dedupeKeys []string, userRACF string) ([]Gift, error) {
+	if len(inputs) != len(dedupeKeys) {
+		return nil, errors.New("inputs/keys length mismatch")
+	}
+	created := make([]Gift, 0, len(inputs))
+	for i, input := range inputs {
+		if m.createFn == nil {
+			continue
+		}
+		g, err := m.createFn(ctx, input, dedupeKeys[i], userRACF)
+		if err != nil {
+			return nil, err
+		}
+		created = append(created, *g)
+	}
+	return created, nil
+}
+
+type mockTxRunner struct{}
+
+func (m *mockTxRunner) RunInTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	return fn(nil)
+}
+
+type mockScraper struct {
+	scrapeProductFn func(ctx context.Context, url string) (*ScrapedProduct, error)
+}
+
+func (m *mockScraper) ScrapeProduct(ctx context.Context, url string) (*ScrapedProduct, error) {
+	if m.scrapeProductFn == nil {
+		return &ScrapedProduct{}, nil
+	}
+	return m.scrapeProductFn(ctx, url)
+}
+
 func sampleGift() Gift {
 	return Gift{
 		ID:         1,
@@ -137,7 +172,7 @@ func TestServiceList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(&mockRepository{listFn: tt.mockFn})
+			svc := NewService(&mockRepository{listFn: tt.mockFn}, &mockTxRunner{}, nil)
 			result, err := svc.List(context.Background(), tt.page, tt.limit, nil)
 			if tt.wantErr {
 				if err == nil {
@@ -166,7 +201,7 @@ func TestServiceListPassesStatusFilter(t *testing.T) {
 			return []Gift{}, 0, nil
 		},
 	}
-	svc := NewService(repo)
+	svc := NewService(repo, &mockTxRunner{}, nil)
 
 	active := "active"
 	_, err := svc.List(context.Background(), 1, 20, &active)
@@ -202,7 +237,7 @@ func TestServiceGetByID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(&mockRepository{getByIDFn: tt.mockFn})
+			svc := NewService(&mockRepository{getByIDFn: tt.mockFn}, &mockTxRunner{}, nil)
 			g, err := svc.GetByID(context.Background(), 1)
 			if tt.wantErr {
 				if err == nil {
@@ -277,7 +312,7 @@ func TestServiceCreate(t *testing.T) {
 					return &g, nil
 				},
 			}
-			svc := NewService(repo)
+			svc := NewService(repo, &mockTxRunner{}, nil)
 			_, err := svc.Create(context.Background(), tt.input, "TST01")
 			if tt.wantErr {
 				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
@@ -299,7 +334,7 @@ func TestServiceCreateNormalizesDedupeKey(t *testing.T) {
 			return &g, nil
 		},
 	}
-	svc := NewService(repo)
+	svc := NewService(repo, &mockTxRunner{}, nil)
 
 	_, err := svc.Create(context.Background(), CreateGiftInput{
 		Name:       "  Máquina  de  Café  ",
@@ -316,16 +351,16 @@ func TestServiceCreateNormalizesDedupeKey(t *testing.T) {
 func TestServiceCreateDuplicate(t *testing.T) {
 	repo := &mockRepository{
 		createFn: func(ctx context.Context, input CreateGiftInput, dedupeKey, userRACF string) (*Gift, error) {
-			return nil, apperror.Conflict("a gift with this name already exists")
+			return nil, apperror.Conflict("Já existe um presente com esse nome.")
 		},
 	}
-	svc := NewService(repo)
+	svc := NewService(repo, &mockTxRunner{}, nil)
 
 	_, err := svc.Create(context.Background(), CreateGiftInput{
 		Name:       "Panela",
 		PriceCents: 19990,
 	}, "TST01")
-	assertAppError(t, err, http.StatusConflict, "a gift with this name already exists")
+	assertAppError(t, err, http.StatusConflict, "Já existe um presente com esse nome.")
 }
 
 func TestServiceUpdate(t *testing.T) {
@@ -366,7 +401,7 @@ func TestServiceUpdate(t *testing.T) {
 					return &g, nil
 				},
 			}
-			svc := NewService(repo)
+			svc := NewService(repo, &mockTxRunner{}, nil)
 			_, err := svc.Update(context.Background(), 1, tt.input, "TST01")
 			if tt.wantErr {
 				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
@@ -409,7 +444,7 @@ func TestServiceUpdateRecalculatesDedupeKeyOnlyWhenNameChanges(t *testing.T) {
 					return &g, nil
 				},
 			}
-			svc := NewService(repo)
+			svc := NewService(repo, &mockTxRunner{}, nil)
 			_, err := svc.Update(context.Background(), 1, tt.input, "TST01")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -441,7 +476,7 @@ func TestServiceDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(&mockRepository{deleteFn: tt.mockFn})
+			svc := NewService(&mockRepository{deleteFn: tt.mockFn}, &mockTxRunner{}, nil)
 			err := svc.Delete(context.Background(), 1, "TST01")
 			if tt.wantErr {
 				if err == nil {
@@ -456,6 +491,149 @@ func TestServiceDelete(t *testing.T) {
 	}
 }
 
+func TestServiceScrapePreview(t *testing.T) {
+	tests := []struct {
+		name           string
+		url            string
+		scrapeFn       func(ctx context.Context, url string) (*ScrapedProduct, error)
+		wantName       string
+		wantDesc       string
+		wantImage      string
+		wantStore      string
+		wantPriceCents int64
+		wantErr        bool
+		wantErrCode    int
+		wantErrMsg     string
+	}{
+		{
+			name: "success all fields",
+			url:  "https://shop.example.com/p/1",
+			scrapeFn: func(ctx context.Context, url string) (*ScrapedProduct, error) {
+				return &ScrapedProduct{
+					Name:        "Jogo de Panelas",
+					Description: "Tramontina inox",
+					PriceBRL:    "459,90",
+					ImageURL:    "https://shop.example.com/img.jpg",
+				}, nil
+			},
+			wantName:       "Jogo de Panelas",
+			wantDesc:       "Tramontina inox",
+			wantImage:      "https://shop.example.com/img.jpg",
+			wantStore:      "https://shop.example.com/p/1",
+			wantPriceCents: 45990,
+		},
+		{
+			name: "price with BR thousands separator",
+			url:  "https://shop.example.com/p/2",
+			scrapeFn: func(ctx context.Context, url string) (*ScrapedProduct, error) {
+				return &ScrapedProduct{Name: "Geladeira", PriceBRL: "R$ 1.234,56"}, nil
+			},
+			wantName:       "Geladeira",
+			wantStore:      "https://shop.example.com/p/2",
+			wantPriceCents: 123456,
+		},
+		{
+			name: "invalid price falls back to zero",
+			url:  "https://shop.example.com/p/3",
+			scrapeFn: func(ctx context.Context, url string) (*ScrapedProduct, error) {
+				return &ScrapedProduct{Name: "Mixer", PriceBRL: "sob consulta"}, nil
+			},
+			wantName:       "Mixer",
+			wantStore:      "https://shop.example.com/p/3",
+			wantPriceCents: 0,
+		},
+		{
+			name: "non-https image url is discarded",
+			url:  "https://shop.example.com/p/4",
+			scrapeFn: func(ctx context.Context, url string) (*ScrapedProduct, error) {
+				return &ScrapedProduct{Name: "Cafeteira", ImageURL: "http://shop.example.com/img.jpg"}, nil
+			},
+			wantName:  "Cafeteira",
+			wantImage: "",
+			wantStore: "https://shop.example.com/p/4",
+		},
+		{
+			name: "empty extraction returns 400",
+			url:  "https://shop.example.com/p/5",
+			scrapeFn: func(ctx context.Context, url string) (*ScrapedProduct, error) {
+				return &ScrapedProduct{}, nil
+			},
+			wantErr:     true,
+			wantErrCode: http.StatusBadRequest,
+			wantErrMsg:  "Não conseguimos identificar o produto",
+		},
+		{
+			name:        "invalid input url",
+			url:         "not-a-url",
+			scrapeFn:    func(ctx context.Context, url string) (*ScrapedProduct, error) { return nil, nil },
+			wantErr:     true,
+			wantErrCode: http.StatusBadRequest,
+			wantErrMsg:  "URL inválida",
+		},
+		{
+			name: "scraper returns error",
+			url:  "https://shop.example.com/p/6",
+			scrapeFn: func(ctx context.Context, url string) (*ScrapedProduct, error) {
+				return nil, apperror.Validation("Não conseguimos buscar dados desta URL.")
+			},
+			wantErr:     true,
+			wantErrCode: http.StatusBadRequest,
+			wantErrMsg:  "Não conseguimos buscar dados",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewService(&mockRepository{}, &mockTxRunner{}, &mockScraper{scrapeProductFn: tt.scrapeFn})
+			got, err := svc.ScrapePreview(context.Background(), tt.url, "TST01")
+			if tt.wantErr {
+				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.Name != tt.wantName {
+				t.Errorf("Name: want %q, got %q", tt.wantName, got.Name)
+			}
+			if got.Description != tt.wantDesc {
+				t.Errorf("Description: want %q, got %q", tt.wantDesc, got.Description)
+			}
+			if got.ImageURL != tt.wantImage {
+				t.Errorf("ImageURL: want %q, got %q", tt.wantImage, got.ImageURL)
+			}
+			if got.StoreURL != tt.wantStore {
+				t.Errorf("StoreURL: want %q, got %q", tt.wantStore, got.StoreURL)
+			}
+			if got.PriceCents != tt.wantPriceCents {
+				t.Errorf("PriceCents: want %d, got %d", tt.wantPriceCents, got.PriceCents)
+			}
+		})
+	}
+}
+
+func TestServiceScrapePreviewReturns503WhenScraperNil(t *testing.T) {
+	svc := NewService(&mockRepository{}, &mockTxRunner{}, nil)
+	_, err := svc.ScrapePreview(context.Background(), "https://x.com/p", "TST01")
+	assertAppError(t, err, http.StatusServiceUnavailable, "Busca por link não está configurada")
+}
+
+func TestServiceScrapePreviewTrimsName(t *testing.T) {
+	longName := strings.Repeat("a", 250)
+	svc := NewService(&mockRepository{}, &mockTxRunner{}, &mockScraper{
+		scrapeProductFn: func(ctx context.Context, url string) (*ScrapedProduct, error) {
+			return &ScrapedProduct{Name: longName}, nil
+		},
+	})
+	got, err := svc.ScrapePreview(context.Background(), "https://x.com/p", "TST01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len([]rune(got.Name)) != scrapeMaxNameLen {
+		t.Errorf("expected name truncated to %d runes, got %d", scrapeMaxNameLen, len([]rune(got.Name)))
+	}
+}
+
 func TestServiceDeletePassesUserRACFToRepo(t *testing.T) {
 	var gotRACF string
 	repo := &mockRepository{
@@ -464,7 +642,7 @@ func TestServiceDeletePassesUserRACFToRepo(t *testing.T) {
 			return nil
 		},
 	}
-	svc := NewService(repo)
+	svc := NewService(repo, &mockTxRunner{}, nil)
 	if err := svc.Delete(context.Background(), 1, "ABC12"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

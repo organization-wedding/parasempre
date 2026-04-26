@@ -32,6 +32,9 @@ const (
 	envEvoAPIKey      = "EVO_API_KEY"
 	envEvoAPIInstance = "EVO_API_INSTANCE"
 
+	envFirecrawlAPIKey = "FIRECRAWL_API_KEY"
+	envFirecrawlURL    = "FIRECRAWL_URL"
+
 	envDBMaxConns       = "DB_MAX_CONNS"
 	envDBMinConns       = "DB_MIN_CONNS"
 	envDBMaxConnLife     = "DB_MAX_CONN_LIFETIME"
@@ -47,6 +50,8 @@ const (
 	defaultDBMinConns       = "2"
 	defaultDBMaxConnLife    = "30m"
 	defaultDBMaxConnIdle    = "5m"
+
+	defaultFirecrawlURL = "https://api.firecrawl.dev"
 )
 
 type DBConfig struct {
@@ -82,6 +87,8 @@ type Config struct {
 	EvoAPIURL      string
 	EvoAPIKey      string
 	EvoAPIInstance string
+	FirecrawlAPIKey string
+	FirecrawlURL    string
 }
 
 type envField struct {
@@ -137,6 +144,8 @@ func Load() (Config, error) {
 		EvoAPIURL:      getEnv(envEvoAPIURL),
 		EvoAPIKey:      getEnv(envEvoAPIKey),
 		EvoAPIInstance: getEnv(envEvoAPIInstance),
+		FirecrawlAPIKey: getEnv(envFirecrawlAPIKey),
+		FirecrawlURL:    getEnvOrDefault(envFirecrawlURL, defaultFirecrawlURL),
 	}
 
 	if err := cfg.validate(); err != nil {

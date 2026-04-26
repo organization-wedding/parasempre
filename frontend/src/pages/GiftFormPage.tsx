@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -6,11 +6,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import Save from "lucide-react/dist/esm/icons/save";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import X from "lucide-react/dist/esm/icons/x";
 import { Header } from "../components/Header";
 import {
   useCreateGiftMutation,
   useGiftQuery,
+  useScrapeGiftURLMutation,
   useUpdateGiftMutation,
 } from "../lib/gift-queries";
 import { useUserMeQuery } from "../lib/user-queries";
@@ -59,15 +61,21 @@ export function GiftFormPage({ giftId }: Props) {
   const navigate = useNavigate();
   const createMutation = useCreateGiftMutation();
   const updateMutation = useUpdateGiftMutation();
+  const scrapeMutation = useScrapeGiftURLMutation();
   const giftQuery = useGiftQuery(giftId ?? 0, isEdit);
   const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
   const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
+
+  const [scrapeURL, setScrapeURL] = useState("");
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
+  const [scrapeSuccess, setScrapeSuccess] = useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
     setError,
+    setValue,
     clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<GiftFormValues>({
@@ -126,6 +134,27 @@ export function GiftFormPage({ giftId }: Props) {
     }
   }
 
+  async function handleScrape() {
+    setScrapeError(null);
+    setScrapeSuccess(false);
+    const url = scrapeURL.trim();
+    if (!/^https:\/\/[^\s]+$/.test(url)) {
+      setScrapeError("Cole uma URL https:// válida da loja.");
+      return;
+    }
+    try {
+      const data = await scrapeMutation.mutateAsync(url);
+      if (data.name) setValue("name", data.name, { shouldDirty: true });
+      if (data.description) setValue("description", data.description, { shouldDirty: true });
+      if (data.price_cents > 0) setValue("price", centsToPriceInput(data.price_cents), { shouldDirty: true });
+      if (data.image_url) setValue("image_url", data.image_url, { shouldDirty: true });
+      setValue("store_url", data.store_url, { shouldDirty: true });
+      setScrapeSuccess(true);
+    } catch (err) {
+      setScrapeError(err instanceof Error ? err.message : "Erro ao buscar dados do produto.");
+    }
+  }
+
   if (!roleLoading && userMe && !isAuthorized) {
     return <UnauthorizedPage />;
   }
@@ -179,6 +208,66 @@ export function GiftFormPage({ giftId }: Props) {
             onSubmit={handleSubmit(onSubmit)}
             className="border border-gold-muted/40 bg-ivory p-6 md:p-8 rounded"
           >
+            {!isEdit && (
+              <div className="mb-6 pb-6 border-b border-gold-muted/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles size={14} className="text-burgundy" />
+                  <h2 className="font-heading text-[0.78rem] font-semibold tracking-[0.08em] uppercase text-burgundy">
+                    Buscar por link da loja
+                  </h2>
+                </div>
+                <p className="text-[0.78rem] text-hint mb-3">
+                  Cole o link de um produto e tentaremos preencher os campos automaticamente.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <input
+                    type="url"
+                    placeholder="https://loja.com/produto"
+                    value={scrapeURL}
+                    onChange={(e) => setScrapeURL(e.target.value)}
+                    disabled={scrapeMutation.isPending}
+                    className={`${inputClass} flex-1`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleScrape}
+                    disabled={scrapeMutation.isPending || scrapeURL.trim() === ""}
+                    className="inline-flex items-center justify-center gap-2 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] bg-burgundy text-gold-light border border-burgundy transition-all duration-200 hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {scrapeMutation.isPending ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-[1.5px] border-gold-light/30 border-t-gold-light rounded-full animate-spin" />
+                        Buscando...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={13} />
+                        Buscar
+                      </>
+                    )}
+                  </button>
+                </div>
+                {scrapeError && (
+                  <div className="mt-3 flex items-start gap-2 rounded border border-[#c25550]/30 bg-[#fef2f1] px-3 py-2">
+                    <AlertTriangle size={14} className="text-[#c25550] shrink-0 mt-0.5" />
+                    <span className="text-[0.78rem] text-[#7a2e2b] flex-1">{scrapeError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setScrapeError(null)}
+                      className="text-[#c25550]/60 hover:text-[#c25550] cursor-pointer"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+                {scrapeSuccess && !scrapeError && (
+                  <p className="mt-3 text-[0.78rem] text-burgundy-deep">
+                    Dados preenchidos abaixo — revise e ajuste antes de salvar.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="mb-5">
               <label className={labelClass}>Nome</label>
               <input

@@ -58,6 +58,7 @@ var fieldMessages = map[string]map[string]string{
 	"ImageURL":     {"url": "image_url must be a valid URL", "startswith": "image_url must start with https://"},
 	"StoreURL":     {"url": "store_url must be a valid URL", "startswith": "store_url must start with https://"},
 	"Status":       {"giftstatus": "status must be 'active' or 'inactive'"},
+	"URL":          {"required": "url é obrigatória", "url": "url deve ser válida", "startswith": "url deve começar com https://"},
 }
 
 func Struct(s any) error {

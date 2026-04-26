@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import Gift from "lucide-react/dist/esm/icons/gift";
 import Plus from "lucide-react/dist/esm/icons/plus";
+import Upload from "lucide-react/dist/esm/icons/upload";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
@@ -85,13 +86,22 @@ export function GiftAdminPage() {
                 </span>
               </div>
 
-              <Link
-                to="/dashboard/presentes/novo"
-                className="inline-flex items-center gap-[0.4rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px shrink-0"
-              >
-                <Plus size={14} />
-                Novo Presente
-              </Link>
+              <div className="flex gap-2.5 shrink-0">
+                <Link
+                  to="/dashboard/presentes/importar"
+                  className="inline-flex items-center gap-[0.4rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-transparent text-burgundy border border-burgundy hover:bg-burgundy hover:text-gold-light"
+                >
+                  <Upload size={14} />
+                  Importar CSV
+                </Link>
+                <Link
+                  to="/dashboard/presentes/novo"
+                  className="inline-flex items-center gap-[0.4rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px"
+                >
+                  <Plus size={14} />
+                  Novo Presente
+                </Link>
+              </div>
             </div>
 
             {effectiveError && (

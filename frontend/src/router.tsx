@@ -14,6 +14,7 @@ import { GiftListPage } from "./pages/GiftListPage";
 import { GiftDetailPage } from "./pages/GiftDetailPage";
 import { GiftAdminPage } from "./pages/GiftAdminPage";
 import { GiftFormPage } from "./pages/GiftFormPage";
+import { GiftImportPage } from "./pages/GiftImportPage";
 import { isAuthenticated } from "./lib/auth";
 import "./index.css";
 
@@ -112,6 +113,13 @@ const giftAdminCreateRoute = createRoute({
   beforeLoad: requireAuth,
 });
 
+const giftAdminImportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard/presentes/importar",
+  component: GiftImportPage,
+  beforeLoad: requireAuth,
+});
+
 const giftAdminEditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard/presentes/$giftId",
@@ -151,6 +159,7 @@ const routeTree = rootRoute.addChildren([
   giftPurchaseRoute,
   giftAdminRoute,
   giftAdminCreateRoute,
+  giftAdminImportRoute,
   giftAdminEditRoute,
 ]);
 

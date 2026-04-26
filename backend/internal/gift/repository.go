@@ -13,6 +13,7 @@ type Repository interface {
 	Update(ctx context.Context, id int64, input UpdateGiftInput, dedupeKey *string, userRACF string) (*Gift, error)
 	Delete(ctx context.Context, id int64, userRACF string) error
 	FindByDedupeKeys(ctx context.Context, keys []string) (map[string]bool, error)
+	BulkCreate(ctx context.Context, inputs []CreateGiftInput, dedupeKeys []string, userRACF string) ([]Gift, error)
 }
 
 type TxAwareRepository interface {

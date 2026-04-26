@@ -150,6 +150,23 @@ func (r *PostgresRepository) Delete(ctx context.Context, id int64, userRACF stri
 	return nil
 }
 
+func (r *PostgresRepository) BulkCreate(ctx context.Context, inputs []CreateGiftInput, dedupeKeys []string, userRACF string) ([]Gift, error) {
+	if len(inputs) != len(dedupeKeys) {
+		return nil, fmt.Errorf("inputs and dedupe keys length mismatch: %d vs %d", len(inputs), len(dedupeKeys))
+	}
+	created := make([]Gift, 0, len(inputs))
+	for i, input := range inputs {
+		g, err := r.Create(ctx, input, dedupeKeys[i], userRACF)
+		if err != nil {
+			slog.Error("gift.repo bulk_create: insert failed", "index", i, "error", err)
+			return nil, err
+		}
+		created = append(created, *g)
+	}
+	slog.Info("gift.repo bulk_create: gifts stored", "count", len(created))
+	return created, nil
+}
+
 func (r *PostgresRepository) FindByDedupeKeys(ctx context.Context, keys []string) (map[string]bool, error) {
 	found := make(map[string]bool, len(keys))
 	if len(keys) == 0 {
@@ -176,6 +193,15 @@ func (r *PostgresRepository) FindByDedupeKeys(ctx context.Context, keys []string
 	return found, rows.Err()
 }
 
+var checkViolationMessages = map[string]string{
+	"gifts_name_not_empty":      "O nome do presente nao pode estar vazio.",
+	"gifts_description_max_len": "A descricao excede o tamanho maximo permitido.",
+	"gifts_price_positive":      "O preco deve ser maior que zero.",
+	"gifts_status_check":        "Status invalido (use \"active\" ou \"inactive\").",
+	"gifts_image_url_https":     "A URL da imagem deve comecar com https://.",
+	"gifts_store_url_https":     "A URL da loja deve comecar com https://.",
+}
+
 func mapPgError(err error) *apperror.AppError {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
@@ -183,12 +209,15 @@ func mapPgError(err error) *apperror.AppError {
 	}
 	switch pgErr.Code {
 	case pgerrcode.UniqueViolation:
-		if pgErr.ConstraintName == "gifts_dedupe_key_unique" {
-			return apperror.Conflict("a gift with this name already exists")
+		if pgErr.ConstraintName == "gifts_dedupe_key_active_unique" {
+			return apperror.Conflict("Já existe um presente com esse nome.")
 		}
-		return apperror.Conflict("unique constraint violated")
+		return apperror.Conflict("Esse presente entra em conflito com outro registro.")
 	case pgerrcode.CheckViolation:
-		return apperror.Validation(fmt.Sprintf("invalid gift data: %s", pgErr.ConstraintName))
+		if msg, ok := checkViolationMessages[pgErr.ConstraintName]; ok {
+			return apperror.Validation(msg)
+		}
+		return apperror.Validation(fmt.Sprintf("Dados invalidos (%s).", pgErr.ConstraintName))
 	}
 	return nil
 }

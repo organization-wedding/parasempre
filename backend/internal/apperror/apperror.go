@@ -55,6 +55,10 @@ func Internal(msg string, err error) *AppError {
 	return &AppError{Code: http.StatusInternalServerError, Message: msg, Err: err}
 }
 
+func ServiceUnavailable(msg string) *AppError {
+	return &AppError{Code: http.StatusServiceUnavailable, Message: msg}
+}
+
 func IsAppError(err error) (*AppError, bool) {
 	var ae *AppError
 	if errors.As(err, &ae) {
