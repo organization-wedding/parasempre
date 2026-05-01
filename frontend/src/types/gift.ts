@@ -3,4 +3,8 @@ export type {
   PagedGiftResponse,
   CreateGiftInput,
   UpdateGiftInput,
+  CSVPreview,
+  CSVPreviewRow,
+  CommitImportResponse,
+  ScrapePreviewResponse,
 } from "../schemas/gift";

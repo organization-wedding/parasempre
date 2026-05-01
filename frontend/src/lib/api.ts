@@ -33,6 +33,18 @@ import {
   commitImportResponseSchema,
   scrapePreviewResponseSchema,
 } from "../schemas/gift";
+import {
+  purchaseRequestSchema,
+  purchaseResponseSchema,
+  publicTransactionSchema,
+  pagedPublicTransactionsSchema,
+  pagedAdminTransactionsSchema,
+  adminSummarySchema,
+  type PurchaseRequest,
+  type PurchaseResponse,
+  type PublicTransaction,
+  type AdminSummary,
+} from "../schemas/payment";
 
 function authHeaders(): Record<string, string> {
   const token = getToken();
@@ -229,6 +241,65 @@ export async function scrapeGiftURL(url: string): Promise<ScrapePreviewResponse>
     body: JSON.stringify({ url }),
   });
   return handleResponse(res, scrapePreviewResponseSchema);
+}
+
+export async function createPurchase(
+  giftId: number,
+  body: PurchaseRequest,
+): Promise<PurchaseResponse> {
+  const payload = purchaseRequestSchema.parse(body);
+  const res = await fetch(`${API_BASE}/api/gifts/${giftId}/purchase`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, purchaseResponseSchema);
+}
+
+export async function listMyPurchases(params?: {
+  page?: number;
+  limit?: number;
+}): Promise<ReturnType<typeof pagedPublicTransactionsSchema.parse>> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const url = query.toString()
+    ? `${API_BASE}/api/me/purchases?${query.toString()}`
+    : `${API_BASE}/api/me/purchases`;
+  const res = await fetch(url, { headers: authHeaders() });
+  return handleResponse(res, pagedPublicTransactionsSchema);
+}
+
+export async function getMyPurchase(id: number): Promise<PublicTransaction> {
+  const res = await fetch(`${API_BASE}/api/me/purchases/${id}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse(res, publicTransactionSchema);
+}
+
+export async function listAdminTransactions(filter?: {
+  status?: string;
+  gift_id?: number;
+  page?: number;
+  limit?: number;
+}): Promise<ReturnType<typeof pagedAdminTransactionsSchema.parse>> {
+  const query = new URLSearchParams();
+  if (filter?.status) query.set("status", filter.status);
+  if (filter?.gift_id) query.set("gift_id", String(filter.gift_id));
+  if (filter?.page) query.set("page", String(filter.page));
+  if (filter?.limit) query.set("limit", String(filter.limit));
+  const url = query.toString()
+    ? `${API_BASE}/api/transactions?${query.toString()}`
+    : `${API_BASE}/api/transactions`;
+  const res = await fetch(url, { headers: authHeaders() });
+  return handleResponse(res, pagedAdminTransactionsSchema);
+}
+
+export async function adminTransactionsSummary(): Promise<AdminSummary> {
+  const res = await fetch(`${API_BASE}/api/transactions/summary`, {
+    headers: authHeaders(),
+  });
+  return handleResponse(res, adminSummarySchema);
 }
 
 // ── Auth / OTP ──────────────────────────────────────────────

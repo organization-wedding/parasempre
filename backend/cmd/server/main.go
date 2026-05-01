@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,12 +11,15 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/ferjunior7/parasempre/backend/internal/auth"
 	"github.com/ferjunior7/parasempre/backend/internal/config"
 	"github.com/ferjunior7/parasempre/backend/internal/database"
 	"github.com/ferjunior7/parasempre/backend/internal/gift"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
+	"github.com/ferjunior7/parasempre/backend/internal/payment"
 	"github.com/ferjunior7/parasempre/backend/internal/user"
 )
 
@@ -65,6 +69,34 @@ func main() {
 	giftHandler := gift.NewHandler(giftSvc)
 	userHandler := user.NewHandler(userSvc, cfg.AppEnv)
 
+	var paymentHandler *payment.Handler
+	var purchaseLimiterMW, webhookLimiterMW func(http.Handler) http.Handler
+	if cfg.MercadoPagoAccessToken != "" && cfg.MercadoPagoWebhookSecret != "" {
+		mpClient := payment.NewMercadoPagoClient(
+			cfg.MercadoPagoAccessToken,
+			cfg.MercadoPagoBaseURL,
+			cfg.MercadoPagoWebhookSecret,
+			"",
+		)
+		paymentRepo := payment.NewPostgresRepository(pool)
+		paymentSvc := payment.NewService(paymentRepo, txRunner, mpClient, giftFinderAdapter{repo: giftRepo}, userRepo)
+		paymentHandler = payment.NewHandler(paymentSvc, mpClient)
+
+		purchaseLimiter := middleware.NewRateLimiter(rate.Every(12*time.Second), 5)
+		webhookLimiter := middleware.NewRateLimiter(rate.Limit(30), 60)
+		purchaseLimiterMW = purchaseLimiter.MiddlewareWithKey(func(r *http.Request) string {
+			if uid := middleware.UserIDFromContext(r.Context()); uid != 0 {
+				return fmt.Sprintf("user:%d", uid)
+			}
+			return middleware.IPKey(r)
+		})
+		webhookLimiterMW = webhookLimiter.Middleware()
+
+		slog.Info("mercado pago: enabled", "base_url", cfg.MercadoPagoBaseURL)
+	} else {
+		slog.Warn("mercado pago: disabled (set MERCADO_PAGO_ACCESS_TOKEN and MERCADO_PAGO_WEBHOOK_SECRET to enable)")
+	}
+
 	var whatsappSender auth.WhatsAppSender
 	if cfg.EvoAPIURL != "" && cfg.EvoAPIKey != "" {
 		whatsappSender = auth.NewEvoAPISender(cfg.EvoAPIURL, cfg.EvoAPIKey, cfg.EvoAPIInstance)
@@ -83,17 +115,21 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerRoutes(mux, routeDeps{
-		auth:   authHandler,
-		guest:  guestHandler,
-		gift:   giftHandler,
-		user:   userHandler,
-		jwt:    jwtSvc,
-		appEnv: cfg.AppEnv,
+		auth:            authHandler,
+		guest:           guestHandler,
+		gift:            giftHandler,
+		user:            userHandler,
+		payment:         paymentHandler,
+		jwt:             jwtSvc,
+		appEnv:          cfg.AppEnv,
+		purchaseLimiter: purchaseLimiterMW,
+		webhookLimiter:  webhookLimiterMW,
 	})
 
 	handler := middleware.Chain(mux,
 		middleware.Recovery,
 		middleware.Logger,
+		middleware.SecurityHeaders(cfg.AppEnv),
 		middleware.CORS(cfg.CORSOrigin),
 	)
 
@@ -133,4 +169,21 @@ type logSender struct{}
 func (s *logSender) SendMessage(phone, message string) error {
 	slog.Info("OTP (dev mode)", "phone", phone, "message", message)
 	return nil
+}
+
+type giftFinderAdapter struct {
+	repo *gift.PostgresRepository
+}
+
+func (a giftFinderAdapter) GetByID(ctx context.Context, id int64) (*payment.GiftSnapshot, error) {
+	g, err := a.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &payment.GiftSnapshot{
+		ID:         g.ID,
+		Name:       g.Name,
+		PriceCents: g.PriceCents,
+		Status:     g.Status,
+	}, nil
 }

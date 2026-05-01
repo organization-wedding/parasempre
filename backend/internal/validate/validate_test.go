@@ -192,6 +192,62 @@ func TestStructReturnsAppError(t *testing.T) {
 	}
 }
 
+func TestIsValidCPF(t *testing.T) {
+	tests := []struct {
+		input string
+		valid bool
+	}{
+		{"39053344705", true},
+		{"390.533.447-05", true},
+		{"  390.533.447-05  ", true},
+		{"11144477735", true},
+		{"00000000000", false},
+		{"11111111111", false},
+		{"99999999999", false},
+		{"39053344700", false},
+		{"12345678901", false},
+		{"3905334470", false},
+		{"390533447055", false},
+		{"", false},
+		{"abc.def.ghi-jk", false},
+	}
+	for _, tt := range tests {
+		got := IsValidCPF(tt.input)
+		if got != tt.valid {
+			t.Errorf("IsValidCPF(%q) = %v, want %v", tt.input, got, tt.valid)
+		}
+	}
+}
+
+func TestStripCPF(t *testing.T) {
+	tests := map[string]string{
+		"390.533.447-05": "39053344705",
+		"39053344705":    "39053344705",
+		"  39053344705 ": "39053344705",
+		"abc 123 def":    "123",
+	}
+	for in, want := range tests {
+		if got := StripCPF(in); got != want {
+			t.Errorf("StripCPF(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestStructCPFTag(t *testing.T) {
+	type body struct {
+		Doc string `validate:"required,cpf"`
+	}
+	if err := Struct(body{Doc: "390.533.447-05"}); err != nil {
+		t.Errorf("expected valid CPF, got error: %v", err)
+	}
+	if err := Struct(body{Doc: "00000000000"}); err == nil {
+		t.Error("expected error for all-zero CPF")
+	}
+	if err := Struct(body{Doc: ""}); err == nil {
+		t.Error("expected error for empty CPF")
+	}
+}
+
 func TestBrPhoneRegexEdgeCases(t *testing.T) {
 	tests := []struct {
 		phone string

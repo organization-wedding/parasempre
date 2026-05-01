@@ -10,6 +10,40 @@ func TestValidate(t *testing.T) {
 	t.Run("Should return error for missing required fields", testValidateMissingRequiredFields)
 	t.Run("Should return error for invalid formats", testValidateInvalidFormats)
 	t.Run("Should return error for invalid EVO URL", testValidateEvoInvalidURL)
+	t.Run("Should reject sandbox MP credentials in production", testValidateMPSandboxInProd)
+	t.Run("Should reject production MP credentials in non-prod", testValidateMPProdInTest)
+}
+
+func testValidateMPSandboxInProd(t *testing.T) {
+	cfg := validConfig()
+	cfg.AppEnv = "production"
+	cfg.MercadoPagoAccessToken = "TEST-1234"
+	cfg.MercadoPagoPublicKey = "TEST-pub"
+	cfg.MercadoPagoWebhookSecret = "secret"
+
+	err := cfg.validate()
+	if err == nil {
+		t.Fatal("expected error for sandbox creds in production")
+	}
+	if !strings.Contains(err.Error(), "SANDBOX") {
+		t.Errorf("expected error to mention SANDBOX, got: %v", err)
+	}
+}
+
+func testValidateMPProdInTest(t *testing.T) {
+	cfg := validConfig()
+	cfg.AppEnv = "test"
+	cfg.MercadoPagoAccessToken = "APP_USR-1234"
+	cfg.MercadoPagoPublicKey = "APP_USR-pub"
+	cfg.MercadoPagoWebhookSecret = "secret"
+
+	err := cfg.validate()
+	if err == nil {
+		t.Fatal("expected error for prod creds in test env")
+	}
+	if !strings.Contains(err.Error(), "PRODUCTION") {
+		t.Errorf("expected error to mention PRODUCTION, got: %v", err)
+	}
 }
 
 func testValidateValidConfig(t *testing.T) {

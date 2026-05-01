@@ -7,16 +7,20 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/gift"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
+	"github.com/ferjunior7/parasempre/backend/internal/payment"
 	"github.com/ferjunior7/parasempre/backend/internal/user"
 )
 
 type routeDeps struct {
-	auth   *auth.Handler
-	guest  *guest.Handler
-	gift   *gift.Handler
-	user   *user.Handler
-	jwt    *auth.JWTService
-	appEnv string
+	auth            *auth.Handler
+	guest           *guest.Handler
+	gift            *gift.Handler
+	user            *user.Handler
+	payment         *payment.Handler
+	jwt             *auth.JWTService
+	appEnv          string
+	purchaseLimiter func(http.Handler) http.Handler
+	webhookLimiter  func(http.Handler) http.Handler
 }
 
 type routeGroup struct {
@@ -73,6 +77,22 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	giftsAdmin.handle("POST /api/gifts/import/preview", d.gift.HandlePreviewImport)
 	giftsAdmin.handle("POST /api/gifts/import/commit", d.gift.HandleCommitImport)
 	giftsAdmin.handle("POST /api/gifts/scrape-preview", d.gift.HandleScrapePreview)
+
+	if d.payment != nil {
+		purchases := newGroup(mux, authMW, d.purchaseLimiter)
+		purchases.handle("POST /api/gifts/{id}/purchase", d.payment.HandleCreatePurchase)
+
+		webhooks := newGroup(mux, d.webhookLimiter)
+		webhooks.handle("POST /api/webhooks/mercadopago", d.payment.HandleWebhook)
+
+		me := newGroup(mux, authMW)
+		me.handle("GET /api/me/purchases", d.payment.HandleListMyPurchases)
+		me.handle("GET /api/me/purchases/{id}", d.payment.HandleGetMyPurchase)
+
+		txAdmin := newGroup(mux, authMW, coupleMW)
+		txAdmin.handle("GET /api/transactions", d.payment.HandleListAll)
+		txAdmin.handle("GET /api/transactions/summary", d.payment.HandleSummary)
+	}
 
 	users := newGroup(mux, authMW)
 	users.handle("GET /api/users/me", d.user.HandleMe)

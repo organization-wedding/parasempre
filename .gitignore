@@ -2,6 +2,7 @@
 .DS_STORE
 .env
 .idea/
+/docs/
 
 /backend/.env
 /backend/bin/
@@ -9,3 +10,4 @@
 
 /frontend/node_modules/
 /frontend/dist/
+/frontend/src/_runtime-env.ts

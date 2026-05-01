@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import Gift from "lucide-react/dist/esm/icons/gift";
+import Package from "lucide-react/dist/esm/icons/package";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
@@ -34,22 +35,34 @@ export function GiftListPage({ page }: Props) {
       <Header />
 
       <main className="mx-auto max-w-[1280px] px-6 pt-24 pb-16">
-        <header className="mb-10 text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="h-px w-12 bg-gold/40" />
-            <span className="font-heading text-[0.68rem] font-semibold tracking-[0.3em] uppercase text-gold-dark">
-              Lista de Presentes
-            </span>
-            <div className="h-px w-12 bg-gold/40" />
+        <div className="relative mb-10">
+          <header className="text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="h-px w-12 bg-gold/40" />
+              <span className="font-heading text-[0.68rem] font-semibold tracking-[0.3em] uppercase text-gold-dark">
+                Lista de Presentes
+              </span>
+              <div className="h-px w-12 bg-gold/40" />
+            </div>
+            <h1 className="font-display text-[1.6rem] md:text-[2rem] font-bold text-dark mb-3">
+              Nossa Lista de Presentes
+            </h1>
+            <p className="text-[0.95rem] text-dark-warm/70 max-w-[560px] mx-auto leading-relaxed">
+              Escolha um presente para celebrar conosco este novo capítulo. Sua
+              presença e carinho são o maior presente que poderíamos receber.
+            </p>
+          </header>
+          <div className="mt-4 flex justify-end md:absolute md:top-0 md:right-0 md:mt-0">
+            <Link
+              to="/meus-presentes"
+              search={{ page: undefined }}
+              className="inline-flex items-center gap-2 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.5rem] px-4 border border-burgundy text-burgundy hover:bg-burgundy hover:text-gold-light transition-all duration-200 no-underline"
+            >
+              <Package size={14} />
+              Presentes que comprei
+            </Link>
           </div>
-          <h1 className="font-display text-[1.6rem] md:text-[2rem] font-bold text-dark mb-3">
-            Nossa Lista de Presentes
-          </h1>
-          <p className="text-[0.95rem] text-dark-warm/70 max-w-[560px] mx-auto leading-relaxed">
-            Escolha um presente para celebrar conosco este novo capítulo. Sua
-            presença e carinho são o maior presente que poderíamos receber.
-          </p>
-        </header>
+        </div>
 
         {error && (
           <div className="mb-6 flex items-center gap-3 rounded border border-[#c25550]/30 bg-[#fef2f1] px-4 py-3">

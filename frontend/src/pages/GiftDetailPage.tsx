@@ -25,6 +25,7 @@ export function GiftDetailPage({ giftId }: Props) {
       <main className="mx-auto max-w-[1100px] px-6 pt-24 pb-16">
         <Link
           to="/lista-presentes"
+          search={{ page: undefined }}
           className="inline-flex items-center gap-1.5 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase text-hint hover:text-burgundy transition-colors no-underline mb-6"
         >
           <ArrowLeft size={14} />
@@ -51,6 +52,7 @@ export function GiftDetailPage({ giftId }: Props) {
             </p>
             <Link
               to="/lista-presentes"
+              search={{ page: undefined }}
               className="inline-flex items-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-burgundy text-burgundy hover:bg-burgundy hover:text-gold-light transition-all duration-200 cursor-pointer no-underline"
             >
               <ArrowLeft size={14} />
