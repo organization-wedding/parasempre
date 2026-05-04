@@ -1,17 +1,15 @@
 import { serve } from "bun";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
-import { syncRuntimeEnv } from "../scripts/sync-runtime-env";
-
-syncRuntimeEnv(dirname(fileURLToPath(import.meta.url)));
 
 const port = parseInt(process.env.FRONTEND_PORT || "3000");
 const isProd = process.env.NODE_ENV === "production";
 
-// Production-only security headers. CSP is the main XSS defense (the JWT in
-// localStorage is the asset we're protecting). Allowlist covers Mercado Pago
-// SDK + iframe (Brick) and Google Fonts. Dev skips CSP because HMR uses
-// inline scripts/eval that the policy would block.
+if (!isProd) {
+  const { fileURLToPath } = await import("url");
+  const { dirname } = await import("path");
+  const { syncRuntimeEnv } = await import("../scripts/sync-runtime-env");
+  syncRuntimeEnv(dirname(fileURLToPath(import.meta.url)));
+}
+
 function securityHeaders(): Record<string, string> {
   const apiBase = process.env.API_BASE || "";
   const csp = [
