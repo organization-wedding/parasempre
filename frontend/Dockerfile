@@ -19,6 +19,8 @@ WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/index.ts ./src/index.ts
 
+ARG API_BASE=http://localhost:8080
 ENV NODE_ENV=production
+ENV API_BASE=${API_BASE}
 
 CMD ["bun", "src/index.ts"]
