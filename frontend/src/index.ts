@@ -14,7 +14,7 @@ function securityHeaders(): Record<string, string> {
   const apiBase = process.env.API_BASE || "";
   const csp = [
     "default-src 'self'",
-    "script-src 'self' https://sdk.mercadopago.com",
+    "script-src 'self' 'unsafe-eval' https://sdk.mercadopago.com",
     "script-src-elem 'self' https://sdk.mercadopago.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
