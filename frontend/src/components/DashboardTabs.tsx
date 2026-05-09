@@ -1,11 +1,12 @@
 import { Link } from "@tanstack/react-router";
 
-type Tab = "convidados" | "presentes" | "pagamentos";
+type Tab = "convidados" | "presentes" | "pagamentos" | "recados";
 
 const tabs: { id: Tab; label: string; to: string }[] = [
   { id: "convidados", label: "Convidados", to: "/dashboard" },
   { id: "presentes", label: "Presentes", to: "/dashboard/presentes" },
   { id: "pagamentos", label: "Pagamentos", to: "/dashboard/pagamentos" },
+  { id: "recados", label: "Recados", to: "/dashboard/recados" },
 ];
 
 export function DashboardTabs({ active }: { active: Tab }) {

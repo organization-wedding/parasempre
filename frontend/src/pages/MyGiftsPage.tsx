@@ -8,7 +8,6 @@ import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
 import Clock from "lucide-react/dist/esm/icons/clock";
 import XCircle from "lucide-react/dist/esm/icons/x-circle";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import { Header } from "../components/Header";
 import { TransactionMessages } from "../components/TransactionMessages";
 import { useMyPurchasesQuery, useMyPurchaseQuery } from "../lib/transaction-queries";
@@ -34,16 +33,10 @@ interface Props {
 
 export function MyGiftsPage({ page }: Props) {
   const { data, isLoading, error } = useMyPurchasesQuery({ page, limit: PAGE_SIZE });
-  const [messageToast, setMessageToast] = useState(false);
 
   const transactions = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  function showMessageComingSoon() {
-    setMessageToast(true);
-    setTimeout(() => setMessageToast(false), 3000);
-  }
 
   return (
     <div className="min-h-dvh bg-parchment">
@@ -61,15 +54,10 @@ export function MyGiftsPage({ page }: Props) {
             Presentes que comprei
           </h1>
           <p className="text-[0.95rem] text-dark-warm/70 max-w-[480px] mx-auto leading-relaxed">
-            Acompanhe o status dos seus presentes e veja as confirmações de pagamento.
+            Acompanhe o status dos seus presentes, deixe um recado para os noivos e veja
+            as confirmações de pagamento.
           </p>
         </header>
-
-        {messageToast && (
-          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-dark text-gold-light px-5 py-3 shadow-xl text-[0.82rem] font-heading tracking-wide">
-            Em breve: funcionalidade de recados será lançada em breve!
-          </div>
-        )}
 
         {error && (
           <div className="mb-6 flex items-center gap-3 rounded border border-[#c25550]/30 bg-[#fef2f1] px-4 py-3">
@@ -106,11 +94,7 @@ export function MyGiftsPage({ page }: Props) {
           <>
             <div className="flex flex-col gap-4">
               {transactions.map((tx) => (
-                <TransactionCard
-                  key={tx.id}
-                  tx={tx}
-                  onMessageClick={showMessageComingSoon}
-                />
+                <TransactionCard key={tx.id} tx={tx} />
               ))}
             </div>
 
@@ -144,13 +128,7 @@ export function MyGiftsPage({ page }: Props) {
   );
 }
 
-function TransactionCard({
-  tx,
-  onMessageClick,
-}: {
-  tx: PublicTransaction;
-  onMessageClick: () => void;
-}) {
+function TransactionCard({ tx }: { tx: PublicTransaction }) {
   const [showQR, setShowQR] = useState(false);
   const { data: detail, isLoading: qrLoading } = useMyPurchaseQuery(tx.id, showQR);
 
@@ -220,15 +198,6 @@ function TransactionCard({
             Tentar novamente
           </Link>
         )}
-
-        <button
-          type="button"
-          onClick={onMessageClick}
-          className="inline-flex items-center gap-1.5 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.45rem] px-3 border border-gold-muted/60 text-hint hover:border-burgundy hover:text-burgundy transition-all duration-200 cursor-pointer"
-        >
-          <MessageSquare size={13} />
-          Deixar recado
-        </button>
       </div>
 
       {showQR && (
@@ -270,7 +239,7 @@ function TransactionCard({
         </div>
       )}
 
-      <TransactionMessages transactionId={tx.id} />
+      <TransactionMessages transactionId={tx.id} status={tx.status} />
     </div>
   );
 }

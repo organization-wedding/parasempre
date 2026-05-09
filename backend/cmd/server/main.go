@@ -17,6 +17,7 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/config"
 	"github.com/ferjunior7/parasempre/backend/internal/database"
 	"github.com/ferjunior7/parasempre/backend/internal/gift"
+	"github.com/ferjunior7/parasempre/backend/internal/giftmessage"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 	"github.com/ferjunior7/parasempre/backend/internal/payment"
@@ -45,6 +46,8 @@ func main() {
 	giftRepo := gift.NewPostgresRepository(pool)
 	userRepo := user.NewPostgresRepository(pool)
 	otpRepo := auth.NewPostgresOTPRepository(pool)
+	paymentRepo := payment.NewPostgresRepository(pool)
+	giftMessageRepo := giftmessage.NewPostgresRepository(pool)
 	txRunner := database.NewTxRunner(pool)
 
 	jwtExpiry, err := time.ParseDuration(cfg.JWTExpiry)
@@ -78,7 +81,6 @@ func main() {
 			cfg.MercadoPagoWebhookSecret,
 			"",
 		)
-		paymentRepo := payment.NewPostgresRepository(pool)
 		paymentSvc := payment.NewService(paymentRepo, txRunner, mpClient, giftFinderAdapter{repo: giftRepo}, userRepo)
 		paymentHandler = payment.NewHandler(paymentSvc, mpClient)
 
@@ -95,6 +97,30 @@ func main() {
 		slog.Info("mercado pago: enabled", "base_url", cfg.MercadoPagoBaseURL)
 	} else {
 		slog.Warn("mercado pago: disabled (set MERCADO_PAGO_ACCESS_TOKEN and MERCADO_PAGO_WEBHOOK_SECRET to enable)")
+	}
+
+	var giftMessageHandler *giftmessage.Handler
+	var messageLimiterMW func(http.Handler) http.Handler
+	{
+		var storage giftmessage.Storage
+		if cfg.SupabaseURL != "" && cfg.SupabaseServiceRoleKey != "" {
+			storage = giftmessage.NewSupabaseStorage(cfg.SupabaseURL, cfg.SupabaseStorageBucket, cfg.SupabaseServiceRoleKey)
+			slog.Info("supabase storage: enabled", "bucket", cfg.SupabaseStorageBucket)
+		} else {
+			slog.Warn("supabase storage: disabled (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable media uploads)")
+		}
+		ttl := time.Duration(cfg.GiftMessageSignedURLTTLSecs) * time.Second
+		txFinder := payment.NewMessageTxFinder(paymentRepo)
+		giftMessageSvc := giftmessage.NewService(giftMessageRepo, txFinder, storage, userRepo, ttl)
+		giftMessageHandler = giftmessage.NewHandler(giftMessageSvc)
+
+		messageLimiter := middleware.NewRateLimiter(rate.Every(12*time.Second), 5)
+		messageLimiterMW = messageLimiter.MiddlewareWithKey(func(r *http.Request) string {
+			if uid := middleware.UserIDFromContext(r.Context()); uid != 0 {
+				return fmt.Sprintf("user:%d", uid)
+			}
+			return middleware.IPKey(r)
+		})
 	}
 
 	var whatsappSender auth.WhatsAppSender
@@ -120,10 +146,12 @@ func main() {
 		gift:            giftHandler,
 		user:            userHandler,
 		payment:         paymentHandler,
+		giftMessage:     giftMessageHandler,
 		jwt:             jwtSvc,
 		appEnv:          cfg.AppEnv,
 		purchaseLimiter: purchaseLimiterMW,
 		webhookLimiter:  webhookLimiterMW,
+		messageLimiter:  messageLimiterMW,
 	})
 
 	handler := middleware.Chain(mux,
