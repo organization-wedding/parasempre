@@ -12,6 +12,60 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 )
 
+func TestFirecrawlClientScrapeProduct_Success_ExtractField(t *testing.T) {
+	var capturedBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &capturedBody)
+
+		_, _ = io.WriteString(w, `{
+			"success": true,
+			"data": {
+				"extract": {
+					"name": "1 AP. DE JANTAR/CHA 30PCS",
+					"price_brl": "R$506,98",
+					"description": "Coleção Brisa",
+					"image_url": "https://m.media-amazon.com/images/I/61WfjowoKRL.jpg"
+				}
+			}
+		}`)
+	}))
+	defer server.Close()
+
+	c := NewFirecrawlClient("k", server.URL)
+	got, err := c.ScrapeProduct(context.Background(), "https://www.amazon.com.br/dp/B0CFFQBY89")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Name != "1 AP. DE JANTAR/CHA 30PCS" {
+		t.Errorf("name: got %q", got.Name)
+	}
+	if got.PriceBRL != "R$506,98" {
+		t.Errorf("price: got %q", got.PriceBRL)
+	}
+	if got.ImageURL != "https://m.media-amazon.com/images/I/61WfjowoKRL.jpg" {
+		t.Errorf("image_url: got %q", got.ImageURL)
+	}
+
+	formats, _ := capturedBody["formats"].([]any)
+	if len(formats) != 1 || formats[0] != "extract" {
+		t.Errorf("expected formats=[extract], got %v", formats)
+	}
+	extract, ok := capturedBody["extract"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected extract object in payload, got %T", capturedBody["extract"])
+	}
+	if _, hasSchema := extract["schema"]; !hasSchema {
+		t.Errorf("expected extract.schema in payload, got %v", extract)
+	}
+	if _, hasJSONOpts := capturedBody["jsonOptions"]; hasJSONOpts {
+		t.Errorf("legacy jsonOptions should not be in payload")
+	}
+	if proxy, _ := capturedBody["proxy"].(string); proxy != "auto" {
+		t.Errorf("expected proxy=auto to bypass anti-bot pages, got %q", proxy)
+	}
+}
+
 func TestFirecrawlClientScrapeProduct_Success_JSONField(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
