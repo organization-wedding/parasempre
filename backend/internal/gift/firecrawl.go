@@ -33,35 +33,43 @@ func NewFirecrawlClient(apiKey, baseURL string) *FirecrawlClient {
 	return &FirecrawlClient{
 		apiKey:  apiKey,
 		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: 25 * time.Second},
+		http:    &http.Client{Timeout: 40 * time.Second},
 	}
 }
-
-const firecrawlExtractionPrompt = "Extrair informações do produto principal desta página de e-commerce. " +
-	"Retornar nome do produto, preço em BRL como string (ex: '1234,56'), descrição curta e URL absoluta da imagem principal. " +
-	"Se algum campo não estiver disponível, retornar string vazia."
 
 var firecrawlExtractionSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"name":        map[string]any{"type": "string"},
-		"price_brl":   map[string]any{"type": "string"},
-		"description": map[string]any{"type": "string"},
-		"image_url":   map[string]any{"type": "string"},
+		"name": map[string]any{
+			"type":        "string",
+			"description": "Nome completo do produto principal da página",
+		},
+		"price_brl": map[string]any{
+			"type":        "string",
+			"description": "Preço atual do produto em reais (BRL), por exemplo 'R$1.234,56'",
+		},
+		"description": map[string]any{
+			"type":        "string",
+			"description": "Descrição curta do produto",
+		},
+		"image_url": map[string]any{
+			"type":        "string",
+			"description": "URL absoluta (https) da imagem principal do produto",
+		},
 	},
-	"required": []string{"name"},
+	"required": []string{"name", "price_brl"},
 }
 
 type firecrawlRequest struct {
-	URL         string             `json:"url"`
-	Formats     []string           `json:"formats"`
-	JSONOptions firecrawlJSONOpts  `json:"jsonOptions"`
-	Timeout     int                `json:"timeout,omitempty"`
+	URL     string                  `json:"url"`
+	Formats []string                `json:"formats"`
+	Extract firecrawlExtractOptions `json:"extract"`
+	Proxy   string                  `json:"proxy,omitempty"`
+	Timeout int                     `json:"timeout,omitempty"`
 }
 
-type firecrawlJSONOpts struct {
+type firecrawlExtractOptions struct {
 	Schema map[string]any `json:"schema"`
-	Prompt string         `json:"prompt"`
 }
 
 type firecrawlResponse struct {
@@ -71,6 +79,7 @@ type firecrawlResponse struct {
 }
 
 type firecrawlResponseData struct {
+	Extract       *firecrawlExtraction `json:"extract,omitempty"`
 	JSON          *firecrawlExtraction `json:"json,omitempty"`
 	LLMExtraction *firecrawlExtraction `json:"llm_extraction,omitempty"`
 	Warning       string               `json:"warning,omitempty"`
@@ -86,12 +95,12 @@ type firecrawlExtraction struct {
 func (c *FirecrawlClient) ScrapeProduct(ctx context.Context, url string) (*ScrapedProduct, error) {
 	payload := firecrawlRequest{
 		URL:     url,
-		Formats: []string{"json"},
-		JSONOptions: firecrawlJSONOpts{
+		Formats: []string{"extract"},
+		Extract: firecrawlExtractOptions{
 			Schema: firecrawlExtractionSchema,
-			Prompt: firecrawlExtractionPrompt,
 		},
-		Timeout: 20000,
+		Proxy:   "auto",
+		Timeout: 30000,
 	}
 
 	body, err := json.Marshal(payload)
@@ -137,7 +146,10 @@ func (c *FirecrawlClient) ScrapeProduct(ctx context.Context, url string) (*Scrap
 		return nil, apperror.Validation("Não conseguimos buscar dados desta URL.")
 	}
 
-	extraction := parsed.Data.JSON
+	extraction := parsed.Data.Extract
+	if extraction == nil {
+		extraction = parsed.Data.JSON
+	}
 	if extraction == nil {
 		extraction = parsed.Data.LLMExtraction
 	}
