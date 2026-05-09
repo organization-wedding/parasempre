@@ -5,6 +5,7 @@ import (
 
 	"github.com/ferjunior7/parasempre/backend/internal/auth"
 	"github.com/ferjunior7/parasempre/backend/internal/gift"
+	"github.com/ferjunior7/parasempre/backend/internal/giftmessage"
 	"github.com/ferjunior7/parasempre/backend/internal/guest"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 	"github.com/ferjunior7/parasempre/backend/internal/payment"
@@ -17,10 +18,12 @@ type routeDeps struct {
 	gift            *gift.Handler
 	user            *user.Handler
 	payment         *payment.Handler
+	giftMessage     *giftmessage.Handler
 	jwt             *auth.JWTService
 	appEnv          string
 	purchaseLimiter func(http.Handler) http.Handler
 	webhookLimiter  func(http.Handler) http.Handler
+	messageLimiter  func(http.Handler) http.Handler
 }
 
 type routeGroup struct {
@@ -92,6 +95,21 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		txAdmin := newGroup(mux, authMW, coupleMW)
 		txAdmin.handle("GET /api/transactions", d.payment.HandleListAll)
 		txAdmin.handle("GET /api/transactions/summary", d.payment.HandleSummary)
+	}
+
+	if d.giftMessage != nil {
+		messagesPublic := newGroup(mux)
+		messagesPublic.handle("GET /api/gifts/{id}/messages", d.giftMessage.HandleListByGift)
+
+		messagesAuth := newGroup(mux, authMW, d.messageLimiter)
+		messagesAuth.handle("POST /api/transactions/{id}/message", d.giftMessage.HandleCreate)
+
+		messagesGet := newGroup(mux, authMW)
+		messagesGet.handle("GET /api/transactions/{id}/message", d.giftMessage.HandleGetMine)
+
+		messagesAdmin := newGroup(mux, authMW, coupleMW)
+		messagesAdmin.handle("GET /api/admin/gift-messages", d.giftMessage.HandleAdminList)
+		messagesAdmin.handle("DELETE /api/admin/gift-messages/{id}", d.giftMessage.HandleAdminDelete)
 	}
 
 	users := newGroup(mux, authMW)

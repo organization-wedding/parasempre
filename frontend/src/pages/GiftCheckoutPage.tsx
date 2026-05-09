@@ -4,17 +4,20 @@ import Gift from "lucide-react/dist/esm/icons/gift";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Package from "lucide-react/dist/esm/icons/package";
 import { Header } from "../components/Header";
 import { PaymentBrick } from "../components/PaymentBrick";
+import { GiftMessageForm } from "../components/GiftMessageForm";
+import { GiftMessageView } from "../components/GiftMessageView";
 import { useGiftQuery } from "../lib/gift-queries";
 import { useCreatePurchaseMutation } from "../lib/payment-queries";
+import { useUserMeQuery } from "../lib/user-queries";
 import { isNotFoundError } from "../lib/api";
 import { formatBRL } from "../lib/format";
 import { MERCADO_PAGO_PUBLIC_KEY } from "../config";
 import type { PaymentBrickFormData } from "../lib/mercado-pago";
 import type { PurchaseResponse } from "../schemas/payment";
+import type { PublicMessage } from "../schemas/giftMessage";
 
 interface Props {
   giftId: number;
@@ -156,45 +159,13 @@ export function GiftCheckoutPage({ giftId }: Props) {
   );
 }
 
-function PostPurchaseCTAs({ onMessageClick }: { onMessageClick: () => void }) {
-  return (
-    <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
-      <button
-        type="button"
-        onClick={onMessageClick}
-        className="inline-flex items-center justify-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-gold-muted/60 text-hint cursor-pointer transition-all duration-200 hover:border-burgundy hover:text-burgundy"
-      >
-        <MessageSquare size={14} />
-        Deixar mensagem para os noivos
-      </button>
-      <Link
-        to="/meus-presentes"
-        search={{ page: undefined }}
-        className="inline-flex items-center justify-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep transition-all duration-200 no-underline"
-      >
-        <Package size={14} />
-        Ver meus presentes
-      </Link>
-    </div>
-  );
-}
-
 function CheckoutResult({ outcome, giftName }: { outcome: CheckoutOutcome; giftName: string }) {
-  const [messageToast, setMessageToast] = useState(false);
-
-  function showMessageComingSoon() {
-    setMessageToast(true);
-    setTimeout(() => setMessageToast(false), 3000);
-  }
+  const { data: userMe } = useUserMeQuery();
+  const defaultAuthor = userMe?.role && userMe.role !== "guest" ? "" : userMe?.role ?? "";
 
   if (outcome.kind === "approved") {
     return (
       <div className="flex flex-col items-center text-center py-10">
-        {messageToast && (
-          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-dark text-gold-light px-5 py-3 shadow-xl text-[0.82rem] font-heading tracking-wide">
-            Em breve: funcionalidade de mensagens será lançada em breve!
-          </div>
-        )}
         <CheckCircle2 size={56} className="text-[#3a7a3a] mb-4" />
         <h2 className="font-display text-[1.5rem] font-bold text-dark mb-2">
           Pagamento aprovado!
@@ -204,7 +175,20 @@ function CheckoutResult({ outcome, giftName }: { outcome: CheckoutOutcome; giftN
           <strong className="text-burgundy">{giftName}</strong>. Em breve os noivos receberão
           a notificação.
         </p>
-        <PostPurchaseCTAs onMessageClick={showMessageComingSoon} />
+        <div className="w-full max-w-[520px] mt-8">
+          <PostPurchaseMessageSection
+            transactionId={outcome.resp.transaction_id}
+            defaultAuthorName={defaultAuthor}
+          />
+        </div>
+        <Link
+          to="/meus-presentes"
+          search={{ page: undefined }}
+          className="mt-6 inline-flex items-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep transition-all duration-200 no-underline"
+        >
+          <Package size={14} />
+          Ver meus presentes
+        </Link>
         <Link
           to="/lista-presentes"
           search={{ page: undefined }}
@@ -221,14 +205,7 @@ function CheckoutResult({ outcome, giftName }: { outcome: CheckoutOutcome; giftN
     const pix = outcome.resp.pix;
     return (
       <div className="flex flex-col items-center text-center py-6">
-        {messageToast && (
-          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-dark text-gold-light px-5 py-3 shadow-xl text-[0.82rem] font-heading tracking-wide">
-            Em breve: funcionalidade de mensagens será lançada em breve!
-          </div>
-        )}
-        <h2 className="font-display text-[1.4rem] font-bold text-dark mb-2">
-          PIX gerado
-        </h2>
+        <h2 className="font-display text-[1.4rem] font-bold text-dark mb-2">PIX gerado</h2>
         <p className="text-[0.9rem] text-dark-warm/80 max-w-[480px] mb-6">
           Aponte a câmera do seu app de banco no QR Code abaixo, ou copie o código PIX.
           O pagamento expira em 30 minutos.
@@ -254,36 +231,85 @@ function CheckoutResult({ outcome, giftName }: { outcome: CheckoutOutcome; giftN
             />
           </div>
         )}
-        <p className="text-[0.75rem] text-hint mt-4 mb-2">
-          Quando o pagamento for confirmado, os noivos receberão a notificação automaticamente.
+        <p className="text-[0.75rem] text-hint mt-4 mb-6 max-w-[480px]">
+          Quando o pagamento for confirmado, você poderá deixar uma mensagem para os noivos
+          em <Link to="/meus-presentes" search={{ page: undefined }} className="text-burgundy hover:underline">Meus presentes</Link>.
         </p>
-        <PostPurchaseCTAs onMessageClick={showMessageComingSoon} />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col items-center text-center py-10">
-      {messageToast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-dark text-gold-light px-5 py-3 shadow-xl text-[0.82rem] font-heading tracking-wide">
-          Em breve: funcionalidade de mensagens será lançada em breve!
-        </div>
-      )}
       <h2 className="font-display text-[1.4rem] font-bold text-dark mb-2">
         Estamos processando
       </h2>
       <p className="text-[0.95rem] text-dark-warm/80 max-w-[420px]">
         O pagamento está em análise. Você receberá uma confirmação assim que ele for aprovado.
       </p>
-      <PostPurchaseCTAs onMessageClick={showMessageComingSoon} />
+      <p className="text-[0.78rem] text-hint mt-3 max-w-[420px]">
+        Você poderá deixar uma mensagem para os noivos em{" "}
+        <Link to="/meus-presentes" search={{ page: undefined }} className="text-burgundy hover:underline">
+          Meus presentes
+        </Link>{" "}
+        assim que o pagamento for aprovado.
+      </p>
       <Link
         to="/lista-presentes"
         search={{ page: undefined }}
-        className="mt-3 inline-flex items-center gap-1.5 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase text-hint hover:text-burgundy transition-colors no-underline"
+        className="mt-6 inline-flex items-center gap-1.5 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase text-hint hover:text-burgundy transition-colors no-underline"
       >
         <ArrowLeft size={13} />
         Voltar à lista
       </Link>
+    </div>
+  );
+}
+
+function PostPurchaseMessageSection({
+  transactionId,
+  defaultAuthorName,
+}: {
+  transactionId: number;
+  defaultAuthorName?: string;
+}) {
+  const [created, setCreated] = useState<PublicMessage | null>(null);
+  const [opened, setOpened] = useState(true);
+
+  if (created) {
+    return (
+      <div className="border border-gold-muted/40 bg-ivory p-5 text-left">
+        <p className="font-heading text-[0.65rem] font-semibold tracking-[0.12em] uppercase text-hint mb-3">
+          Recado enviado!
+        </p>
+        <GiftMessageView message={created} showAuthor={false} />
+      </div>
+    );
+  }
+
+  if (!opened) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpened(true)}
+        className="inline-flex items-center justify-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-gold-muted/60 text-hint hover:border-burgundy hover:text-burgundy transition-all duration-200 cursor-pointer"
+      >
+        Deixar mensagem para os noivos
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-gold-muted/40 bg-ivory p-5 text-left">
+      <p className="font-heading text-[0.65rem] font-semibold tracking-[0.12em] uppercase text-hint mb-3">
+        Deixe um recado (opcional)
+      </p>
+      <GiftMessageForm
+        transactionId={transactionId}
+        defaultAuthorName={defaultAuthorName}
+        onCreated={(m) => setCreated(m)}
+        onCancel={() => setOpened(false)}
+      />
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { GiftFormPage } from "./pages/GiftFormPage";
 import { GiftImportPage } from "./pages/GiftImportPage";
 import { MyGiftsPage } from "./pages/MyGiftsPage";
 import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
+import { AdminGiftMessagesPage } from "./pages/AdminGiftMessagesPage";
 import { isAuthenticated } from "./lib/auth";
 import "./index.css";
 
@@ -154,6 +155,13 @@ const adminTransactionsRoute = createRoute({
   beforeLoad: requireAuth,
 });
 
+const adminGiftMessagesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard/recados",
+  component: AdminGiftMessagesPage,
+  beforeLoad: requireAuth,
+});
+
 function GuestEditRoute() {
   const { guestId } = guestEditRoute.useParams();
   return <GuestFormPage guestId={Number(guestId)} />;
@@ -195,6 +203,7 @@ const routeTree = rootRoute.addChildren([
   giftAdminEditRoute,
   myGiftsRoute,
   adminTransactionsRoute,
+  adminGiftMessagesRoute,
 ]);
 
 export const router = createRouter({

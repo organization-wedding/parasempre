@@ -45,6 +45,14 @@ import {
   type PublicTransaction,
   type AdminSummary,
 } from "../schemas/payment";
+import {
+  publicMessageSchema,
+  pagedPublicMessagesSchema,
+  pagedAdminMessagesSchema,
+  type PublicMessage,
+  type PagedPublicMessages,
+  type PagedAdminMessages,
+} from "../schemas/giftMessage";
 
 function authHeaders(): Record<string, string> {
   const token = getToken();
@@ -300,6 +308,68 @@ export async function adminTransactionsSummary(): Promise<AdminSummary> {
     headers: authHeaders(),
   });
   return handleResponse(res, adminSummarySchema);
+}
+
+// ── Gift Messages ───────────────────────────────────────────
+
+export async function createGiftMessage(
+  transactionId: number,
+  formData: FormData,
+): Promise<PublicMessage> {
+  const res = await fetch(`${API_BASE}/api/transactions/${transactionId}/message`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+  return handleResponse(res, publicMessageSchema);
+}
+
+export async function getMyTransactionMessage(
+  transactionId: number,
+): Promise<PublicMessage | null> {
+  const res = await fetch(`${API_BASE}/api/transactions/${transactionId}/message`, {
+    headers: authHeaders(),
+  });
+  if (res.status === 404) return null;
+  return handleResponse(res, publicMessageSchema);
+}
+
+export async function listGiftMessages(
+  giftId: number,
+  params?: { page?: number; limit?: number },
+): Promise<PagedPublicMessages> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const url = query.toString()
+    ? `${API_BASE}/api/gifts/${giftId}/messages?${query.toString()}`
+    : `${API_BASE}/api/gifts/${giftId}/messages`;
+  const res = await fetch(url);
+  return handleResponse(res, pagedPublicMessagesSchema);
+}
+
+export async function listAdminGiftMessages(params?: {
+  page?: number;
+  limit?: number;
+}): Promise<PagedAdminMessages> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const url = query.toString()
+    ? `${API_BASE}/api/admin/gift-messages?${query.toString()}`
+    : `${API_BASE}/api/admin/gift-messages`;
+  const res = await fetch(url, { headers: authHeaders() });
+  return handleResponse(res, pagedAdminMessagesSchema);
+}
+
+export async function deleteGiftMessage(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/gift-messages/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(await parseApiError(res));
+  }
 }
 
 // ── Auth / OTP ──────────────────────────────────────────────

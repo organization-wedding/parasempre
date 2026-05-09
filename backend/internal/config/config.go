@@ -40,6 +40,11 @@ const (
 	envMPWebhookSecret = "MERCADO_PAGO_WEBHOOK_SECRET"
 	envMPBaseURL       = "MERCADO_PAGO_BASE_URL"
 
+	envSupabaseURL             = "SUPABASE_URL"
+	envSupabaseServiceRoleKey  = "SUPABASE_SERVICE_ROLE_KEY"
+	envSupabaseStorageBucket   = "SUPABASE_STORAGE_BUCKET"
+	envGiftMessageSignedURLTTL = "GIFT_MESSAGE_SIGNED_URL_TTL_SECONDS"
+
 	envDBMaxConns    = "DB_MAX_CONNS"
 	envDBMinConns    = "DB_MIN_CONNS"
 	envDBMaxConnLife = "DB_MAX_CONN_LIFETIME"
@@ -58,6 +63,9 @@ const (
 
 	defaultFirecrawlURL = "https://api.firecrawl.dev"
 	defaultMPBaseURL    = "https://api.mercadopago.com"
+
+	defaultSupabaseStorageBucket   = "gift-messages"
+	defaultGiftMessageSignedURLTTL = "900"
 )
 
 type DBConfig struct {
@@ -99,6 +107,11 @@ type Config struct {
 	MercadoPagoPublicKey     string
 	MercadoPagoWebhookSecret string
 	MercadoPagoBaseURL       string
+
+	SupabaseURL                 string
+	SupabaseServiceRoleKey      string
+	SupabaseStorageBucket       string
+	GiftMessageSignedURLTTLSecs int
 }
 
 type envField struct {
@@ -160,7 +173,17 @@ func Load() (Config, error) {
 		MercadoPagoPublicKey:     getEnv(envMPPublicKey),
 		MercadoPagoWebhookSecret: getEnv(envMPWebhookSecret),
 		MercadoPagoBaseURL:       getEnvOrDefault(envMPBaseURL, defaultMPBaseURL),
+
+		SupabaseURL:            getEnv(envSupabaseURL),
+		SupabaseServiceRoleKey: getEnv(envSupabaseServiceRoleKey),
+		SupabaseStorageBucket:  getEnvOrDefault(envSupabaseStorageBucket, defaultSupabaseStorageBucket),
 	}
+
+	ttlSecs, err := strconv.Atoi(getEnvOrDefault(envGiftMessageSignedURLTTL, defaultGiftMessageSignedURLTTL))
+	if err != nil || ttlSecs <= 0 {
+		return Config{}, fmt.Errorf("invalid %s: must be a positive integer (seconds)", envGiftMessageSignedURLTTL)
+	}
+	cfg.GiftMessageSignedURLTTLSecs = ttlSecs
 
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -202,6 +225,10 @@ func (c Config) validate() error {
 	}
 	if err := validateEvoConfig(c.EvoAPIURL); err != nil {
 		issues = append(issues, err.Error())
+	}
+
+	if (c.SupabaseURL != "") != (c.SupabaseServiceRoleKey != "") {
+		issues = append(issues, fmt.Sprintf("%s e %s precisam ser definidas juntas", envSupabaseURL, envSupabaseServiceRoleKey))
 	}
 
 	if c.MercadoPagoAccessToken != "" {
