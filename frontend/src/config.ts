@@ -20,6 +20,7 @@ export const API_BASE: string = RUNTIME_ENV.API_BASE || "http://localhost:8080";
 export const MERCADO_PAGO_PUBLIC_KEY: string = RUNTIME_ENV.MERCADO_PAGO_PUBLIC_KEY ?? "";
 
 export const IS_DEV = API_BASE.includes("localhost") || API_BASE.includes("teste");
+export const IS_LOCAL_DEV = API_BASE.includes("localhost");
 
 export const CONTACT = {
   phone: "(43) 99607-0599",

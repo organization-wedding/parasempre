@@ -132,6 +132,16 @@ func main() {
 	otpSvc := auth.NewOTPService(otpRepo, whatsappSender)
 	authHandler := auth.NewHandler(otpSvc, jwtSvc, userSvc, userSvc, userSvc)
 
+	var devLoginHandler *auth.DevLoginHandler
+	if cfg.AppEnv != "production" && cfg.EnableTestLogin {
+		phone := cfg.TestLoginPhone
+		if phone == "" {
+			phone = cfg.Couple.Groom.Phone
+		}
+		devLoginHandler = auth.NewDevLoginHandler(jwtSvc, userSvc, userSvc, phone)
+		slog.Warn("dev-login: ENABLED — never set ENABLE_TEST_LOGIN=true in production", "phone", phone)
+	}
+
 	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer seedCancel()
 	userSvc.SeedCouple(seedCtx,
@@ -142,6 +152,7 @@ func main() {
 	mux := http.NewServeMux()
 	registerRoutes(mux, routeDeps{
 		auth:            authHandler,
+		devLogin:        devLoginHandler,
 		guest:           guestHandler,
 		gift:            giftHandler,
 		user:            userHandler,

@@ -14,6 +14,7 @@ import (
 
 type routeDeps struct {
 	auth            *auth.Handler
+	devLogin        *auth.DevLoginHandler
 	guest           *guest.Handler
 	gift            *gift.Handler
 	user            *user.Handler
@@ -50,6 +51,11 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	otp := newGroup(mux)
 	otp.handle("POST /api/auth/otp/send", d.auth.HandleSendOTP)
 	otp.handle("POST /api/auth/otp/verify", d.auth.HandleVerifyOTP)
+
+	if d.devLogin != nil {
+		dev := newGroup(mux, middleware.DevOnly(d.appEnv))
+		dev.handle("POST /api/auth/dev-login", d.devLogin.Handle)
+	}
 
 	guests := newGroup(mux, authMW)
 	guests.handle("GET /api/guests", d.guest.HandleList)
