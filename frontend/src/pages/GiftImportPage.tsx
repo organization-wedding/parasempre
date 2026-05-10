@@ -8,13 +8,10 @@ import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import X from "lucide-react/dist/esm/icons/x";
 import Gift from "lucide-react/dist/esm/icons/gift";
-import { Header } from "../components/Header";
 import {
   useCommitGiftImportMutation,
   usePreviewGiftImportMutation,
 } from "../lib/gift-queries";
-import { useUserMeQuery } from "../lib/user-queries";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import { formatBRL } from "../lib/format";
 import type {
   CSVPreview,
@@ -54,8 +51,6 @@ function rowToInput(row: CSVPreviewRow): CreateGiftInput {
 
 export function GiftImportPage() {
   const navigate = useNavigate();
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
 
   const previewMutation = usePreviewGiftImportMutation();
   const commitMutation = useCommitGiftImportMutation();
@@ -150,17 +145,10 @@ export function GiftImportPage() {
   );
   const selectedCount = selectedLines.size;
 
-  if (!roleLoading && userMe && !isAuthorized) {
-    return <UnauthorizedPage />;
-  }
-
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-
-      <main className="mx-auto max-w-[1100px] px-6 pt-24 pb-16">
-        <Link
-          to="/dashboard/presentes"
+    <div className="mx-auto max-w-[1100px]">
+      <Link
+          to="/admin/presentes"
           className="inline-flex items-center gap-1.5 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase text-hint no-underline mb-6 transition-colors hover:text-burgundy"
         >
           <ArrowLeft size={15} />
@@ -188,7 +176,7 @@ export function GiftImportPage() {
         {commitResult ? (
           <ResultCard
             result={commitResult}
-            onDone={() => void navigate({ to: "/dashboard/presentes" })}
+            onDone={() => void navigate({ to: "/admin/presentes" })}
             onImportAnother={resetImport}
           />
         ) : preview ? (
@@ -231,7 +219,6 @@ export function GiftImportPage() {
             loading={previewMutation.isPending}
           />
         )}
-      </main>
     </div>
   );
 }

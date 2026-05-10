@@ -9,14 +9,10 @@ import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import X from "lucide-react/dist/esm/icons/x";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
-import { Header } from "../components/Header";
-import { DashboardTabs } from "../components/DashboardTabs";
 import {
   useDeleteGiftMutation,
   useGiftsQuery,
 } from "../lib/gift-queries";
-import { useUserMeQuery } from "../lib/user-queries";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import { formatBRL } from "../lib/format";
 import type { PublicGift } from "../types/gift";
 
@@ -33,9 +29,6 @@ export function GiftAdminPage() {
   const [deleteTarget, setDeleteTarget] = useState<PublicGift | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
 
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
-
   const effectiveError = uiError ?? (error instanceof Error ? error.message : null);
 
   async function handleDelete() {
@@ -49,23 +42,8 @@ export function GiftAdminPage() {
     }
   }
 
-  if (!roleLoading && userMe && !isAuthorized) {
-    return <UnauthorizedPage />;
-  }
-
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-
-      <main className="mx-auto max-w-[1280px] px-6 pt-24 pb-16">
-        {roleLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-hint">
-            <div className="w-8 h-8 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin mb-4" />
-            <span className="text-[0.85rem]">Verificando permissões...</span>
-          </div>
-        ) : (
-          <>
-            <DashboardTabs active="presentes" />
+    <>
             <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">
@@ -79,14 +57,14 @@ export function GiftAdminPage() {
 
               <div className="flex gap-2.5 shrink-0">
                 <Link
-                  to="/dashboard/presentes/importar"
+                  to="/admin/presentes/importar"
                   className="inline-flex items-center gap-[0.4rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-transparent text-burgundy border border-burgundy hover:bg-burgundy hover:text-gold-light"
                 >
                   <Upload size={14} />
                   Importar CSV
                 </Link>
                 <Link
-                  to="/dashboard/presentes/novo"
+                  to="/admin/presentes/novo"
                   className="inline-flex items-center gap-[0.4rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px"
                 >
                   <Plus size={14} />
@@ -128,7 +106,7 @@ export function GiftAdminPage() {
                   Comece adicionando o primeiro presente da sua lista.
                 </p>
                 <Link
-                  to="/dashboard/presentes/novo"
+                  to="/admin/presentes/novo"
                   className="inline-flex items-center justify-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 bg-burgundy text-gold-light border border-burgundy transition-all duration-300 hover:bg-burgundy-deep no-underline"
                 >
                   <Plus size={14} />
@@ -188,7 +166,7 @@ export function GiftAdminPage() {
                           <td className="py-3 px-3">
                             <div className="flex gap-1 justify-end">
                               <Link
-                                to="/dashboard/presentes/$giftId"
+                                to="/admin/presentes/$giftId"
                                 params={{ giftId: String(gift.id) }}
                                 className="p-1.5 text-dark-warm/40 hover:text-burgundy transition-colors"
                                 title="Editar"
@@ -238,9 +216,6 @@ export function GiftAdminPage() {
                 )}
               </>
             )}
-          </>
-        )}
-      </main>
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -276,6 +251,6 @@ export function GiftAdminPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

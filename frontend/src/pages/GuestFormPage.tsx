@@ -7,7 +7,6 @@ import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import Save from "lucide-react/dist/esm/icons/save";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import X from "lucide-react/dist/esm/icons/x";
-import { Header } from "../components/Header";
 import {
   useCreateGuestMutation,
   useGuestQuery,
@@ -15,7 +14,6 @@ import {
   useUpdateGuestMutation,
 } from "../lib/guest-queries";
 import { useUserMeQuery } from "../lib/user-queries";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import type { Guest } from "../types/guest";
 
 interface Props {
@@ -53,8 +51,7 @@ export function GuestFormPage({ guestId }: Props) {
   const guestQuery = useGuestQuery(guestId ?? 0, isEdit);
   const guestsResponse = useGuestsQuery({ limit: 1000 });
   const allGuests = guestsResponse.data?.data ?? [];
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
+  const { data: userMe } = useUserMeQuery();
 
   // Family group autocomplete state
   const [familySearch, setFamilySearch] = useState("");
@@ -185,17 +182,12 @@ export function GuestFormPage({ guestId }: Props) {
         });
       }
 
-      await navigate({ to: "/dashboard" });
+      await navigate({ to: "/admin" });
     } catch (submitError) {
       setError("root", {
         message: submitError instanceof Error ? submitError.message : "Erro ao salvar",
       });
     }
-  }
-
-  // Unauthorized guard — user is authenticated (router guard), check role
-  if (!roleLoading && userMe && !isAuthorized) {
-    return <UnauthorizedPage />;
   }
 
   const inputClass =
@@ -209,12 +201,9 @@ export function GuestFormPage({ guestId }: Props) {
   const errorMessage = errors.root?.message ?? mutationError;
 
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-
-      <main className="mx-auto max-w-[640px] px-6 pt-24 pb-16">
-        <Link
-          to="/dashboard"
+    <div className="mx-auto max-w-[640px]">
+      <Link
+          to="/admin"
           className="inline-flex items-center gap-1.5 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase text-hint no-underline mb-6 transition-colors hover:text-burgundy"
         >
           <ArrowLeft size={15} />
@@ -427,7 +416,7 @@ export function GuestFormPage({ guestId }: Props) {
 
             <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-4 border-t border-gold-muted/20">
               <Link
-                to="/dashboard"
+                to="/admin"
                 className="inline-flex items-center justify-center font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-gold-muted/50 text-hint bg-transparent transition-all duration-200 hover:border-burgundy hover:text-burgundy no-underline cursor-pointer"
               >
                 Cancelar
@@ -443,7 +432,6 @@ export function GuestFormPage({ guestId }: Props) {
             </div>
           </form>
         )}
-      </main>
     </div>
   );
 }

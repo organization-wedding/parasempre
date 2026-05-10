@@ -19,6 +19,7 @@ import { GiftImportPage } from "./pages/GiftImportPage";
 import { MyGiftsPage } from "./pages/MyGiftsPage";
 import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
 import { AdminGiftMessagesPage } from "./pages/AdminGiftMessagesPage";
+import { AdminLayout } from "./components/AdminLayout";
 import { isAuthenticated } from "./lib/auth";
 import "./index.css";
 
@@ -54,25 +55,84 @@ const loginRoute = createRoute({
   }),
 });
 
-const dashboardRoute = createRoute({
+const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard",
-  component: GuestListPage,
+  path: "/admin",
+  component: AdminLayout,
   beforeLoad: requireAuth,
+});
+
+const adminIndexRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "/",
+  component: GuestListPage,
 });
 
 const guestCreateRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/novo",
+  getParentRoute: () => adminRoute,
+  path: "novo",
   component: GuestFormPage,
-  beforeLoad: requireAuth,
 });
 
 const guestEditRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/$guestId",
+  getParentRoute: () => adminRoute,
+  path: "$guestId",
   component: GuestEditRoute,
-  beforeLoad: requireAuth,
+});
+
+const giftAdminRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes",
+  component: GiftAdminPage,
+});
+
+const giftAdminCreateRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes/novo",
+  component: GiftFormPage,
+});
+
+const giftAdminImportRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes/importar",
+  component: GiftImportPage,
+});
+
+const giftAdminEditRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes/$giftId",
+  component: GiftAdminEditRoute,
+});
+
+const adminTransactionsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "pagamentos",
+  component: AdminTransactionsPage,
+});
+
+const adminGiftMessagesRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "recados",
+  component: AdminGiftMessagesPage,
+});
+
+const dashboardLegacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard/$",
+  component: () => null,
+  beforeLoad: ({ params }) => {
+    const rest = (params as { _splat?: string })._splat ?? "";
+    throw redirect({ to: rest ? `/admin/${rest}` : "/admin" });
+  },
+});
+
+const dashboardLegacyRootRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard",
+  component: () => null,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin" });
+  },
 });
 
 const guestListRoute = createRoute({
@@ -109,34 +169,6 @@ function GiftCheckoutRoute() {
   return <GiftCheckoutPage giftId={Number(giftId)} />;
 }
 
-const giftAdminRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/presentes",
-  component: GiftAdminPage,
-  beforeLoad: requireAuth,
-});
-
-const giftAdminCreateRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/presentes/novo",
-  component: GiftFormPage,
-  beforeLoad: requireAuth,
-});
-
-const giftAdminImportRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/presentes/importar",
-  component: GiftImportPage,
-  beforeLoad: requireAuth,
-});
-
-const giftAdminEditRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/presentes/$giftId",
-  component: GiftAdminEditRoute,
-  beforeLoad: requireAuth,
-});
-
 const myGiftsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/meus-presentes",
@@ -146,20 +178,6 @@ const myGiftsRoute = createRoute({
     const n = Number(search.page);
     return { page: Number.isFinite(n) && n > 1 ? n : undefined };
   },
-});
-
-const adminTransactionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/pagamentos",
-  component: AdminTransactionsPage,
-  beforeLoad: requireAuth,
-});
-
-const adminGiftMessagesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/recados",
-  component: AdminGiftMessagesPage,
-  beforeLoad: requireAuth,
 });
 
 function GuestEditRoute() {
@@ -190,20 +208,24 @@ function MyGiftsRoute() {
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
-  dashboardRoute,
-  guestCreateRoute,
-  guestEditRoute,
+  adminRoute.addChildren([
+    adminIndexRoute,
+    guestCreateRoute,
+    guestEditRoute,
+    giftAdminRoute,
+    giftAdminCreateRoute,
+    giftAdminImportRoute,
+    giftAdminEditRoute,
+    adminTransactionsRoute,
+    adminGiftMessagesRoute,
+  ]),
+  dashboardLegacyRootRoute,
+  dashboardLegacyRoute,
   guestListRoute,
   giftListRoute,
   giftDetailRoute,
   giftPurchaseRoute,
-  giftAdminRoute,
-  giftAdminCreateRoute,
-  giftAdminImportRoute,
-  giftAdminEditRoute,
   myGiftsRoute,
-  adminTransactionsRoute,
-  adminGiftMessagesRoute,
 ]);
 
 export const router = createRouter({

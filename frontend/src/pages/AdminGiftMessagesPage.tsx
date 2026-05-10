@@ -4,27 +4,18 @@ import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
-import { Header } from "../components/Header";
-import { DashboardTabs } from "../components/DashboardTabs";
 import { GiftMessageView } from "../components/GiftMessageView";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import {
   useAdminGiftMessagesQuery,
   useDeleteGiftMessageMutation,
 } from "../lib/message-queries";
-import { useUserMeQuery } from "../lib/user-queries";
 import type { AdminMessage } from "../schemas/giftMessage";
 
 const PAGE_SIZE = 20;
 
 export function AdminGiftMessagesPage() {
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
-
   const [page, setPage] = useState(1);
-  const { data, isLoading, error } = useAdminGiftMessagesQuery(
-    isAuthorized ? { page, limit: PAGE_SIZE } : undefined,
-  );
+  const { data, isLoading, error } = useAdminGiftMessagesQuery({ page, limit: PAGE_SIZE });
   const deleteMutation = useDeleteGiftMessageMutation();
 
   const [deleteTarget, setDeleteTarget] = useState<AdminMessage | null>(null);
@@ -32,10 +23,6 @@ export function AdminGiftMessagesPage() {
   const messages = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  if (!roleLoading && userMe && !isAuthorized) {
-    return <UnauthorizedPage />;
-  }
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
@@ -48,11 +35,7 @@ export function AdminGiftMessagesPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-      <main className="mx-auto max-w-[960px] px-6 pt-24 pb-16">
-        <DashboardTabs active="recados" />
-
+    <div className="mx-auto max-w-[960px]">
         <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">
@@ -74,7 +57,7 @@ export function AdminGiftMessagesPage() {
           </div>
         )}
 
-        {isLoading || roleLoading ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-hint">
             <div className="w-8 h-8 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin mb-4" />
             <span className="text-[0.85rem]">Carregando recados...</span>
@@ -142,7 +125,6 @@ export function AdminGiftMessagesPage() {
             )}
           </div>
         )}
-      </main>
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

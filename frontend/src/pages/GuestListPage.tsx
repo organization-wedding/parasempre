@@ -14,16 +14,12 @@ import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
-import { Header } from "../components/Header";
-import { DashboardTabs } from "../components/DashboardTabs";
 import {
   useDeleteGuestMutation,
   useDeleteGuestsMutation,
   useGuestsQuery,
   useImportGuestsMutation,
 } from "../lib/guest-queries";
-import { useUserMeQuery } from "../lib/user-queries";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import type { Guest, ImportResult } from "../types/guest";
 
 const PAGE_SIZE = 20;
@@ -56,9 +52,6 @@ export function GuestListPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
-
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
 
   const effectiveError = uiError ?? (error instanceof Error ? error.message : null);
 
@@ -175,26 +168,11 @@ export function GuestListPage() {
     setImportOpen(true);
   }
 
-  if (!roleLoading && !isAuthorized) {
-    return <UnauthorizedPage />;
-  }
-
   const startRange = (page - 1) * PAGE_SIZE + 1;
   const endRange = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-
-      <main className="mx-auto max-w-[1280px] px-6 pt-24 pb-16">
-        {roleLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-hint">
-            <div className="w-8 h-8 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin mb-4" />
-            <span className="text-[0.85rem]">Verificando permissões...</span>
-          </div>
-        ) : (
-        <>
-        <DashboardTabs active="convidados" />
+    <>
         <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">Gerenciar Convidados</h1>
@@ -224,7 +202,7 @@ export function GuestListPage() {
               Importar
             </button>
             <Link
-              to="/dashboard/novo"
+              to="/admin/novo"
               className="inline-flex items-center gap-[0.4rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.1rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px"
             >
               <Plus size={14} />
@@ -356,7 +334,7 @@ export function GuestListPage() {
                 Importar Lista
               </button>
               <Link
-                to="/dashboard/novo"
+                to="/admin/novo"
                 className="inline-flex items-center justify-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 bg-burgundy text-gold-light border border-burgundy transition-all duration-300 hover:bg-burgundy-deep no-underline"
               >
                 <Plus size={14} />
@@ -472,7 +450,7 @@ export function GuestListPage() {
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-center gap-1">
                           <Link
-                            to="/dashboard/$guestId"
+                            to="/admin/$guestId"
                             params={{ guestId: String(guest.id) }}
                             className="p-1.5 text-dark-warm/40 hover:text-burgundy transition-colors"
                             title="Editar"
@@ -525,9 +503,6 @@ export function GuestListPage() {
             )}
           </>
         )}
-      </>
-      )}
-      </main>
 
       {deleteTarget && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -640,6 +615,6 @@ export function GuestListPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
