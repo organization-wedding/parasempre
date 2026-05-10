@@ -430,3 +430,11 @@ export async function verifyOtp(phone: string, code: string): Promise<TokenRespo
   }
   return res.json() as Promise<TokenResponse>;
 }
+
+export async function devLogin(): Promise<TokenResponse> {
+  const res = await fetch(`${API_BASE}/api/auth/dev-login`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`dev-login failed: ${res.status}`);
+  }
+  return res.json() as Promise<TokenResponse>;
+}
