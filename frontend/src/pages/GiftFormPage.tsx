@@ -8,15 +8,12 @@ import Save from "lucide-react/dist/esm/icons/save";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import X from "lucide-react/dist/esm/icons/x";
-import { Header } from "../components/Header";
 import {
   useCreateGiftMutation,
   useGiftQuery,
   useScrapeGiftURLMutation,
   useUpdateGiftMutation,
 } from "../lib/gift-queries";
-import { useUserMeQuery } from "../lib/user-queries";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import type { CreateGiftInput, UpdateGiftInput } from "../types/gift";
 
 interface Props {
@@ -63,8 +60,6 @@ export function GiftFormPage({ giftId }: Props) {
   const updateMutation = useUpdateGiftMutation();
   const scrapeMutation = useScrapeGiftURLMutation();
   const giftQuery = useGiftQuery(giftId ?? 0, isEdit);
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
 
   const [scrapeURL, setScrapeURL] = useState("");
   const [scrapeError, setScrapeError] = useState<string | null>(null);
@@ -126,7 +121,7 @@ export function GiftFormPage({ giftId }: Props) {
       } else {
         await createMutation.mutateAsync(payload as CreateGiftInput);
       }
-      await navigate({ to: "/dashboard/presentes" });
+      await navigate({ to: "/admin/presentes" });
     } catch (submitError) {
       setError("root", {
         message: submitError instanceof Error ? submitError.message : "Erro ao salvar",
@@ -155,10 +150,6 @@ export function GiftFormPage({ giftId }: Props) {
     }
   }
 
-  if (!roleLoading && userMe && !isAuthorized) {
-    return <UnauthorizedPage />;
-  }
-
   const inputClass =
     "w-full px-3.5 py-2.5 text-[0.88rem] border border-gold-muted/40 bg-ivory text-dark-warm placeholder:text-hint/40 outline-none focus:border-burgundy transition-colors";
   const labelClass =
@@ -168,12 +159,9 @@ export function GiftFormPage({ giftId }: Props) {
   const errorMessage = errors.root?.message ?? mutationError;
 
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-
-      <main className="mx-auto max-w-[640px] px-6 pt-24 pb-16">
-        <Link
-          to="/dashboard/presentes"
+    <div className="mx-auto max-w-[640px]">
+      <Link
+          to="/admin/presentes"
           className="inline-flex items-center gap-1.5 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase text-hint no-underline mb-6 transition-colors hover:text-burgundy"
         >
           <ArrowLeft size={15} />
@@ -339,7 +327,7 @@ export function GiftFormPage({ giftId }: Props) {
 
             <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-4 border-t border-gold-muted/20">
               <Link
-                to="/dashboard/presentes"
+                to="/admin/presentes"
                 className="inline-flex items-center justify-center font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-gold-muted/50 text-hint bg-transparent transition-all duration-200 hover:border-burgundy hover:text-burgundy no-underline cursor-pointer"
               >
                 Cancelar
@@ -355,7 +343,6 @@ export function GiftFormPage({ giftId }: Props) {
             </div>
           </form>
         )}
-      </main>
     </div>
   );
 }

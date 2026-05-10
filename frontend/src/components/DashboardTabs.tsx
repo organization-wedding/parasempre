@@ -1,28 +1,31 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 
-type Tab = "convidados" | "presentes" | "pagamentos" | "recados";
+const tabs = [
+  { label: "Convidados", to: "/admin" },
+  { label: "Presentes", to: "/admin/presentes" },
+  { label: "Pagamentos", to: "/admin/pagamentos" },
+  { label: "Recados", to: "/admin/recados" },
+] as const;
 
-const tabs: { id: Tab; label: string; to: string }[] = [
-  { id: "convidados", label: "Convidados", to: "/dashboard" },
-  { id: "presentes", label: "Presentes", to: "/dashboard/presentes" },
-  { id: "pagamentos", label: "Pagamentos", to: "/dashboard/pagamentos" },
-  { id: "recados", label: "Recados", to: "/dashboard/recados" },
-];
+export function DashboardTabs() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const activeTo = tabs.find((tab) => tab.to === pathname)?.to;
 
-export function DashboardTabs({ active }: { active: Tab }) {
+  if (!activeTo) return null;
+
   return (
     <nav className="mb-6 flex gap-6 border-b border-gold-muted/30">
       {tabs.map((tab) =>
-        tab.id === active ? (
+        tab.to === activeTo ? (
           <span
-            key={tab.id}
+            key={tab.to}
             className="font-heading text-[0.72rem] font-semibold tracking-[0.12em] uppercase text-burgundy py-2 border-b-2 border-burgundy -mb-px"
           >
             {tab.label}
           </span>
         ) : (
           <Link
-            key={tab.id}
+            key={tab.to}
             to={tab.to}
             className="font-heading text-[0.72rem] font-semibold tracking-[0.12em] uppercase text-hint py-2 no-underline transition-colors hover:text-burgundy"
           >

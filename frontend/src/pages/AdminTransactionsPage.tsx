@@ -7,11 +7,7 @@ import Clock from "lucide-react/dist/esm/icons/clock";
 import XCircle from "lucide-react/dist/esm/icons/x-circle";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import X from "lucide-react/dist/esm/icons/x";
-import { Header } from "../components/Header";
-import { DashboardTabs } from "../components/DashboardTabs";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import { useAdminTransactionsQuery, useAdminSummaryQuery } from "../lib/transaction-queries";
-import { useUserMeQuery } from "../lib/user-queries";
 import { useGiftsQuery } from "../lib/gift-queries";
 import { formatBRL } from "../lib/format";
 import type { AdminTransaction } from "../types/payment";
@@ -36,9 +32,6 @@ const statusOptions = [
 ];
 
 export function AdminTransactionsPage() {
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
-
   const [filterStatus, setFilterStatus] = useState("");
   const [filterGiftId, setFilterGiftId] = useState<number | undefined>();
   const [page, setPage] = useState(1);
@@ -46,15 +39,12 @@ export function AdminTransactionsPage() {
   const { data: giftsData } = useGiftsQuery({ limit: 100 });
   const gifts = giftsData?.data ?? [];
 
-  const filter = {
+  const { data, isLoading, error } = useAdminTransactionsQuery({
     status: filterStatus || undefined,
     gift_id: filterGiftId,
     page,
     limit: PAGE_SIZE,
-  };
-  const { data, isLoading, error } = useAdminTransactionsQuery(
-    isAuthorized ? filter : undefined,
-  );
+  });
   const { data: summary } = useAdminSummaryQuery();
 
   const transactions = data?.data ?? [];
@@ -67,20 +57,12 @@ export function AdminTransactionsPage() {
     setPage(1);
   }
 
-  if (!roleLoading && userMe && !isAuthorized) {
-    return <UnauthorizedPage />;
-  }
-
   const approvedCount = summary?.by_status.find((b) => b.status === "approved")?.count ?? 0;
   const pendingCount = summary?.by_status.find((b) => b.status === "pending")?.count ?? 0;
   const rejectedCount = summary?.by_status.find((b) => b.status === "rejected")?.count ?? 0;
 
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-      <main className="mx-auto max-w-[1280px] px-6 pt-24 pb-16">
-        <DashboardTabs active="pagamentos" />
-
+    <>
         <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-[1.5rem] md:text-[1.8rem] font-bold text-dark">
@@ -156,7 +138,7 @@ export function AdminTransactionsPage() {
           </div>
         )}
 
-        {isLoading || roleLoading ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-hint">
             <div className="w-8 h-8 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin mb-4" />
             <span className="text-[0.85rem]">Carregando transações...</span>
@@ -225,8 +207,7 @@ export function AdminTransactionsPage() {
             )}
           </>
         )}
-      </main>
-    </div>
+    </>
   );
 }
 

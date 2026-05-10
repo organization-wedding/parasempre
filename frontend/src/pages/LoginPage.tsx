@@ -76,7 +76,7 @@ const RESEND_COOLDOWN = 60;
 export function LoginPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { redirect?: string };
-  const redirectTo = search.redirect ?? "/dashboard";
+  const redirectTo = search.redirect ?? "/admin";
 
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [phone, setPhone] = useState("");
@@ -169,7 +169,7 @@ export function LoginPage() {
       const result = await verifyOtp.mutateAsync({ phone, code });
       setAuth(result.token, result.role, result.uracf);
 
-      const target = redirectTo.startsWith("/") ? redirectTo : "/dashboard";
+      const target = redirectTo.startsWith("/") ? redirectTo : "/admin";
       void navigate({ to: target });
     } catch (err) {
       showErrorToast(err, "Código inválido ou expirado");
