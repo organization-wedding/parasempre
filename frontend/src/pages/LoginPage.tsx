@@ -8,7 +8,7 @@ import { isAuthenticated, setAuth } from "../lib/auth";
 import { useSendOtpMutation, useVerifyOtpMutation } from "../lib/auth-queries";
 import { devLogin, OtpApiError, OtpRateLimitError } from "../lib/api";
 import { Toast } from "../components/Toast";
-import { IS_LOCAL_DEV } from "../config";
+import { IS_DEV } from "../config";
 
 function titleForStatus(status: number): string {
   if (status === 400) return "Dados inválidos";
@@ -83,7 +83,7 @@ export function LoginPage() {
   const [code, setCode] = useState("");
   const [toast, setToast] = useState<{ id: number; title: string; message: string } | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [autoLoginPending, setAutoLoginPending] = useState(IS_LOCAL_DEV);
+  const [autoLoginPending, setAutoLoginPending] = useState(IS_DEV);
 
   const codeInputRef = useRef<HTMLInputElement>(null);
   const autoLoginAttemptedRef = useRef(false);
@@ -102,15 +102,15 @@ export function LoginPage() {
     showToast("Erro", err instanceof Error ? err.message : fallback);
   }
 
-  // Auto-login em desenvolvimento local: bypass do OTP via /api/auth/dev-login.
-  // Só dispara quando IS_LOCAL_DEV (localhost) — staging/prod seguem fluxo normal.
+  // Auto-login em dev/teste: bypass do OTP via /api/auth/dev-login.
+  // Dispara em localhost e ambiente de teste — produção segue fluxo normal.
   useEffect(() => {
-    if (!IS_LOCAL_DEV) return;
+    if (!IS_DEV) return;
     if (autoLoginAttemptedRef.current) return;
     autoLoginAttemptedRef.current = true;
 
     if (isAuthenticated()) {
-      const target = redirectTo.startsWith("/") ? redirectTo : "/dashboard";
+      const target = redirectTo.startsWith("/") ? redirectTo : "/admin";
       void navigate({ to: target });
       return;
     }
@@ -118,7 +118,7 @@ export function LoginPage() {
     devLogin()
       .then((res) => {
         setAuth(res.token, res.role, res.uracf);
-        const target = redirectTo.startsWith("/") ? redirectTo : "/dashboard";
+        const target = redirectTo.startsWith("/") ? redirectTo : "/admin";
         void navigate({ to: target });
       })
       .catch((err) => {
