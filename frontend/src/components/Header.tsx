@@ -5,7 +5,6 @@ import X from "lucide-react/dist/esm/icons/x";
 import Gift from "lucide-react/dist/esm/icons/gift";
 import UserCheck from "lucide-react/dist/esm/icons/user-check";
 import { CoatOfArms } from "./CoatOfArms";
-import { NAV_LINKS } from "../config";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -24,33 +23,20 @@ export function Header() {
           </span>
         </Link>
 
-        <nav className="hidden nav:flex gap-9">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              to={link.href}
-              className="group relative font-heading text-[0.72rem] font-semibold tracking-[0.12em] uppercase text-dark-warm no-underline py-1 transition-colors duration-300 hover:text-burgundy"
-            >
-              {link.label}
-              <span className="absolute -bottom-0.5 left-1/2 h-[1.5px] w-0 -translate-x-1/2 bg-gold transition-all duration-300 group-hover:w-full" />
-            </Link>
-          ))}
-        </nav>
-
         <div className="hidden nav:flex gap-2.5 items-center">
           <a
-            href="/registrar-presenca"
+            href="/lista-presenca"
             className="inline-flex items-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-transparent text-burgundy border border-burgundy hover:bg-burgundy hover:text-gold-light"
           >
             <UserCheck size={15} />
             Registrar Presença
           </a>
           <a
-            href="/comprar-presente"
+            href="/lista-presentes"
             className="inline-flex items-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px"
           >
             <Gift size={15} />
-            Comprar Presente
+            Lista de Presentes
           </a>
         </div>
 
@@ -65,32 +51,20 @@ export function Header() {
 
       {mobileMenuOpen && (
         <div className="anim-slide-down border-t border-parchment-dark px-6 pt-4 pb-6">
-          <nav className="flex flex-col mb-5">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                to={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="font-heading text-[0.85rem] font-semibold tracking-[0.1em] uppercase text-dark-warm no-underline py-3 border-b border-parchment-dark transition-colors duration-200 hover:text-burgundy"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
           <div className="flex flex-col gap-2.5">
             <a
-              href="/registrar-presenca"
+              href="/lista-presenca"
               className="inline-flex items-center justify-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-transparent text-burgundy border border-burgundy hover:bg-burgundy hover:text-gold-light w-full"
             >
               <UserCheck size={15} />
               Registrar Presença
             </a>
             <a
-              href="/comprar-presente"
+              href="/lista-presentes"
               className="inline-flex items-center justify-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-burgundy text-gold-light border border-burgundy hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] hover:-translate-y-px w-full"
             >
               <Gift size={15} />
-              Comprar Presente
+              Lista de Presentes
             </a>
           </div>
         </div>
