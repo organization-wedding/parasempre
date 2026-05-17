@@ -56,3 +56,22 @@ export const paginatedGuestsSchema = z.object({
 });
 
 export type PagedGuestResponse = z.infer<typeof paginatedGuestsSchema>;
+
+export const myFamilyResponseSchema = z.array(guestSchema);
+
+export const batchConfirmInputSchema = z.object({
+  guest_ids: z.array(z.number().int().positive()).min(1),
+  confirmed: z.boolean(),
+});
+
+export const meResponseSchema = z.object({
+  role: z.string(),
+  guest_id: z.number().int().nullable().optional(),
+  first_name: z.string().nullable().optional(),
+  last_name: z.string().nullable().optional(),
+  family_group: z.number().int().nullable().optional(),
+});
+
+export type MyFamilyResponse = z.infer<typeof myFamilyResponseSchema>;
+export type BatchConfirmInput = z.infer<typeof batchConfirmInputSchema>;
+export type MeResponse = z.infer<typeof meResponseSchema>;

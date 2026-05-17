@@ -18,6 +18,7 @@ type UserBridge interface {
 	DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error
 	GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error)
 	GetGuestIDByUserID(ctx context.Context, userID int64) (*int64, error)
+	GetURACFByUserID(ctx context.Context, userID int64) (string, error)
 }
 
 type Service struct {
@@ -28,6 +29,83 @@ type Service struct {
 
 func NewService(repo TxAwareRepository, users UserBridge, txRunner database.TxRunner) *Service {
 	return &Service{repo: repo, users: users, txRunner: txRunner}
+}
+
+func (s *Service) ListMyFamily(ctx context.Context, userID int64) ([]Guest, error) {
+	guestID, err := s.users.GetGuestIDByUserID(ctx, userID)
+	if err != nil {
+		slog.Error("guest.service list_my_family: failed to get current user's guest", "user_id", userID, "error", err)
+		return nil, apperror.Internal("failed to verify guest identity", err)
+	}
+	if guestID == nil {
+		return []Guest{}, nil
+	}
+
+	currentGuest, err := s.repo.GetByIDAny(ctx, *guestID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
+	}
+
+	guests, err := s.repo.ListByFamilyGroup(ctx, currentGuest.FamilyGroup)
+	if err != nil {
+		return nil, apperror.Internal("failed to list family guests", err)
+	}
+	return guests, nil
+}
+
+func (s *Service) SetConfirmedBatch(ctx context.Context, input BatchConfirmInput, userID int64) ([]Guest, error) {
+	if err := validate.Struct(input); err != nil {
+		return nil, err
+	}
+
+	currentUserGuestID, err := s.users.GetGuestIDByUserID(ctx, userID)
+	if err != nil {
+		slog.Error("guest.service set_confirmed_batch: failed to get current user's guest", "user_id", userID, "error", err)
+		return nil, apperror.Internal("failed to verify guest identity", err)
+	}
+	if currentUserGuestID == nil {
+		return nil, apperror.Forbidden("only guests can confirm attendance")
+	}
+
+	currentGuest, err := s.repo.GetByIDAny(ctx, *currentUserGuestID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
+	}
+
+	targets, err := s.repo.GetByIDs(ctx, input.GuestIDs)
+	if err != nil {
+		return nil, apperror.Internal("failed to fetch target guests", err)
+	}
+	if len(targets) != len(input.GuestIDs) {
+		return nil, apperror.NotFound("one or more guests not found")
+	}
+	for _, target := range targets {
+		if target.FamilyGroup != currentGuest.FamilyGroup {
+			slog.Warn("guest.service set_confirmed_batch: unauthorized cross-family attempt", "user_id", userID, "target_id", target.ID, "caller_family", currentGuest.FamilyGroup, "target_family", target.FamilyGroup)
+			return nil, apperror.Forbidden("you can only confirm guests in your own family")
+		}
+	}
+
+	updatedByRACF, err := s.users.GetURACFByUserID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
+	}
+
+	var updated []Guest
+	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		guests, err := txRepo.SetConfirmedByIDs(ctx, input.GuestIDs, input.Confirmed, updatedByRACF)
+		if err != nil {
+			return err
+		}
+		updated = guests
+		return nil
+	}); err != nil {
+		return nil, apperror.WrapIfNotApp("failed to update batch confirmation", err)
+	}
+
+	slog.Info("guest.service set_confirmed_batch: success", "ids", input.GuestIDs, "confirmed", input.Confirmed, "count", len(updated), "user_id", userID)
+	return updated, nil
 }
 
 func (s *Service) List(ctx context.Context, page, limit int, userRACF string) (*PagedResponse, error) {
@@ -203,26 +281,37 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 		return nil, apperror.Forbidden("only guests can confirm their attendance")
 	}
 
-	if *currentUserGuestID != id {
-		slog.Warn("guest.service set_confirmed: unauthorized attempt", "user_id", userID, "requested_guest_id", id, "actual_guest_id", *currentUserGuestID)
-		return nil, apperror.Forbidden("you can only confirm your own attendance")
+	currentGuest, err := s.repo.GetByIDAny(ctx, *currentUserGuestID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
 	}
 
-	current, err := s.repo.GetByID(ctx, id, "")
+	target, err := s.repo.GetByIDAny(ctx, id)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to fetch guest", err)
 	}
-	if current.Confirmed == confirmed {
-		slog.Info("guest.service set_confirmed: already in desired state, skipping update", "id", id, "confirmed", confirmed)
-		return current, nil
+
+	if target.FamilyGroup != currentGuest.FamilyGroup {
+		slog.Warn("guest.service set_confirmed: unauthorized cross-family attempt", "user_id", userID, "requested_guest_id", id, "caller_family", currentGuest.FamilyGroup, "target_family", target.FamilyGroup)
+		return nil, apperror.Forbidden("you can only confirm guests in your own family")
 	}
 
-	guest, err := s.repo.SetConfirmed(ctx, id, confirmed, "")
+	if target.Confirmed == confirmed {
+		slog.Info("guest.service set_confirmed: already in desired state, skipping update", "id", id, "confirmed", confirmed)
+		return target, nil
+	}
+
+	updatedByRACF, err := s.users.GetURACFByUserID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
+	}
+
+	updated, err := s.repo.SetConfirmed(ctx, id, confirmed, updatedByRACF)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to update confirmation", err)
 	}
-	slog.Info("guest.service set_confirmed: success", "id", guest.ID, "confirmed", confirmed, "user_id", userID)
-	return guest, nil
+	slog.Info("guest.service set_confirmed: success", "id", updated.ID, "confirmed", confirmed, "user_id", userID)
+	return updated, nil
 }
 
 func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirmed bool, userID int64) (*Guest, error) {
@@ -248,7 +337,7 @@ func (s *Service) setConfirmedFamily(ctx context.Context, familyGroup int64, con
 		return nil, apperror.Forbidden("only guests can confirm family attendance")
 	}
 
-	currentGuest, err := s.repo.GetByID(ctx, *currentUserGuestID, "")
+	currentGuest, err := s.repo.GetByIDAny(ctx, *currentUserGuestID)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
 	}
@@ -267,7 +356,12 @@ func (s *Service) setConfirmedFamily(ctx context.Context, familyGroup int64, con
 		return nil, apperror.NotFound("family group not found")
 	}
 
-	guests, err := s.repo.SetConfirmedByFamilyGroup(ctx, familyGroup, confirmed, "")
+	updatedByRACF, err := s.users.GetURACFByUserID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
+	}
+
+	guests, err := s.repo.SetConfirmedByFamilyGroup(ctx, familyGroup, confirmed, updatedByRACF)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to update family confirmation", err)
 	}

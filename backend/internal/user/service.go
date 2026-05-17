@@ -87,6 +87,15 @@ func (s *Service) GetMe(ctx context.Context, uracf string) (*User, error) {
 	return u, nil
 }
 
+func (s *Service) GetMeDetailed(ctx context.Context, uracf string) (*MeResponse, error) {
+	me, err := s.repo.GetMeByURACF(ctx, uracf)
+	if err != nil {
+		slog.Error("user.service get_me_detailed: lookup failed", "uracf", uracf, "error", err)
+		return nil, apperror.Internal("failed to get user", err)
+	}
+	return me, nil
+}
+
 func (s *Service) CheckByPhone(ctx context.Context, phone string) (*CheckResponse, error) {
 	type phoneInput struct {
 		Phone string `validate:"required,brphone"`
@@ -140,6 +149,17 @@ func (s *Service) GetGuestIDByUserID(ctx context.Context, userID int64) (*int64,
 		return nil, nil
 	}
 	return u.GuestID, nil
+}
+
+func (s *Service) GetURACFByUserID(ctx context.Context, userID int64) (string, error) {
+	u, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return "", apperror.WrapIfNotApp("failed to find user", err)
+	}
+	if u == nil {
+		return "", apperror.NotFound("user not found")
+	}
+	return u.URACF, nil
 }
 
 func (s *Service) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {

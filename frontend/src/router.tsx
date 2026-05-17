@@ -9,6 +9,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { GuestListPage } from "./pages/GuestListPage";
 import { GuestFormPage } from "./pages/GuestFormPage";
 import { LoginPage } from "./pages/LoginPage";
+import { RegisterAttendancePage } from "./pages/RegisterAttendancePage";
 import { UnderConstruction } from "./pages/UnderConstruction";
 import { GiftListPage } from "./pages/GiftListPage";
 import { GiftDetailPage } from "./pages/GiftDetailPage";
@@ -135,10 +136,11 @@ const dashboardLegacyRootRoute = createRoute({
   },
 });
 
-const guestListRoute = createRoute({
+const registerAttendanceRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/lista-presenca",
-  component: UnderConstruction,
+  path: "/registrar-presenca",
+  component: RegisterAttendancePage,
+  beforeLoad: requireAuth,
 });
 
 const giftListRoute = createRoute({
@@ -221,7 +223,7 @@ const routeTree = rootRoute.addChildren([
   ]),
   dashboardLegacyRootRoute,
   dashboardLegacyRoute,
-  guestListRoute,
+  registerAttendanceRoute,
   giftListRoute,
   giftDetailRoute,
   giftPurchaseRoute,

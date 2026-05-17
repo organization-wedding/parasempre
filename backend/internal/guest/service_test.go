@@ -15,7 +15,10 @@ import (
 
 type mockRepository struct {
 	listFn                       func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error)
+	listByFamilyGroupFn          func(ctx context.Context, familyGroup int64) ([]Guest, error)
 	getByID                      func(ctx context.Context, id int64, userRACF string) (*Guest, error)
+	getByIDAnyFn                 func(ctx context.Context, id int64) (*Guest, error)
+	getByIDsFn                   func(ctx context.Context, ids []int64) ([]Guest, error)
 	getByNameFn                  func(ctx context.Context, firstName, lastName string) (*Guest, error)
 	familyGroupExistsFn          func(ctx context.Context, familyGroup int64) (bool, error)
 	getNextFamilyGroupFn         func(ctx context.Context) (int64, error)
@@ -24,6 +27,7 @@ type mockRepository struct {
 	deleteFn                     func(ctx context.Context, id int64) error
 	setConfirmedFn               func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
 	setConfirmedByFamilyGroupFn  func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error)
+	setConfirmedByIDsFn          func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error)
 	getFamilyGroupByPhoneFn      func(ctx context.Context, phone string) (*int64, error)
 }
 
@@ -33,6 +37,30 @@ func (m *mockRepository) List(ctx context.Context, limit, offset int, userRACF s
 
 func (m *mockRepository) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 	return m.getByID(ctx, id, userRACF)
+}
+
+func (m *mockRepository) ListByFamilyGroup(ctx context.Context, familyGroup int64) ([]Guest, error) {
+	if m.listByFamilyGroupFn != nil {
+		return m.listByFamilyGroupFn(ctx, familyGroup)
+	}
+	return []Guest{}, nil
+}
+
+func (m *mockRepository) GetByIDAny(ctx context.Context, id int64) (*Guest, error) {
+	if m.getByIDAnyFn != nil {
+		return m.getByIDAnyFn(ctx, id)
+	}
+	if m.getByID != nil {
+		return m.getByID(ctx, id, "")
+	}
+	return nil, nil
+}
+
+func (m *mockRepository) GetByIDs(ctx context.Context, ids []int64) ([]Guest, error) {
+	if m.getByIDsFn != nil {
+		return m.getByIDsFn(ctx, ids)
+	}
+	return []Guest{}, nil
 }
 
 func (m *mockRepository) GetByName(ctx context.Context, firstName, lastName string) (*Guest, error) {
@@ -79,6 +107,13 @@ func (m *mockRepository) SetConfirmedByFamilyGroup(ctx context.Context, familyGr
 	return []Guest{}, nil
 }
 
+func (m *mockRepository) SetConfirmedByIDs(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error) {
+	if m.setConfirmedByIDsFn != nil {
+		return m.setConfirmedByIDsFn(ctx, ids, confirmed, userRACF)
+	}
+	return []Guest{}, nil
+}
+
 func (m *mockRepository) GetFamilyGroupByPhone(ctx context.Context, phone string) (*int64, error) {
 	if m.getFamilyGroupByPhoneFn != nil {
 		return m.getFamilyGroupByPhoneFn(ctx, phone)
@@ -96,6 +131,7 @@ type mockUserBridge struct {
 	deleteFn             func(ctx context.Context, tx pgx.Tx, guestID int64) error
 	getGuestIDByPhoneFn  func(ctx context.Context, phone string) (*int64, error)
 	getGuestIDByUserIDFn func(ctx context.Context, userID int64) (*int64, error)
+	getURACFByUserIDFn   func(ctx context.Context, userID int64) (string, error)
 }
 
 func (m *mockUserBridge) UserExistsByURACF(ctx context.Context, uracf string) (bool, error) {
@@ -131,6 +167,13 @@ func (m *mockUserBridge) GetGuestIDByUserID(ctx context.Context, userID int64) (
 		return m.getGuestIDByUserIDFn(ctx, userID)
 	}
 	return nil, nil
+}
+
+func (m *mockUserBridge) GetURACFByUserID(ctx context.Context, userID int64) (string, error) {
+	if m.getURACFByUserIDFn != nil {
+		return m.getURACFByUserIDFn(ctx, userID)
+	}
+	return "TST01", nil
 }
 
 type mockTxRunner struct{}
@@ -916,6 +959,190 @@ func TestServiceCancelByPhone(t *testing.T) {
 	if guest.Confirmed {
 		t.Fatal("expected confirmed to be false")
 	}
+}
+
+func TestServiceConfirmRejectsCrossFamily(t *testing.T) {
+	repo := &mockRepository{
+		getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			g := sampleGuest()
+			if id == 1 {
+				g.ID = 1
+				g.FamilyGroup = 1
+				return &g, nil
+			}
+			g.ID = 99
+			g.FamilyGroup = 2
+			return &g, nil
+		},
+	}
+	users := &mockUserBridge{
+		getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+			id := int64(1)
+			return &id, nil
+		},
+	}
+	svc := newTestService(repo, users)
+
+	_, err := svc.Confirm(context.Background(), 99, 1)
+	assertAppError(t, err, http.StatusForbidden, "you can only confirm guests in your own family")
+}
+
+func TestServiceListMyFamily(t *testing.T) {
+	t.Run("admin returns empty", func(t *testing.T) {
+		users := &mockUserBridge{
+			getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+				return nil, nil
+			},
+		}
+		svc := newTestService(&mockRepository{}, users)
+		guests, err := svc.ListMyFamily(context.Background(), 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(guests) != 0 {
+			t.Fatalf("expected empty slice, got %d guests", len(guests))
+		}
+	})
+
+	t.Run("returns family roster", func(t *testing.T) {
+		repo := &mockRepository{
+			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			},
+			listByFamilyGroupFn: func(ctx context.Context, familyGroup int64) ([]Guest, error) {
+				g1 := sampleGuest()
+				g1.ID = 1
+				g2 := sampleGuest()
+				g2.ID = 2
+				g2.FirstName = "Maria"
+				return []Guest{g1, g2}, nil
+			},
+		}
+		users := &mockUserBridge{
+			getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+				id := int64(1)
+				return &id, nil
+			},
+		}
+		svc := newTestService(repo, users)
+		guests, err := svc.ListMyFamily(context.Background(), 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(guests) != 2 {
+			t.Fatalf("expected 2 guests, got %d", len(guests))
+		}
+	})
+}
+
+func TestServiceSetConfirmedBatch(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		var updatedIDs []int64
+		var updatedConfirmed bool
+		repo := &mockRepository{
+			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			},
+			getByIDsFn: func(ctx context.Context, ids []int64) ([]Guest, error) {
+				out := []Guest{}
+				for _, id := range ids {
+					g := sampleGuest()
+					g.ID = id
+					out = append(out, g)
+				}
+				return out, nil
+			},
+			setConfirmedByIDsFn: func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error) {
+				updatedIDs = ids
+				updatedConfirmed = confirmed
+				out := []Guest{}
+				for _, id := range ids {
+					g := sampleGuest()
+					g.ID = id
+					g.Confirmed = confirmed
+					out = append(out, g)
+				}
+				return out, nil
+			},
+		}
+		users := &mockUserBridge{
+			getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+				id := int64(1)
+				return &id, nil
+			},
+		}
+		svc := newTestService(repo, users)
+		guests, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Confirmed: true}, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(guests) != 2 {
+			t.Fatalf("expected 2 updated guests, got %d", len(guests))
+		}
+		if !updatedConfirmed {
+			t.Fatal("expected updatedConfirmed=true")
+		}
+		if len(updatedIDs) != 2 {
+			t.Fatalf("expected 2 updated IDs, got %d", len(updatedIDs))
+		}
+	})
+
+	t.Run("rejects cross-family", func(t *testing.T) {
+		repo := &mockRepository{
+			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			},
+			getByIDsFn: func(ctx context.Context, ids []int64) ([]Guest, error) {
+				g1 := sampleGuest()
+				g1.ID = 1
+				g1.FamilyGroup = 1
+				g2 := sampleGuest()
+				g2.ID = 2
+				g2.FamilyGroup = 999
+				return []Guest{g1, g2}, nil
+			},
+		}
+		users := &mockUserBridge{
+			getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+				id := int64(1)
+				return &id, nil
+			},
+		}
+		svc := newTestService(repo, users)
+		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Confirmed: true}, 1)
+		assertAppError(t, err, http.StatusForbidden, "you can only confirm guests in your own family")
+	})
+
+	t.Run("rejects missing guests", func(t *testing.T) {
+		repo := &mockRepository{
+			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			},
+			getByIDsFn: func(ctx context.Context, ids []int64) ([]Guest, error) {
+				g := sampleGuest()
+				return []Guest{g}, nil
+			},
+		}
+		users := &mockUserBridge{
+			getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+				id := int64(1)
+				return &id, nil
+			},
+		}
+		svc := newTestService(repo, users)
+		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Confirmed: true}, 1)
+		assertAppError(t, err, http.StatusNotFound, "one or more guests not found")
+	})
+
+	t.Run("rejects empty ids", func(t *testing.T) {
+		svc := newTestService(&mockRepository{}, defaultUserBridge())
+		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: nil, Confirmed: true}, 1)
+		assertAppError(t, err, http.StatusBadRequest, "GuestIDs failed on required validation")
+	})
 }
 
 func TestServiceDelete(t *testing.T) {

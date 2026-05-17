@@ -8,6 +8,7 @@ type Repository interface {
 	GetByPhone(ctx context.Context, phone string) (*User, error)
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByRole(ctx context.Context, role string) (*User, error)
+	GetMeByURACF(ctx context.Context, uracf string) (*MeResponse, error)
 	Create(ctx context.Context, u *User) (*User, error)
 	Update(ctx context.Context, id int64, input UpdateInput) (*User, error)
 	Delete(ctx context.Context, id int64) error

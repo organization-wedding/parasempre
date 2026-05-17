@@ -33,6 +33,42 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) HandleListMyFamily(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	guests, err := h.svc.ListMyFamily(r.Context(), userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to list family guests", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleBatchConfirm(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	var input BatchConfirmInput
+	if err := httputil.DecodeJSON(r, &input); err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid batch payload", err))
+		return
+	}
+
+	guests, err := h.svc.SetConfirmedBatch(r.Context(), input, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to update batch confirmation", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	userRACF := middleware.UserRACFFromContext(r.Context())
 	id, err := httputil.PathID(r)

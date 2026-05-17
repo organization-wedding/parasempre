@@ -6,6 +6,9 @@ import type {
   UpdateGuestInput,
   ImportResult,
   PagedGuestResponse,
+  MyFamilyResponse,
+  BatchConfirmInput,
+  MeResponse,
 } from "../types/guest";
 import type {
   PublicGift,
@@ -17,10 +20,13 @@ import type {
   ScrapePreviewResponse,
 } from "../types/gift";
 import {
+  batchConfirmInputSchema,
   createGuestInputSchema,
   guestSchema,
   guestsSchema,
   importResultSchema,
+  meResponseSchema,
+  myFamilyResponseSchema,
   paginatedGuestsSchema,
   updateGuestInputSchema,
 } from "../schemas/guest";
@@ -89,7 +95,7 @@ async function handleResponse<T>(res: Response, schema: { parse: (value: unknown
   return schema.parse(data);
 }
 
-export async function getUserMe(): Promise<{ role: string } | null> {
+export async function getUserMe(): Promise<MeResponse | null> {
   const token = getToken();
   if (!token) return null;
   const res = await fetch(`${API_BASE}/api/users/me`, {
@@ -104,7 +110,57 @@ export async function getUserMe(): Promise<{ role: string } | null> {
     const data = (await res.json()) as { error?: string };
     throw new Error(typeof data?.error === "string" ? data.error : `Erro ${res.status}`);
   }
-  return res.json() as Promise<{ role: string }>;
+  const json = await res.json();
+  return meResponseSchema.parse(json);
+}
+
+export async function getMyFamily(): Promise<MyFamilyResponse> {
+  const res = await fetch(`${API_BASE}/api/guests/my-family`, {
+    headers: authHeaders(),
+  });
+  return handleResponse(res, myFamilyResponseSchema);
+}
+
+export async function confirmGuest(id: number): Promise<Guest> {
+  const res = await fetch(`${API_BASE}/api/guests/${id}/confirm`, {
+    method: "PATCH",
+    headers: authHeaders(),
+  });
+  return handleResponse(res, guestSchema);
+}
+
+export async function cancelGuest(id: number): Promise<Guest> {
+  const res = await fetch(`${API_BASE}/api/guests/${id}/cancel`, {
+    method: "PATCH",
+    headers: authHeaders(),
+  });
+  return handleResponse(res, guestSchema);
+}
+
+export async function batchConfirmFamily(input: BatchConfirmInput): Promise<Guest[]> {
+  const payload = batchConfirmInputSchema.parse(input);
+  const res = await fetch(`${API_BASE}/api/guests/family/batch`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, guestsSchema);
+}
+
+export async function confirmWholeFamily(familyGroup: number): Promise<Guest[]> {
+  const res = await fetch(`${API_BASE}/api/guests/family/${familyGroup}/confirm`, {
+    method: "PATCH",
+    headers: authHeaders(),
+  });
+  return handleResponse(res, guestsSchema);
+}
+
+export async function cancelWholeFamily(familyGroup: number): Promise<Guest[]> {
+  const res = await fetch(`${API_BASE}/api/guests/family/${familyGroup}/cancel`, {
+    method: "PATCH",
+    headers: authHeaders(),
+  });
+  return handleResponse(res, guestsSchema);
 }
 
 export async function listGuests(params?: { page?: number; limit?: number }): Promise<PagedGuestResponse> {
