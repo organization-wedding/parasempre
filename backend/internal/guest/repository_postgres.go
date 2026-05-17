@@ -77,6 +77,64 @@ func (r *PostgresRepository) GetByID(ctx context.Context, id int64, userRACF str
 	return &g, nil
 }
 
+func (r *PostgresRepository) GetByIDAny(ctx context.Context, id int64) (*Guest, error) {
+	g, err := scanGuest(r.db.QueryRow(ctx,
+		`SELECT `+guestColumns+` FROM guests WHERE id = $1`, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.NotFound("guest not found")
+		}
+		slog.Error("guest.repo get_by_id_any: query failed", "id", id, "error", err)
+		return nil, err
+	}
+	return &g, nil
+}
+
+func (r *PostgresRepository) ListByFamilyGroup(ctx context.Context, familyGroup int64) ([]Guest, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+guestColumns+` FROM guests WHERE family_group = $1 ORDER BY id`, familyGroup)
+	if err != nil {
+		slog.Error("guest.repo list_by_family_group: query failed", "family_group", familyGroup, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	guests := []Guest{}
+	for rows.Next() {
+		var g Guest
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			slog.Error("guest.repo list_by_family_group: scan failed", "error", err)
+			return nil, err
+		}
+		guests = append(guests, g)
+	}
+	return guests, rows.Err()
+}
+
+func (r *PostgresRepository) GetByIDs(ctx context.Context, ids []int64) ([]Guest, error) {
+	if len(ids) == 0 {
+		return []Guest{}, nil
+	}
+	rows, err := r.db.Query(ctx,
+		`SELECT `+guestColumns+` FROM guests WHERE id = ANY($1::bigint[])`, ids)
+	if err != nil {
+		slog.Error("guest.repo get_by_ids: query failed", "ids", ids, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	guests := []Guest{}
+	for rows.Next() {
+		var g Guest
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			slog.Error("guest.repo get_by_ids: scan failed", "error", err)
+			return nil, err
+		}
+		guests = append(guests, g)
+	}
+	return guests, rows.Err()
+}
+
 func (r *PostgresRepository) GetByName(ctx context.Context, firstName, lastName string) (*Guest, error) {
 	g, err := scanGuest(r.db.QueryRow(ctx,
 		`SELECT `+guestColumns+` FROM guests WHERE first_name = $1 AND last_name = $2`, firstName, lastName))
@@ -171,6 +229,34 @@ func (r *PostgresRepository) SetConfirmed(ctx context.Context, id int64, confirm
 	}
 	slog.Info("guest.repo set_confirmed: guest updated", "id", g.ID, "confirmed", confirmed)
 	return &g, nil
+}
+
+func (r *PostgresRepository) SetConfirmedByIDs(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error) {
+	if len(ids) == 0 {
+		return []Guest{}, nil
+	}
+	rows, err := r.db.Query(ctx,
+		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
+		 WHERE id = ANY($3::bigint[])
+		 RETURNING `+guestColumns,
+		confirmed, userRACF, ids)
+	if err != nil {
+		slog.Error("guest.repo set_confirmed_by_ids: update failed", "ids", ids, "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	guests := []Guest{}
+	for rows.Next() {
+		var g Guest
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			slog.Error("guest.repo set_confirmed_by_ids: scan failed", "error", err)
+			return nil, err
+		}
+		guests = append(guests, g)
+	}
+	slog.Info("guest.repo set_confirmed_by_ids: guests updated", "ids", ids, "confirmed", confirmed, "count", len(guests))
+	return guests, rows.Err()
 }
 
 func (r *PostgresRepository) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error) {

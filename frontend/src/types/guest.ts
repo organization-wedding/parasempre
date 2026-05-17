@@ -4,4 +4,7 @@ export type {
   UpdateGuestInput,
   ImportResult,
   PagedGuestResponse,
+  MyFamilyResponse,
+  BatchConfirmInput,
+  MeResponse,
 } from "../schemas/guest";

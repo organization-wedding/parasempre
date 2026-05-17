@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -66,6 +67,12 @@ func TestCORS(t *testing.T) {
 
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d", w.Code)
+		}
+		methods := w.Header().Get("Access-Control-Allow-Methods")
+		for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
+			if !strings.Contains(methods, m) {
+				t.Fatalf("expected %q in Access-Control-Allow-Methods, got %q", m, methods)
+			}
 		}
 	})
 }

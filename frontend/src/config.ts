@@ -29,6 +29,5 @@ export const CONTACT = {
 };
 
 export const NAV_LINKS = [
-  { label: "Lista de Presença", href: "/lista-presenca" },
   { label: "Lista de Presentes", href: "/lista-presentes" },
 ];

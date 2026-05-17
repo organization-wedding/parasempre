@@ -38,3 +38,11 @@ type UpdateInput struct {
 	Role  *string `json:"role" validate:"omitempty,oneof=guest groom bride"`
 	Phone *string `json:"phone" validate:"omitempty,brphone"`
 }
+
+type MeResponse struct {
+	Role        string  `json:"role"`
+	GuestID     *int64  `json:"guest_id,omitempty"`
+	FirstName   *string `json:"first_name,omitempty"`
+	LastName    *string `json:"last_name,omitempty"`
+	FamilyGroup *int64  `json:"family_group,omitempty"`
+}
