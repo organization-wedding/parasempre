@@ -49,3 +49,8 @@ type ImportResponse struct {
 	Total        int              `json:"total"`
 	Errors       []ImportRowError `json:"errors"`
 }
+
+type BatchConfirmInput struct {
+	GuestIDs  []int64 `json:"guest_ids" validate:"required,min=1,max=50,dive,gt=0"`
+	Confirmed bool    `json:"confirmed"`
+}

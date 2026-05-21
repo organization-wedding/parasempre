@@ -55,17 +55,17 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 	uracf := middleware.UserRACFFromContext(r.Context())
 
-	u, err := h.svc.GetMe(r.Context(), uracf)
+	me, err := h.svc.GetMeDetailed(r.Context(), uracf)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to get user", err))
 		return
 	}
-	if u == nil {
+	if me == nil {
 		httputil.WriteError(w, r, apperror.NotFound("user not found"))
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]string{"role": u.Role})
+	httputil.WriteJSON(w, http.StatusOK, me)
 }
 
 func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {

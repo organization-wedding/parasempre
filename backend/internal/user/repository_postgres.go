@@ -45,6 +45,24 @@ func (r *PostgresRepository) GetByURACF(ctx context.Context, uracf string) (*Use
 	return &u, nil
 }
 
+func (r *PostgresRepository) GetMeByURACF(ctx context.Context, uracf string) (*MeResponse, error) {
+	var me MeResponse
+	err := r.db.QueryRow(ctx,
+		`SELECT u.role, u.guest_id, g.first_name, g.last_name, g.family_group
+		 FROM users u
+		 LEFT JOIN guests g ON g.id = u.guest_id
+		 WHERE u.uracf = $1`, uracf).
+		Scan(&me.Role, &me.GuestID, &me.FirstName, &me.LastName, &me.FamilyGroup)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		slog.Error("user.repo get_me_by_uracf: query failed", "uracf", uracf, "error", err)
+		return nil, err
+	}
+	return &me, nil
+}
+
 func (r *PostgresRepository) GetByGuestID(ctx context.Context, guestID int64) (*User, error) {
 	u, err := scanUser(r.db.QueryRow(ctx,
 		`SELECT `+userColumns+` FROM users WHERE guest_id = $1`, guestID))

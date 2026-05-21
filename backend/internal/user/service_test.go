@@ -20,6 +20,7 @@ type mockUserRepo struct {
 	getByPhone      func(ctx context.Context, phone string) (*User, error)
 	getByID         func(ctx context.Context, id int64) (*User, error)
 	getByRole       func(ctx context.Context, role string) (*User, error)
+	getMeByURACF    func(ctx context.Context, uracf string) (*MeResponse, error)
 	createFn        func(ctx context.Context, u *User) (*User, error)
 	updateFn        func(ctx context.Context, id int64, input UpdateInput) (*User, error)
 	deleteFn        func(ctx context.Context, id int64) error
@@ -78,6 +79,13 @@ func (m *mockUserRepo) GetByRole(ctx context.Context, role string) (*User, error
 	return nil, nil
 }
 
+func (m *mockUserRepo) GetMeByURACF(ctx context.Context, uracf string) (*MeResponse, error) {
+	if m.getMeByURACF != nil {
+		return m.getMeByURACF(ctx, uracf)
+	}
+	return nil, nil
+}
+
 func (m *mockUserRepo) Update(ctx context.Context, id int64, input UpdateInput) (*User, error) {
 	if m.updateFn != nil {
 		return m.updateFn(ctx, id, input)
@@ -109,7 +117,10 @@ func (m *mockUserRepo) WithTx(_ pgx.Tx) Repository {
 
 type mockGuestRepo struct {
 	listFn                       func(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error)
+	listByFamilyGroupFn          func(ctx context.Context, familyGroup int64) ([]guest.Guest, error)
 	getByID                      func(ctx context.Context, id int64, userRACF string) (*guest.Guest, error)
+	getByIDAnyFn                 func(ctx context.Context, id int64) (*guest.Guest, error)
+	getByIDsFn                   func(ctx context.Context, ids []int64) ([]guest.Guest, error)
 	getByNameFn                  func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
 	familyGroupExistsFn          func(ctx context.Context, familyGroup int64) (bool, error)
 	getNextFamilyGroupFn         func(ctx context.Context) (int64, error)
@@ -118,6 +129,7 @@ type mockGuestRepo struct {
 	deleteFn                     func(ctx context.Context, id int64) error
 	setConfirmedFn               func(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error)
 	setConfirmedByFamilyGroupFn  func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error)
+	setConfirmedByIDsFn          func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]guest.Guest, error)
 	getFamilyGroupByPhoneFn      func(ctx context.Context, phone string) (*int64, error)
 }
 
@@ -133,6 +145,30 @@ func (m *mockGuestRepo) GetByID(ctx context.Context, id int64, userRACF string) 
 		return m.getByID(ctx, id, userRACF)
 	}
 	return nil, nil
+}
+
+func (m *mockGuestRepo) ListByFamilyGroup(ctx context.Context, familyGroup int64) ([]guest.Guest, error) {
+	if m.listByFamilyGroupFn != nil {
+		return m.listByFamilyGroupFn(ctx, familyGroup)
+	}
+	return []guest.Guest{}, nil
+}
+
+func (m *mockGuestRepo) GetByIDAny(ctx context.Context, id int64) (*guest.Guest, error) {
+	if m.getByIDAnyFn != nil {
+		return m.getByIDAnyFn(ctx, id)
+	}
+	if m.getByID != nil {
+		return m.getByID(ctx, id, "")
+	}
+	return nil, nil
+}
+
+func (m *mockGuestRepo) GetByIDs(ctx context.Context, ids []int64) ([]guest.Guest, error) {
+	if m.getByIDsFn != nil {
+		return m.getByIDsFn(ctx, ids)
+	}
+	return []guest.Guest{}, nil
 }
 
 func (m *mockGuestRepo) GetByName(ctx context.Context, firstName, lastName string) (*guest.Guest, error) {
@@ -184,6 +220,13 @@ func (m *mockGuestRepo) SetConfirmed(ctx context.Context, id int64, confirmed bo
 func (m *mockGuestRepo) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error) {
 	if m.setConfirmedByFamilyGroupFn != nil {
 		return m.setConfirmedByFamilyGroupFn(ctx, familyGroup, confirmed, userRACF)
+	}
+	return []guest.Guest{}, nil
+}
+
+func (m *mockGuestRepo) SetConfirmedByIDs(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]guest.Guest, error) {
+	if m.setConfirmedByIDsFn != nil {
+		return m.setConfirmedByIDsFn(ctx, ids, confirmed, userRACF)
 	}
 	return []guest.Guest{}, nil
 }
