@@ -25,7 +25,7 @@ export function Header() {
 
         <div className="hidden nav:flex gap-2.5 items-center">
           <a
-            href="/lista-presenca"
+            href="/registrar-presenca"
             className="inline-flex items-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-transparent text-burgundy border border-burgundy hover:bg-burgundy hover:text-gold-light"
           >
             <UserCheck size={15} />
@@ -53,7 +53,7 @@ export function Header() {
         <div className="anim-slide-down border-t border-parchment-dark px-6 pt-4 pb-6">
           <div className="flex flex-col gap-2.5">
             <a
-              href="/lista-presenca"
+              href="/registrar-presenca"
               className="inline-flex items-center justify-center gap-[0.45rem] font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.55rem] px-[1.15rem] cursor-pointer no-underline transition-all duration-300 whitespace-nowrap bg-transparent text-burgundy border border-burgundy hover:bg-burgundy hover:text-gold-light w-full"
             >
               <UserCheck size={15} />

@@ -20,7 +20,7 @@ function securityHeaders(): Record<string, string> {
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https:",
     `connect-src 'self' https://api.mercadopago.com${apiBase ? " " + apiBase : ""}`,
-    "frame-src https://*.mercadopago.com.br https://*.mercadopago.com",
+    "frame-src https://*.mercadopago.com.br https://*.mercadopago.com https://www.google.com https://maps.google.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
