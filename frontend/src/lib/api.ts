@@ -53,10 +53,8 @@ import {
 } from "../schemas/payment";
 import {
   publicMessageSchema,
-  pagedPublicMessagesSchema,
   pagedAdminMessagesSchema,
   type PublicMessage,
-  type PagedPublicMessages,
   type PagedAdminMessages,
 } from "../schemas/giftMessage";
 
@@ -388,20 +386,6 @@ export async function getMyTransactionMessage(
   });
   if (res.status === 404) return null;
   return handleResponse(res, publicMessageSchema);
-}
-
-export async function listGiftMessages(
-  giftId: number,
-  params?: { page?: number; limit?: number },
-): Promise<PagedPublicMessages> {
-  const query = new URLSearchParams();
-  if (params?.page) query.set("page", String(params.page));
-  if (params?.limit) query.set("limit", String(params.limit));
-  const url = query.toString()
-    ? `${API_BASE}/api/gifts/${giftId}/messages?${query.toString()}`
-    : `${API_BASE}/api/gifts/${giftId}/messages`;
-  const res = await fetch(url);
-  return handleResponse(res, pagedPublicMessagesSchema);
 }
 
 export async function listAdminGiftMessages(params?: {

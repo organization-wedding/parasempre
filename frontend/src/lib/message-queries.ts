@@ -4,7 +4,6 @@ import {
   deleteGiftMessage,
   getMyTransactionMessage,
   listAdminGiftMessages,
-  listGiftMessages,
 } from "./api";
 import type { PublicMessage } from "../schemas/giftMessage";
 
@@ -22,16 +21,6 @@ export function useMyTransactionMessageQuery(transactionId: number, enabled: boo
     queryFn: () => getMyTransactionMessage(transactionId),
     enabled,
     staleTime: 60 * 1000,
-  });
-}
-
-export function useGiftMessagesQuery(giftId: number, page?: number) {
-  return useQuery({
-    queryKey: messageKeys.byGift(giftId, page),
-    queryFn: () => listGiftMessages(giftId, { page }),
-    placeholderData: (prev) => prev,
-    // staleTime menor que TTL de signed URL (15min) para evitar URLs expiradas em cache.
-    staleTime: 5 * 60 * 1000,
   });
 }
 
