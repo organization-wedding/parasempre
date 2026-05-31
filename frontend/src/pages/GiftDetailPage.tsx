@@ -1,24 +1,16 @@
-import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import Gift from "lucide-react/dist/esm/icons/gift";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
-import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import { Header } from "../components/Header";
-import { GiftMessageView } from "../components/GiftMessageView";
 import { isNotFoundError } from "../lib/api";
 import { useGiftQuery } from "../lib/gift-queries";
-import { useGiftMessagesQuery } from "../lib/message-queries";
 import { formatBRL } from "../lib/format";
 
 interface Props {
   giftId: number;
 }
-
-const MESSAGES_PAGE_SIZE = 5;
 
 export function GiftDetailPage({ giftId }: Props) {
   const validId = Number.isFinite(giftId) && giftId > 0;
@@ -130,88 +122,9 @@ export function GiftDetailPage({ giftId }: Props) {
                 </div>
               </div>
             </div>
-
-            <GiftMessagesSection giftId={gift.id} />
           </>
         ) : null}
       </main>
     </div>
-  );
-}
-
-function GiftMessagesSection({ giftId }: { giftId: number }) {
-  const [page, setPage] = useState(1);
-  const { data, isLoading, error } = useGiftMessagesQuery(giftId, page);
-
-  const total = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / MESSAGES_PAGE_SIZE));
-  const messages = data?.data ?? [];
-
-  return (
-    <section className="mt-16 border-t border-gold-muted/40 pt-10">
-      <header className="mb-6 flex items-center gap-3">
-        <MessageSquare size={18} className="text-burgundy" />
-        <h2 className="font-display text-[1.2rem] font-bold text-dark">Recados</h2>
-        {total > 0 && (
-          <span className="font-heading text-[0.7rem] tracking-[0.08em] uppercase text-hint">
-            {total}
-          </span>
-        )}
-      </header>
-
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-hint text-[0.85rem]">
-          <div className="w-4 h-4 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin" />
-          Carregando recados…
-        </div>
-      ) : error ? (
-        <div className="flex items-center gap-3 rounded border border-[#c25550]/30 bg-[#fef2f1] px-4 py-3">
-          <AlertTriangle size={16} className="text-[#c25550] shrink-0" />
-          <span className="text-[0.82rem] text-[#7a2e2b] flex-1">
-            {error instanceof Error ? error.message : "Não foi possível carregar os recados."}
-          </span>
-        </div>
-      ) : messages.length === 0 ? (
-        <p className="text-[0.88rem] text-hint">
-          Ainda não há recados para este presente. Seja o primeiro a presentear e deixar uma mensagem!
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-col gap-6">
-            {messages.map((m) => (
-              <article key={m.id} className="bg-ivory border border-gold-muted/30 p-5">
-                <GiftMessageView message={m} />
-              </article>
-            ))}
-          </div>
-
-          {totalPages > 1 && (
-            <div className="mt-8 flex items-center justify-center gap-4">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="inline-flex items-center gap-1.5 font-heading text-[0.7rem] font-semibold tracking-[0.06em] uppercase py-2 px-4 border border-gold-muted/50 bg-ivory text-dark-warm hover:border-burgundy hover:text-burgundy transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={14} />
-                Anterior
-              </button>
-              <span className="font-heading text-[0.72rem] tracking-[0.08em] uppercase text-dark-warm/70">
-                Página {page} de {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={page >= totalPages}
-                className="inline-flex items-center gap-1.5 font-heading text-[0.7rem] font-semibold tracking-[0.06em] uppercase py-2 px-4 border border-gold-muted/50 bg-ivory text-dark-warm hover:border-burgundy hover:text-burgundy transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Próxima
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </section>
   );
 }
