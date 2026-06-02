@@ -14,17 +14,17 @@ func TestParseCSV(t *testing.T) {
 	}{
 		{
 			name: "valid CSV with header",
-			csv:  "first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\nMaria,Santos,11888888888,R,2\n",
+			csv:  "first_name,last_name,relationship,family_group\nJoão,Silva,P,1\nMaria,Santos,R,2\n",
 			want: 2,
 		},
 		{
 			name: "valid CSV with extra whitespace",
-			csv:  "first_name,last_name,phone,relationship,family_group\n João , Silva , 11999999999 , P , 1 \n",
+			csv:  "first_name,last_name,relationship,family_group\n João , Silva , P , 1 \n",
 			want: 1,
 		},
 		{
 			name:    "empty CSV (header only)",
-			csv:     "first_name,last_name,phone,relationship,family_group\n",
+			csv:     "first_name,last_name,relationship,family_group\n",
 			want:    0,
 			wantErr: false,
 		},
@@ -35,7 +35,7 @@ func TestParseCSV(t *testing.T) {
 		},
 		{
 			name:    "missing family_group column",
-			csv:     "first_name,last_name,phone,relationship\nJoão,Silva,11999999999,P\n",
+			csv:     "first_name,last_name,relationship\nJoão,Silva,P\n",
 			wantErr: true,
 		},
 		{
@@ -45,7 +45,7 @@ func TestParseCSV(t *testing.T) {
 		},
 		{
 			name:    "invalid family_group value",
-			csv:     "first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,abc\n",
+			csv:     "first_name,last_name,relationship,family_group\nJoão,Silva,P,abc\n",
 			wantErr: true,
 		},
 	}
@@ -70,7 +70,7 @@ func TestParseCSV(t *testing.T) {
 }
 
 func TestParseCSVFieldMapping(t *testing.T) {
-	csv := "first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,5\n"
+	csv := "first_name,last_name,relationship,family_group\nJoão,Silva,P,5\n"
 	guests, err := ParseCSV(strings.NewReader(csv))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -85,9 +85,6 @@ func TestParseCSVFieldMapping(t *testing.T) {
 	if g.LastName != "Silva" {
 		t.Errorf("expected last_name 'Silva', got %q", g.LastName)
 	}
-	if g.Phone != "11999999999" {
-		t.Errorf("expected phone '11999999999', got %q", g.Phone)
-	}
 	if g.Relationship != "P" {
 		t.Errorf("expected relationship 'P', got %q", g.Relationship)
 	}
@@ -97,8 +94,6 @@ func TestParseCSVFieldMapping(t *testing.T) {
 }
 
 func TestParseXLSX(t *testing.T) {
-	// XLSX parsing is tested via integration with excelize.
-	// We test error handling for invalid input here.
 	_, err := ParseXLSX(strings.NewReader("not a valid xlsx"))
 	if err == nil {
 		t.Fatal("expected error for invalid XLSX, got nil")

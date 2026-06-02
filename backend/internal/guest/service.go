@@ -2,147 +2,215 @@ package guest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
+	"github.com/ferjunior7/parasempre/backend/internal/database"
+	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
 
-var (
-	ErrNotFound   = errors.New("guest not found")
-	ErrValidation = errors.New("validation error")
-)
-
-// UserChecker verifies whether a RACF belongs to a registered user.
-type UserChecker interface {
+type UserBridge interface {
 	UserExistsByURACF(ctx context.Context, uracf string) (bool, error)
+	CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
+	DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error
+	GetGuestIDByPhone(ctx context.Context, phone string) (*int64, error)
+	GetGuestIDByUserID(ctx context.Context, userID int64) (*int64, error)
+	GetURACFByUserID(ctx context.Context, userID int64) (string, error)
 }
 
 type Service struct {
-	repo        Repository
-	userChecker UserChecker
+	repo     TxAwareRepository
+	users    UserBridge
+	txRunner database.TxRunner
 }
 
-func NewService(repo Repository, userChecker UserChecker) *Service {
-	return &Service{repo: repo, userChecker: userChecker}
+func NewService(repo TxAwareRepository, users UserBridge, txRunner database.TxRunner) *Service {
+	return &Service{repo: repo, users: users, txRunner: txRunner}
 }
 
-func (s *Service) List(ctx context.Context) ([]Guest, error) {
-	guests, err := s.repo.List(ctx)
+func (s *Service) ListMyFamily(ctx context.Context, userID int64) ([]Guest, error) {
+	guestID, err := s.users.GetGuestIDByUserID(ctx, userID)
 	if err != nil {
-		slog.Error("guest.service list: failed", "error", err)
-		return nil, err
+		slog.Error("guest.service list_my_family: failed to get current user's guest", "user_id", userID, "error", err)
+		return nil, apperror.Internal("failed to verify guest identity", err)
+	}
+	if guestID == nil {
+		return []Guest{}, nil
+	}
+
+	currentGuest, err := s.repo.GetByIDAny(ctx, *guestID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
+	}
+
+	guests, err := s.repo.ListByFamilyGroup(ctx, currentGuest.FamilyGroup)
+	if err != nil {
+		return nil, apperror.Internal("failed to list family guests", err)
 	}
 	return guests, nil
 }
 
-func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {
-	guest, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		slog.Error("guest.service get_by_id: failed", "id", id, "error", err)
+func (s *Service) SetConfirmedBatch(ctx context.Context, input BatchConfirmInput, userID int64) ([]Guest, error) {
+	if err := validate.Struct(input); err != nil {
 		return nil, err
+	}
+
+	currentUserGuestID, err := s.users.GetGuestIDByUserID(ctx, userID)
+	if err != nil {
+		slog.Error("guest.service set_confirmed_batch: failed to get current user's guest", "user_id", userID, "error", err)
+		return nil, apperror.Internal("failed to verify guest identity", err)
+	}
+	if currentUserGuestID == nil {
+		return nil, apperror.Forbidden("only guests can confirm attendance")
+	}
+
+	currentGuest, err := s.repo.GetByIDAny(ctx, *currentUserGuestID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
+	}
+
+	targets, err := s.repo.GetByIDs(ctx, input.GuestIDs)
+	if err != nil {
+		return nil, apperror.Internal("failed to fetch target guests", err)
+	}
+	if len(targets) != len(input.GuestIDs) {
+		return nil, apperror.NotFound("one or more guests not found")
+	}
+	for _, target := range targets {
+		if target.FamilyGroup != currentGuest.FamilyGroup {
+			slog.Warn("guest.service set_confirmed_batch: unauthorized cross-family attempt", "user_id", userID, "target_id", target.ID, "caller_family", currentGuest.FamilyGroup, "target_family", target.FamilyGroup)
+			return nil, apperror.Forbidden("you can only confirm guests in your own family")
+		}
+	}
+
+	updatedByRACF, err := s.users.GetURACFByUserID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
+	}
+
+	var updated []Guest
+	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		guests, err := txRepo.SetConfirmedByIDs(ctx, input.GuestIDs, input.Confirmed, updatedByRACF)
+		if err != nil {
+			return err
+		}
+		updated = guests
+		return nil
+	}); err != nil {
+		return nil, apperror.WrapIfNotApp("failed to update batch confirmation", err)
+	}
+
+	slog.Info("guest.service set_confirmed_batch: success", "ids", input.GuestIDs, "confirmed", input.Confirmed, "count", len(updated), "user_id", userID)
+	return updated, nil
+}
+
+func (s *Service) List(ctx context.Context, page, limit int, userRACF string) (*PagedResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset := (page - 1) * limit
+	guests, total, err := s.repo.List(ctx, limit, offset, userRACF)
+	if err != nil {
+		slog.Error("guest.service list: failed", "error", err)
+		return nil, apperror.Internal("failed to list guests", err)
+	}
+	return &PagedResponse{
+		Data:  guests,
+		Page:  page,
+		Limit: limit,
+		Total: total,
+	}, nil
+}
+
+func (s *Service) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	guest, err := s.repo.GetByID(ctx, id, userRACF)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to get guest", err)
 	}
 	return guest, nil
 }
 
 func (s *Service) Create(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
-	if err := validateCreate(input); err != nil {
-		slog.Warn("guest.service create: validation failed", "first_name", input.FirstName, "last_name", input.LastName, "error", err)
+	if err := validate.Struct(input); err != nil {
 		return nil, err
 	}
 
-	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
+	exists, err := s.users.UserExistsByURACF(ctx, userRACF)
 	if err != nil {
 		slog.Error("guest.service create: user check failed", "user_racf", userRACF, "error", err)
-		return nil, fmt.Errorf("failed to verify user: %w", err)
+		return nil, apperror.Internal("failed to verify user", err)
 	}
 	if !exists {
-		slog.Warn("guest.service create: unknown user racf", "user_racf", userRACF)
-		return nil, errors.New("user-racf does not match any registered user")
-	}
-
-	existing, err := s.repo.GetByName(ctx, input.FirstName, input.LastName)
-	if err != nil {
-		slog.Error("guest.service create: name lookup failed", "first_name", input.FirstName, "last_name", input.LastName, "error", err)
-		return nil, fmt.Errorf("failed to check name uniqueness: %w", err)
-	}
-	if existing != nil {
-		slog.Warn("guest.service create: duplicate name", "first_name", input.FirstName, "last_name", input.LastName)
-		return nil, fmt.Errorf("a guest named '%s %s' already exists", input.FirstName, input.LastName)
-	}
-
-	if input.Phone != "" {
-		existingByPhone, err := s.repo.GetByPhone(ctx, input.Phone)
-		if err != nil {
-			slog.Error("guest.service create: phone lookup failed", "phone", input.Phone, "error", err)
-			return nil, fmt.Errorf("failed to check phone uniqueness: %w", err)
-		}
-		if existingByPhone != nil {
-			slog.Warn("guest.service create: duplicate phone", "phone", input.Phone)
-			return nil, fmt.Errorf("a guest with phone '%s' already exists", input.Phone)
-		}
+		return nil, apperror.Validation("user-racf does not match any registered user")
 	}
 
 	if input.FamilyGroup != nil {
 		familyGroupExists, err := s.repo.FamilyGroupExists(ctx, *input.FamilyGroup)
 		if err != nil {
-			slog.Error("guest.service create: family_group lookup failed", "family_group", *input.FamilyGroup, "error", err)
-			return nil, fmt.Errorf("failed to validate family_group: %w", err)
+			slog.Error("guest.service create: family_group lookup failed", "error", err)
+			return nil, apperror.Internal("failed to validate family_group", err)
 		}
 		if !familyGroupExists {
-			slog.Warn("guest.service create: family_group not found", "family_group", *input.FamilyGroup)
-			return nil, errors.New("family_group not found")
+			return nil, apperror.Validation("family_group not found")
 		}
 	} else {
 		nextFamilyGroup, err := s.repo.GetNextFamilyGroup(ctx)
 		if err != nil {
 			slog.Error("guest.service create: failed to get next family_group", "error", err)
-			return nil, fmt.Errorf("failed to generate family_group: %w", err)
+			return nil, apperror.Internal("failed to generate family_group", err)
 		}
 		input.FamilyGroup = &nextFamilyGroup
 	}
 
-	guest, err := s.repo.Create(ctx, input, userRACF)
-	if err != nil {
-		slog.Error("guest.service create: repository create failed", "user_racf", userRACF, "error", err)
-		return nil, err
+	var created *Guest
+	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		g, err := txRepo.Create(ctx, input, userRACF)
+		if err != nil {
+			return err
+		}
+		created = g
+
+		if err := s.users.CreateGuestUserTx(ctx, tx, g.ID, input.Phone); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, apperror.WrapIfNotApp("failed to create guest", err)
 	}
-	slog.Info("guest.service create: guest created", "id", guest.ID, "user_racf", userRACF)
-	return guest, nil
+
+	slog.Info("guest.service create: guest+user created", "id", created.ID, "user_racf", userRACF)
+	return created, nil
 }
 
 func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error) {
-	if err := validateUpdate(input); err != nil {
-		slog.Warn("guest.service update: validation failed", "id", id, "error", err)
+	if err := validate.Struct(input); err != nil {
 		return nil, err
 	}
 
-	exists, err := s.userChecker.UserExistsByURACF(ctx, userRACF)
+	exists, err := s.users.UserExistsByURACF(ctx, userRACF)
 	if err != nil {
-		slog.Error("guest.service update: user check failed", "id", id, "user_racf", userRACF, "error", err)
-		return nil, fmt.Errorf("failed to verify user: %w", err)
+		slog.Error("guest.service update: user check failed", "error", err)
+		return nil, apperror.Internal("failed to verify user", err)
 	}
 	if !exists {
-		slog.Warn("guest.service update: unknown user racf", "id", id, "user_racf", userRACF)
-		return nil, errors.New("user-racf does not match any registered user")
-	}
-
-	if input.Phone != nil && *input.Phone != "" {
-		existingByPhone, err := s.repo.GetByPhone(ctx, *input.Phone)
-		if err != nil {
-			slog.Error("guest.service update: phone lookup failed", "id", id, "phone", *input.Phone, "error", err)
-			return nil, fmt.Errorf("failed to check phone uniqueness: %w", err)
-		}
-		if existingByPhone != nil && existingByPhone.ID != id {
-			slog.Warn("guest.service update: duplicate phone", "id", id, "phone", *input.Phone)
-			return nil, fmt.Errorf("a guest with phone '%s' already exists", *input.Phone)
-		}
+		return nil, apperror.Validation("user-racf does not match any registered user")
 	}
 
 	if input.FirstName != nil || input.LastName != nil {
-		current, err := s.repo.GetByID(ctx, id)
+		current, err := s.repo.GetByID(ctx, id, userRACF)
 		if err != nil {
-			slog.Error("guest.service update: current guest fetch failed", "id", id, "error", err)
 			return nil, err
 		}
 		firstName := current.FirstName
@@ -155,60 +223,200 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 		}
 		existing, err := s.repo.GetByName(ctx, firstName, lastName)
 		if err != nil {
-			slog.Error("guest.service update: name lookup failed", "id", id, "first_name", firstName, "last_name", lastName, "error", err)
-			return nil, fmt.Errorf("failed to check name uniqueness: %w", err)
+			slog.Error("guest.service update: name lookup failed", "error", err)
+			return nil, apperror.Internal("failed to check name uniqueness", err)
 		}
 		if existing != nil && existing.ID != id {
-			slog.Warn("guest.service update: duplicate name", "id", id, "first_name", firstName, "last_name", lastName)
-			return nil, fmt.Errorf("a guest named '%s %s' already exists", firstName, lastName)
+			return nil, apperror.Conflict(fmt.Sprintf("a guest named '%s %s' already exists", firstName, lastName))
 		}
 	}
 
 	guest, err := s.repo.Update(ctx, id, input, userRACF)
 	if err != nil {
-		slog.Error("guest.service update: repository update failed", "id", id, "user_racf", userRACF, "error", err)
-		return nil, err
+		return nil, apperror.WrapIfNotApp("failed to update guest", err)
 	}
 	slog.Info("guest.service update: guest updated", "id", guest.ID, "user_racf", userRACF)
 	return guest, nil
 }
 
+func (s *Service) Confirm(ctx context.Context, id int64, userID int64) (*Guest, error) {
+	return s.setConfirmed(ctx, id, true, userID)
+}
+
+func (s *Service) Cancel(ctx context.Context, id int64, userID int64) (*Guest, error) {
+	return s.setConfirmed(ctx, id, false, userID)
+}
+
+func (s *Service) ConfirmByPhone(ctx context.Context, phone string, userID int64) (*Guest, error) {
+	return s.setConfirmedByPhone(ctx, phone, true, userID)
+}
+
+func (s *Service) CancelByPhone(ctx context.Context, phone string, userID int64) (*Guest, error) {
+	return s.setConfirmedByPhone(ctx, phone, false, userID)
+}
+
+func (s *Service) ConfirmFamily(ctx context.Context, familyGroup int64, userID int64) ([]Guest, error) {
+	return s.setConfirmedFamily(ctx, familyGroup, true, userID)
+}
+
+func (s *Service) CancelFamily(ctx context.Context, familyGroup int64, userID int64) ([]Guest, error) {
+	return s.setConfirmedFamily(ctx, familyGroup, false, userID)
+}
+
+func (s *Service) ConfirmFamilyByPhone(ctx context.Context, phone string, userID int64) ([]Guest, error) {
+	return s.setConfirmedFamilyByPhone(ctx, phone, true, userID)
+}
+
+func (s *Service) CancelFamilyByPhone(ctx context.Context, phone string, userID int64) ([]Guest, error) {
+	return s.setConfirmedFamilyByPhone(ctx, phone, false, userID)
+}
+
+func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, userID int64) (*Guest, error) {
+	currentUserGuestID, err := s.users.GetGuestIDByUserID(ctx, userID)
+	if err != nil {
+		slog.Error("guest.service set_confirmed: failed to get current user's guest", "user_id", userID, "error", err)
+		return nil, apperror.Internal("failed to verify guest identity", err)
+	}
+	if currentUserGuestID == nil {
+		return nil, apperror.Forbidden("only guests can confirm their attendance")
+	}
+
+	currentGuest, err := s.repo.GetByIDAny(ctx, *currentUserGuestID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
+	}
+
+	target, err := s.repo.GetByIDAny(ctx, id)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch guest", err)
+	}
+
+	if target.FamilyGroup != currentGuest.FamilyGroup {
+		slog.Warn("guest.service set_confirmed: unauthorized cross-family attempt", "user_id", userID, "requested_guest_id", id, "caller_family", currentGuest.FamilyGroup, "target_family", target.FamilyGroup)
+		return nil, apperror.Forbidden("you can only confirm guests in your own family")
+	}
+
+	if target.Confirmed == confirmed {
+		slog.Info("guest.service set_confirmed: already in desired state, skipping update", "id", id, "confirmed", confirmed)
+		return target, nil
+	}
+
+	updatedByRACF, err := s.users.GetURACFByUserID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
+	}
+
+	updated, err := s.repo.SetConfirmed(ctx, id, confirmed, updatedByRACF)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to update confirmation", err)
+	}
+	slog.Info("guest.service set_confirmed: success", "id", updated.ID, "confirmed", confirmed, "user_id", userID)
+	return updated, nil
+}
+
+func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirmed bool, userID int64) (*Guest, error) {
+	guestID, err := s.users.GetGuestIDByPhone(ctx, phone)
+	if err != nil {
+		slog.Error("guest.service set_confirmed_by_phone: phone lookup failed", "phone", phone, "error", err)
+		return nil, apperror.Internal("failed to find guest by phone", err)
+	}
+	if guestID == nil {
+		return nil, apperror.NotFound("no guest found for this phone number")
+	}
+
+	return s.setConfirmed(ctx, *guestID, confirmed, userID)
+}
+
+func (s *Service) setConfirmedFamily(ctx context.Context, familyGroup int64, confirmed bool, userID int64) ([]Guest, error) {
+	currentUserGuestID, err := s.users.GetGuestIDByUserID(ctx, userID)
+	if err != nil {
+		slog.Error("guest.service set_confirmed_family: failed to get current user's guest", "user_id", userID, "error", err)
+		return nil, apperror.Internal("failed to verify guest identity", err)
+	}
+	if currentUserGuestID == nil {
+		return nil, apperror.Forbidden("only guests can confirm family attendance")
+	}
+
+	currentGuest, err := s.repo.GetByIDAny(ctx, *currentUserGuestID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to fetch current guest", err)
+	}
+
+	if currentGuest.FamilyGroup != familyGroup {
+		slog.Warn("guest.service set_confirmed_family: unauthorized attempt", "user_id", userID, "requested_family", familyGroup, "actual_family", currentGuest.FamilyGroup)
+		return nil, apperror.Forbidden("you can only confirm your own family's attendance")
+	}
+
+	familyGroupExists, err := s.repo.FamilyGroupExists(ctx, familyGroup)
+	if err != nil {
+		slog.Error("guest.service set_confirmed_family: family group lookup failed", "family_group", familyGroup, "error", err)
+		return nil, apperror.Internal("failed to validate family_group", err)
+	}
+	if !familyGroupExists {
+		return nil, apperror.NotFound("family group not found")
+	}
+
+	updatedByRACF, err := s.users.GetURACFByUserID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
+	}
+
+	guests, err := s.repo.SetConfirmedByFamilyGroup(ctx, familyGroup, confirmed, updatedByRACF)
+	if err != nil {
+		return nil, apperror.WrapIfNotApp("failed to update family confirmation", err)
+	}
+
+	slog.Info("guest.service set_confirmed_family: success", "family_group", familyGroup, "confirmed", confirmed, "count", len(guests), "user_id", userID)
+	return guests, nil
+}
+
+func (s *Service) setConfirmedFamilyByPhone(ctx context.Context, phone string, confirmed bool, userID int64) ([]Guest, error) {
+	familyGroup, err := s.repo.GetFamilyGroupByPhone(ctx, phone)
+	if err != nil {
+		slog.Error("guest.service set_confirmed_family_by_phone: phone lookup failed", "phone", phone, "error", err)
+		return nil, apperror.Internal("failed to find family by phone", err)
+	}
+	if familyGroup == nil {
+		return nil, apperror.NotFound("no family found for this phone number")
+	}
+
+	return s.setConfirmedFamily(ctx, *familyGroup, confirmed, userID)
+}
+
+func (s *Service) Import(ctx context.Context, guests []CreateGuestInput, userRACF string) ImportResponse {
+	var successCount int
+	var rowErrors []ImportRowError
+	const dataRowStart = 2
+	for i, input := range guests {
+		rowNumber := i + dataRowStart
+		if _, err := s.Create(ctx, input, userRACF); err != nil {
+			slog.Warn("guest.service import: row failed", "row", rowNumber, "error", err)
+			rowErrors = append(rowErrors, ImportRowError{Row: rowNumber, Error: err.Error()})
+			continue
+		}
+		successCount++
+	}
+	if rowErrors == nil {
+		rowErrors = []ImportRowError{}
+	}
+	return ImportResponse{
+		SuccessCount: successCount,
+		ErrorCount:   len(rowErrors),
+		Total:        len(guests),
+		Errors:       rowErrors,
+	}
+}
+
 func (s *Service) Delete(ctx context.Context, id int64) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
-		slog.Error("guest.service delete: failed", "id", id, "error", err)
-		return err
+	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
+		if err := s.users.DeleteGuestUserTx(ctx, tx, id); err != nil {
+			return err
+		}
+		txRepo := s.repo.WithTx(tx)
+		return txRepo.Delete(ctx, id)
+	}); err != nil {
+		return apperror.WrapIfNotApp("failed to delete guest", err)
 	}
 	slog.Info("guest.service delete: guest deleted", "id", id)
-	return nil
-}
-
-var phoneRegex = regexp.MustCompile(`^\d{2}9\d{8}$`)
-
-func validateCreate(input CreateGuestInput) error {
-	if input.FirstName == "" {
-		return errors.New("first_name is required")
-	}
-	if input.LastName == "" {
-		return errors.New("last_name is required")
-	}
-	if input.Phone != "" && !phoneRegex.MatchString(input.Phone) {
-		return errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
-	}
-	if input.Relationship != "P" && input.Relationship != "R" {
-		return errors.New("relationship must be 'P' or 'R'")
-	}
-	if input.FamilyGroup != nil && *input.FamilyGroup <= 0 {
-		return errors.New("family_group must be greater than 0")
-	}
-	return nil
-}
-
-func validateUpdate(input UpdateGuestInput) error {
-	if input.Phone != nil && *input.Phone != "" && !phoneRegex.MatchString(*input.Phone) {
-		return errors.New("phone must be a valid BR mobile number (11 digits: DDD + 9 + 8 digits)")
-	}
-	if input.Relationship != nil && *input.Relationship != "P" && *input.Relationship != "R" {
-		return errors.New("relationship must be 'P' or 'R'")
-	}
 	return nil
 }

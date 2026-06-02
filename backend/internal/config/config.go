@@ -1,64 +1,321 @@
 package config
 
-import "os"
+import (
+	"fmt"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	envDBHost     = "DB_HOST"
+	envDBPort     = "DB_PORT"
+	envDBUser     = "DB_USER"
+	envDBPassword = "DB_PASSWORD"
+	envDBName     = "DB_NAME"
+	envDBSSLMode  = "DB_SSLMODE"
+
+	envCORSOrigin = "CORS_ORIGIN"
+	envAppEnv     = "APP_ENV"
+
+	envGroomPhone = "GROOM_PHONE"
+	envGroomURACF = "GROOM_URACF"
+	envBridePhone = "BRIDE_PHONE"
+	envBrideURACF = "BRIDE_URACF"
+
+	envJWTSecret = "JWT_SECRET"
+	envJWTExpiry = "JWT_EXPIRY"
+
+	envEvoAPIURL      = "EVO_API_URL"
+	envEvoAPIKey      = "EVO_API_KEY"
+	envEvoAPIInstance = "EVO_API_INSTANCE"
+
+	envEnableTestLogin = "ENABLE_TEST_LOGIN"
+	envTestLoginPhone  = "TEST_LOGIN_PHONE"
+
+	envFirecrawlAPIKey = "FIRECRAWL_API_KEY"
+	envFirecrawlURL    = "FIRECRAWL_URL"
+
+	envMPAccessToken   = "MERCADO_PAGO_ACCESS_TOKEN"
+	envMPPublicKey     = "MERCADO_PAGO_PUBLIC_KEY"
+	envMPWebhookSecret = "MERCADO_PAGO_WEBHOOK_SECRET"
+	envMPBaseURL       = "MERCADO_PAGO_BASE_URL"
+
+	envSupabaseURL             = "SUPABASE_URL"
+	envSupabaseServiceRoleKey  = "SUPABASE_SERVICE_ROLE_KEY"
+	envSupabaseStorageBucket   = "SUPABASE_STORAGE_BUCKET"
+	envGiftMessageSignedURLTTL = "GIFT_MESSAGE_SIGNED_URL_TTL_SECONDS"
+
+	envDBMaxConns    = "DB_MAX_CONNS"
+	envDBMinConns    = "DB_MIN_CONNS"
+	envDBMaxConnLife = "DB_MAX_CONN_LIFETIME"
+	envDBMaxConnIdle = "DB_MAX_CONN_IDLE_TIME"
+)
+
+const (
+	defaultCORSOrigin    = "http://localhost:3000"
+	defaultAppEnv        = "test"
+	defaultJWTExpiry     = "3h"
+	defaultDBSSLMode     = "require"
+	defaultDBMaxConns    = "10"
+	defaultDBMinConns    = "2"
+	defaultDBMaxConnLife = "30m"
+	defaultDBMaxConnIdle = "5m"
+
+	defaultFirecrawlURL = "https://api.firecrawl.dev"
+	defaultMPBaseURL    = "https://api.mercadopago.com"
+
+	defaultSupabaseStorageBucket   = "gift-messages"
+	defaultGiftMessageSignedURLTTL = "900"
+)
 
 type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Name     string
-	SSLMode  string
+	Host            string
+	Port            string
+	User            string
+	Password        string
+	Name            string
+	SSLMode         string
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
 }
 
-type PersonConfig struct {
-	FirstName string
-	LastName  string
-	Phone     string
-	URACF     string
+type CoupleUserConfig struct {
+	Phone string
+	URACF string
 }
 
 type CoupleConfig struct {
-	Groom PersonConfig
-	Bride PersonConfig
+	Groom CoupleUserConfig
+	Bride CoupleUserConfig
 }
 
 type Config struct {
-	DB         DBConfig
-	Port       string
-	CORSOrigin string
-	AppEnv     string
-	Couple     CoupleConfig
+	DB                       DBConfig
+	CORSOrigin               string
+	AppEnv                   string
+	Couple                   CoupleConfig
+	JWTSecret                string
+	JWTExpiry                string
+	EvoAPIURL                string
+	EvoAPIKey                string
+	EvoAPIInstance           string
+	FirecrawlAPIKey          string
+	FirecrawlURL             string
+	MercadoPagoAccessToken   string
+	MercadoPagoPublicKey     string
+	MercadoPagoWebhookSecret string
+	MercadoPagoBaseURL       string
+
+	SupabaseURL                 string
+	SupabaseServiceRoleKey      string
+	SupabaseStorageBucket       string
+	GiftMessageSignedURLTTLSecs int
+
+	EnableTestLogin bool
+	TestLoginPhone  string
 }
 
-func Load() Config {
-	return Config{
-		DB: DBConfig{
-			Host:     getEnv("DB_HOST"),
-			Port:     getEnv("DB_PORT"),
-			User:     getEnv("DB_USER"),
-			Password: getEnv("DB_PASSWORD"),
-			Name:     getEnv("DB_NAME"),
-			SSLMode:  getEnv("DB_SSLMODE"),
-		},
-		Port:       getEnvOrDefault("PORT", "8080"),
-		CORSOrigin: getEnvOrDefault("CORS_ORIGIN", "http://localhost:"+getEnvOrDefault("FRONTEND_PORT", "3000")),
-		AppEnv:     getEnvOrDefault("APP_ENV", "test"),
-		Couple: CoupleConfig{
-			Groom: PersonConfig{
-				FirstName: getEnv("GROOM_FIRST_NAME"),
-				LastName:  getEnv("GROOM_LAST_NAME"),
-				Phone:     getEnv("GROOM_PHONE"),
-				URACF:     getEnv("GROOM_URACF"),
-			},
-			Bride: PersonConfig{
-				FirstName: getEnv("BRIDE_FIRST_NAME"),
-				LastName:  getEnv("BRIDE_LAST_NAME"),
-				Phone:     getEnv("BRIDE_PHONE"),
-				URACF:     getEnv("BRIDE_URACF"),
-			},
-		},
+type envField struct {
+	name  string
+	value string
+}
+
+func Load() (Config, error) {
+	maxConns, err := strconv.ParseInt(getEnvOrDefault(envDBMaxConns, defaultDBMaxConns), 10, 32)
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMaxConns, err)
 	}
+	minConns, err := strconv.ParseInt(getEnvOrDefault(envDBMinConns, defaultDBMinConns), 10, 32)
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMinConns, err)
+	}
+	maxConnLife, err := time.ParseDuration(getEnvOrDefault(envDBMaxConnLife, defaultDBMaxConnLife))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMaxConnLife, err)
+	}
+	maxConnIdle, err := time.ParseDuration(getEnvOrDefault(envDBMaxConnIdle, defaultDBMaxConnIdle))
+	if err != nil {
+		return Config{}, fmt.Errorf("invalid %s: %w", envDBMaxConnIdle, err)
+	}
+
+	cfg := Config{
+		DB: DBConfig{
+			Host:            getEnv(envDBHost),
+			Port:            getEnv(envDBPort),
+			User:            getEnv(envDBUser),
+			Password:        getEnv(envDBPassword),
+			Name:            getEnv(envDBName),
+			SSLMode:         getEnvOrDefault(envDBSSLMode, defaultDBSSLMode),
+			MaxConns:        int32(maxConns),
+			MinConns:        int32(minConns),
+			MaxConnLifetime: maxConnLife,
+			MaxConnIdleTime: maxConnIdle,
+		},
+		CORSOrigin: getEnvOrDefault(envCORSOrigin, defaultCORSOrigin),
+		AppEnv:     getEnvOrDefault(envAppEnv, defaultAppEnv),
+		Couple: CoupleConfig{
+			Groom: CoupleUserConfig{
+				Phone: getEnv(envGroomPhone),
+				URACF: getEnv(envGroomURACF),
+			},
+			Bride: CoupleUserConfig{
+				Phone: getEnv(envBridePhone),
+				URACF: getEnv(envBrideURACF),
+			},
+		},
+		JWTSecret:                getEnv(envJWTSecret),
+		JWTExpiry:                getEnvOrDefault(envJWTExpiry, defaultJWTExpiry),
+		EvoAPIURL:                getEnv(envEvoAPIURL),
+		EvoAPIKey:                getEnv(envEvoAPIKey),
+		EvoAPIInstance:           getEnv(envEvoAPIInstance),
+		FirecrawlAPIKey:          getEnv(envFirecrawlAPIKey),
+		FirecrawlURL:             getEnvOrDefault(envFirecrawlURL, defaultFirecrawlURL),
+		MercadoPagoAccessToken:   getEnv(envMPAccessToken),
+		MercadoPagoPublicKey:     getEnv(envMPPublicKey),
+		MercadoPagoWebhookSecret: getEnv(envMPWebhookSecret),
+		MercadoPagoBaseURL:       getEnvOrDefault(envMPBaseURL, defaultMPBaseURL),
+
+		SupabaseURL:            getEnv(envSupabaseURL),
+		SupabaseServiceRoleKey: getEnv(envSupabaseServiceRoleKey),
+		SupabaseStorageBucket:  getEnvOrDefault(envSupabaseStorageBucket, defaultSupabaseStorageBucket),
+
+		EnableTestLogin: parseBool(getEnv(envEnableTestLogin)),
+		TestLoginPhone:  getEnv(envTestLoginPhone),
+	}
+
+	ttlSecs, err := strconv.Atoi(getEnvOrDefault(envGiftMessageSignedURLTTL, defaultGiftMessageSignedURLTTL))
+	if err != nil || ttlSecs <= 0 {
+		return Config{}, fmt.Errorf("invalid %s: must be a positive integer (seconds)", envGiftMessageSignedURLTTL)
+	}
+	cfg.GiftMessageSignedURLTTLSecs = ttlSecs
+
+	if err := cfg.validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (c Config) validate() error {
+	requiredFields := []envField{
+		req(envDBHost, c.DB.Host),
+		req(envDBPort, c.DB.Port),
+		req(envDBUser, c.DB.User),
+		req(envDBPassword, c.DB.Password),
+		req(envDBName, c.DB.Name),
+		req(envJWTSecret, c.JWTSecret),
+		req(envEvoAPIURL, c.EvoAPIURL),
+		req(envEvoAPIKey, c.EvoAPIKey),
+		req(envEvoAPIInstance, c.EvoAPIInstance),
+		req(envGroomPhone, c.Couple.Groom.Phone),
+		req(envGroomURACF, c.Couple.Groom.URACF),
+		req(envBridePhone, c.Couple.Bride.Phone),
+		req(envBrideURACF, c.Couple.Bride.URACF),
+	}
+
+	var issues []string
+
+	if missing := missingRequired(requiredFields); len(missing) > 0 {
+		issues = append(issues, "missing required environment variables: "+strings.Join(missing, ", "))
+	}
+
+	if err := validatePort(envDBPort, c.DB.Port); err != nil {
+		issues = append(issues, err.Error())
+	}
+	if err := validateDuration(envJWTExpiry, c.JWTExpiry); err != nil {
+		issues = append(issues, err.Error())
+	}
+	if err := validateOneOf(envAppEnv, c.AppEnv, []string{"test", "production"}); err != nil {
+		issues = append(issues, err.Error())
+	}
+	if err := validateEvoConfig(c.EvoAPIURL); err != nil {
+		issues = append(issues, err.Error())
+	}
+
+	if (c.SupabaseURL != "") != (c.SupabaseServiceRoleKey != "") {
+		issues = append(issues, fmt.Sprintf("%s e %s precisam ser definidas juntas", envSupabaseURL, envSupabaseServiceRoleKey))
+	}
+
+	if c.EnableTestLogin && c.AppEnv == "production" {
+		issues = append(issues, fmt.Sprintf("%s must not be true when %s=production", envEnableTestLogin, envAppEnv))
+	}
+
+	if c.MercadoPagoAccessToken != "" {
+		if c.MercadoPagoWebhookSecret == "" {
+			issues = append(issues, fmt.Sprintf("%s is required when %s is set (webhooks would be unverifiable)", envMPWebhookSecret, envMPAccessToken))
+		}
+		if c.MercadoPagoPublicKey == "" {
+			issues = append(issues, fmt.Sprintf("%s is required when %s is set (frontend Brick needs the public key)", envMPPublicKey, envMPAccessToken))
+		}
+		// Cross-check env vs credential prefix to catch deploys with the wrong
+		// keys. MP production tokens start with APP_USR-, sandbox with TEST-.
+		isSandbox := strings.HasPrefix(c.MercadoPagoAccessToken, "TEST-") ||
+			strings.HasPrefix(c.MercadoPagoPublicKey, "TEST-")
+		isProdCred := strings.HasPrefix(c.MercadoPagoAccessToken, "APP_USR-") ||
+			strings.HasPrefix(c.MercadoPagoPublicKey, "APP_USR-")
+		if c.AppEnv == "production" && isSandbox {
+			issues = append(issues, fmt.Sprintf("%s is set to a SANDBOX credential (TEST-...) but %s=production — purchases would not be real", envMPAccessToken, envAppEnv))
+		}
+		if c.AppEnv != "production" && isProdCred {
+			issues = append(issues, fmt.Sprintf("%s is set to a PRODUCTION credential (APP_USR-...) but %s=%s — risk of charging real cards in non-prod", envMPAccessToken, envAppEnv, c.AppEnv))
+		}
+	}
+
+	if len(issues) > 0 {
+		return fmt.Errorf("invalid configuration:\n- %s", strings.Join(issues, "\n- "))
+	}
+
+	return nil
+}
+
+func req(name, value string) envField {
+	return envField{name: name, value: value}
+}
+
+func missingRequired(fields []envField) []string {
+	missing := make([]string, 0)
+	for _, field := range fields {
+		if strings.TrimSpace(field.value) == "" {
+			missing = append(missing, field.name)
+		}
+	}
+	return missing
+}
+
+func validatePort(name, value string) error {
+	port, err := strconv.Atoi(value)
+	if err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("%s must be a number between 1 and 65535", name)
+	}
+	return nil
+}
+
+func validateDuration(name, value string) error {
+	if _, err := time.ParseDuration(value); err != nil {
+		return fmt.Errorf("%s must be a valid duration (ex: 3h, 30m): %v", name, err)
+	}
+	return nil
+}
+
+func validateOneOf(name, value string, allowed []string) error {
+	for _, item := range allowed {
+		if value == item {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s must be one of: %s", name, strings.Join(allowed, ", "))
+}
+
+func validateEvoConfig(evoUrl string) error {
+	if _, err := url.ParseRequestURI(evoUrl); err != nil {
+		return fmt.Errorf("%s must be a valid URL: %v", envEvoAPIURL, err)
+	}
+
+	return nil
 }
 
 func getEnv(key string) string {
@@ -66,8 +323,16 @@ func getEnv(key string) string {
 }
 
 func getEnvOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+	if v, ok := os.LookupEnv(key); ok && strings.TrimSpace(v) != "" {
 		return v
 	}
 	return fallback
+}
+
+func parseBool(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1", "yes", "on":
+		return true
+	}
+	return false
 }

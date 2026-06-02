@@ -1,15 +1,15 @@
 package guest
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
+	"github.com/ferjunior7/parasempre/backend/internal/httputil"
+	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 )
 
 type Handler struct {
@@ -20,167 +20,282 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/guests", h.handleList)
-	mux.HandleFunc("POST /api/guests", h.handleCreate)
-	mux.HandleFunc("GET /api/guests/{id}", h.handleGet)
-	mux.HandleFunc("PUT /api/guests/{id}", h.handleUpdate)
-	mux.HandleFunc("DELETE /api/guests/{id}", h.handleDelete)
-	mux.HandleFunc("POST /api/guests/import", h.handleImport)
-}
+func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-var racfRegex = regexp.MustCompile(`^[A-Za-z0-9]{5}$`)
-
-func getUserRACF(r *http.Request) (string, error) {
-	racf := strings.TrimSpace(r.Header.Get("user-racf"))
-	if racf == "" {
-		slog.Error("auth: missing user-racf header")
-		return "", fmt.Errorf("header user-racf is required")
-	}
-	if !racfRegex.MatchString(racf) {
-		return "", fmt.Errorf("user-racf must be exactly 5 alphanumeric characters")
-	}
-	return strings.ToUpper(racf), nil
-}
-
-func parseID(r *http.Request) (int64, error) {
-	return strconv.ParseInt(r.PathValue("id"), 10, 64)
-}
-
-func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
-	guests, err := h.svc.List(r.Context())
+	result, err := h.svc.List(r.Context(), page, limit, userRACF)
 	if err != nil {
-		slog.Error("list: failed to list guests", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list guests")
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to list guests", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, guests)
+	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
-func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
-	if err != nil {
-		slog.Warn("get: invalid guest ID", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid guest ID")
+func (h *Handler) HandleListMyFamily(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
 		return
 	}
 
-	guest, err := h.svc.GetByID(r.Context(), id)
+	guests, err := h.svc.ListMyFamily(r.Context(), userID)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			slog.Warn("get: guest not found", "id", id)
-			writeError(w, http.StatusNotFound, "guest not found")
-			return
-		}
-		slog.Error("get: failed to get guest", "id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get guest")
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to list family guests", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, guest)
+	httputil.WriteJSON(w, http.StatusOK, guests)
 }
 
-func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
-	if err != nil {
-		slog.Error("create: failed to get user RACF", "error", err)
-		writeError(w, http.StatusBadRequest, err.Error())
+func (h *Handler) HandleBatchConfirm(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
 		return
 	}
+
+	var input BatchConfirmInput
+	if err := httputil.DecodeJSON(r, &input); err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid batch payload", err))
+		return
+	}
+
+	guests, err := h.svc.SetConfirmedBatch(r.Context(), input, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to update batch confirmation", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest id", err))
+		return
+	}
+
+	guest, err := h.svc.GetByID(r.Context(), id, userRACF)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to get guest", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
 
 	var input CreateGuestInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		slog.Error("create: invalid request body", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid JSON")
+	if err := httputil.DecodeJSON(r, &input); err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest payload", err))
 		return
 	}
 
 	guest, err := h.svc.Create(r.Context(), input, userRACF)
 	if err != nil {
-		slog.Error("create: failed to create guest", "user_racf", userRACF, "error", err)
-		writeError(w, http.StatusBadRequest, err.Error())
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to create guest", err))
 		return
 	}
-	writeJSON(w, http.StatusCreated, guest)
+	httputil.WriteJSON(w, http.StatusCreated, guest)
 }
 
-func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
-	if err != nil {
-		slog.Error("update: failed to get user RACF", "error", err)
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
+func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
 
-	id, err := parseID(r)
+	id, err := httputil.PathID(r)
 	if err != nil {
-		slog.Warn("update: invalid guest ID", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid guest ID")
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest id", err))
 		return
 	}
 
 	var input UpdateGuestInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		slog.Error("update: invalid request body", "id", id, "error", err)
-		writeError(w, http.StatusBadRequest, "invalid JSON")
+	if err := httputil.DecodeJSON(r, &input); err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest payload", err))
 		return
 	}
 
 	guest, err := h.svc.Update(r.Context(), id, input, userRACF)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			slog.Warn("update: guest not found", "id", id)
-			writeError(w, http.StatusNotFound, "guest not found")
-			return
-		}
-		slog.Error("update: failed to update guest", "id", id, "error", err)
-		writeError(w, http.StatusBadRequest, err.Error())
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to update guest", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, guest)
+	httputil.WriteJSON(w, http.StatusOK, guest)
 }
 
-func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
+func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := httputil.PathID(r)
 	if err != nil {
-		slog.Error("delete: failed to get user RACF", "error", err)
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	_ = userRACF
-
-	id, err := parseID(r)
-	if err != nil {
-		slog.Warn("delete: invalid guest ID", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid guest ID")
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest id", err))
 		return
 	}
 
 	err = h.svc.Delete(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			slog.Warn("delete: guest not found", "id", id)
-			writeError(w, http.StatusNotFound, "guest not found")
-			return
-		}
-		slog.Error("delete: failed to delete guest", "id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete guest")
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to delete guest", err))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
-	userRACF, err := getUserRACF(r)
-	if err != nil {
-		slog.Error("import: failed to get user RACF", "error", err)
-		writeError(w, http.StatusBadRequest, err.Error())
+func (h *Handler) HandleConfirm(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
 		return
 	}
 
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest id", err))
+		return
+	}
+
+	guest, err := h.svc.Confirm(r.Context(), id, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm guest", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleCancel(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	id, err := httputil.PathID(r)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest id", err))
+		return
+	}
+
+	guest, err := h.svc.Cancel(r.Context(), id, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel guest", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleConfirmByPhone(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	phone := r.PathValue("phone")
+	guest, err := h.svc.ConfirmByPhone(r.Context(), phone, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm guest by phone", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleCancelByPhone(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	phone := r.PathValue("phone")
+	guest, err := h.svc.CancelByPhone(r.Context(), phone, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel guest by phone", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guest)
+}
+
+func (h *Handler) HandleConfirmFamily(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	familyGroupStr := r.PathValue("familyGroup")
+	familyGroup, err := strconv.ParseInt(familyGroupStr, 10, 64)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid family group", err))
+		return
+	}
+
+	guests, err := h.svc.ConfirmFamily(r.Context(), familyGroup, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm family group", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleCancelFamily(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	familyGroupStr := r.PathValue("familyGroup")
+	familyGroup, err := strconv.ParseInt(familyGroupStr, 10, 64)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid family group", err))
+		return
+	}
+
+	guests, err := h.svc.CancelFamily(r.Context(), familyGroup, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel family group", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleConfirmFamilyByPhone(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	phone := r.PathValue("phone")
+	guests, err := h.svc.ConfirmFamilyByPhone(r.Context(), phone, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm family by phone", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleCancelFamilyByPhone(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == 0 {
+		httputil.WriteError(w, r, apperror.Unauthorized("authentication required"))
+		return
+	}
+
+	phone := r.PathValue("phone")
+	guests, err := h.svc.CancelFamilyByPhone(r.Context(), phone, userID)
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel family by phone", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, guests)
+}
+
+func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
+	userRACF := middleware.UserRACFFromContext(r.Context())
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		slog.Error("import: missing file", "error", err)
-		writeError(w, http.StatusBadRequest, "file is required")
+		httputil.WriteError(w, r, apperror.Validation("file is required"))
 		return
 	}
 	defer file.Close()
@@ -194,46 +309,24 @@ func (h *Handler) handleImport(w http.ResponseWriter, r *http.Request) {
 	case ".xlsx":
 		guests, err = ParseXLSX(file)
 	default:
-		slog.Warn("import: unsupported file format", "extension", ext)
-		writeError(w, http.StatusBadRequest, "unsupported file format: use .csv or .xlsx")
+		httputil.WriteError(w, r, apperror.Validation("unsupported file format: use .csv or .xlsx"))
 		return
 	}
 
 	if err != nil {
 		slog.Error("import: failed to parse file", "extension", ext, "error", err)
-		writeError(w, http.StatusBadRequest, "failed to parse file: "+err.Error())
+		httputil.WriteError(w, r, apperror.Validation("failed to parse uploaded file"))
 		return
 	}
 
-	var created int
-	var errs []string
-	for i, input := range guests {
-		if _, err := h.svc.Create(r.Context(), input, userRACF); err != nil {
-			slog.Warn("import: failed to create guest", "row", i+2, "error", err)
-			errs = append(errs, err.Error())
-			continue
-		}
-		created++
-	}
+	result := h.svc.Import(r.Context(), guests, userRACF)
 
 	status := http.StatusOK
-	if len(errs) > 0 {
+	if result.ErrorCount > 0 && result.SuccessCount > 0 {
+		status = http.StatusMultiStatus
+	} else if result.ErrorCount > 0 {
 		status = http.StatusBadRequest
 	}
 
-	writeJSON(w, status, map[string]any{
-		"imported": created,
-		"errors":   errs,
-		"total":    len(guests),
-	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	httputil.WriteJSON(w, status, result)
 }

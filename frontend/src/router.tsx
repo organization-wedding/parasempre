@@ -3,21 +3,38 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  redirect,
 } from "@tanstack/react-router";
 import { LandingPage } from "./pages/LandingPage";
 import { GuestListPage } from "./pages/GuestListPage";
 import { GuestFormPage } from "./pages/GuestFormPage";
+import { LoginPage } from "./pages/LoginPage";
+import { RegisterAttendancePage } from "./pages/RegisterAttendancePage";
 import { UnderConstruction } from "./pages/UnderConstruction";
-import { ImpersonationModal } from "./components/ImpersonationModal";
+import { GiftListPage } from "./pages/GiftListPage";
+import { GiftDetailPage } from "./pages/GiftDetailPage";
+import { GiftCheckoutPage } from "./pages/GiftCheckoutPage";
+import { GiftAdminPage } from "./pages/GiftAdminPage";
+import { GiftFormPage } from "./pages/GiftFormPage";
+import { GiftImportPage } from "./pages/GiftImportPage";
+import { MyGiftsPage } from "./pages/MyGiftsPage";
+import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
+import { AdminGiftMessagesPage } from "./pages/AdminGiftMessagesPage";
+import { AdminLayout } from "./components/AdminLayout";
+import { isAuthenticated } from "./lib/auth";
 import "./index.css";
 
+function requireAuth({ location }: { location: { pathname: string } }) {
+  if (!isAuthenticated()) {
+    throw redirect({
+      to: "/login",
+      search: { redirect: location.pathname },
+    });
+  }
+}
+
 function RootLayout() {
-  return (
-    <>
-      <Outlet />
-      <ImpersonationModal />
-    </>
-  );
+  return <Outlet />;
 }
 
 const rootRoute = createRootRoute({
@@ -30,28 +47,139 @@ const homeRoute = createRoute({
   component: LandingPage,
 });
 
-const dashboardRoute = createRoute({
+const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard",
+  path: "/login",
+  component: LoginPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: (search.redirect as string) || undefined,
+  }),
+});
+
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin",
+  component: AdminLayout,
+  beforeLoad: requireAuth,
+});
+
+const adminIndexRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "/",
   component: GuestListPage,
 });
 
 const guestCreateRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/novo",
+  getParentRoute: () => adminRoute,
+  path: "novo",
   component: GuestFormPage,
 });
 
 const guestEditRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/$guestId",
+  getParentRoute: () => adminRoute,
+  path: "$guestId",
   component: GuestEditRoute,
 });
 
-const guestListRoute = createRoute({
+const giftAdminRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes",
+  component: GiftAdminPage,
+});
+
+const giftAdminCreateRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes/novo",
+  component: GiftFormPage,
+});
+
+const giftAdminImportRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes/importar",
+  component: GiftImportPage,
+});
+
+const giftAdminEditRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "presentes/$giftId",
+  component: GiftAdminEditRoute,
+});
+
+const adminTransactionsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "pagamentos",
+  component: AdminTransactionsPage,
+});
+
+const adminGiftMessagesRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "recados",
+  component: AdminGiftMessagesPage,
+});
+
+const dashboardLegacyRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/lista-presenca",
-  component: UnderConstruction,
+  path: "/dashboard/$",
+  component: () => null,
+  beforeLoad: ({ params }) => {
+    const rest = (params as { _splat?: string })._splat ?? "";
+    throw redirect({ to: rest ? `/admin/${rest}` : "/admin" });
+  },
+});
+
+const dashboardLegacyRootRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard",
+  component: () => null,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin" });
+  },
+});
+
+const registerAttendanceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/registrar-presenca",
+  component: RegisterAttendancePage,
+  beforeLoad: requireAuth,
+});
+
+const giftListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/lista-presentes",
+  component: GiftListRoute,
+  validateSearch: (search: Record<string, unknown>) => {
+    const n = Number(search.page);
+    return { page: Number.isFinite(n) && n > 1 ? n : undefined };
+  },
+});
+
+const giftDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/lista-presentes/$giftId",
+  component: GiftDetailRoute,
+});
+
+const giftPurchaseRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/lista-presentes/$giftId/comprar",
+  component: GiftCheckoutRoute,
+  beforeLoad: requireAuth,
+});
+
+function GiftCheckoutRoute() {
+  const { giftId } = giftPurchaseRoute.useParams();
+  return <GiftCheckoutPage giftId={Number(giftId)} />;
+}
+
+const myGiftsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/meus-presentes",
+  component: MyGiftsRoute,
+  beforeLoad: requireAuth,
+  validateSearch: (search: Record<string, unknown>) => {
+    const n = Number(search.page);
+    return { page: Number.isFinite(n) && n > 1 ? n : undefined };
+  },
 });
 
 function GuestEditRoute() {
@@ -59,12 +187,47 @@ function GuestEditRoute() {
   return <GuestFormPage guestId={Number(guestId)} />;
 }
 
+function GiftAdminEditRoute() {
+  const { giftId } = giftAdminEditRoute.useParams();
+  return <GiftFormPage giftId={Number(giftId)} />;
+}
+
+function GiftListRoute() {
+  const { page } = giftListRoute.useSearch();
+  return <GiftListPage page={page ?? 1} />;
+}
+
+function GiftDetailRoute() {
+  const { giftId } = giftDetailRoute.useParams();
+  return <GiftDetailPage giftId={Number(giftId)} />;
+}
+
+function MyGiftsRoute() {
+  const { page } = myGiftsRoute.useSearch();
+  return <MyGiftsPage page={page ?? 1} />;
+}
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
-  dashboardRoute,
-  guestCreateRoute,
-  guestEditRoute,
-  guestListRoute,
+  loginRoute,
+  adminRoute.addChildren([
+    adminIndexRoute,
+    guestCreateRoute,
+    guestEditRoute,
+    giftAdminRoute,
+    giftAdminCreateRoute,
+    giftAdminImportRoute,
+    giftAdminEditRoute,
+    adminTransactionsRoute,
+    adminGiftMessagesRoute,
+  ]),
+  dashboardLegacyRootRoute,
+  dashboardLegacyRoute,
+  registerAttendanceRoute,
+  giftListRoute,
+  giftDetailRoute,
+  giftPurchaseRoute,
+  myGiftsRoute,
 ]);
 
 export const router = createRouter({

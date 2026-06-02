@@ -7,8 +7,6 @@ import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import Save from "lucide-react/dist/esm/icons/save";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import X from "lucide-react/dist/esm/icons/x";
-import { Header } from "../components/Header";
-import { getUserRacf } from "../lib/api";
 import {
   useCreateGuestMutation,
   useGuestQuery,
@@ -16,7 +14,6 @@ import {
   useUpdateGuestMutation,
 } from "../lib/guest-queries";
 import { useUserMeQuery } from "../lib/user-queries";
-import { UnauthorizedPage } from "./UnauthorizedPage";
 import type { Guest } from "../types/guest";
 
 interface Props {
@@ -52,9 +49,9 @@ export function GuestFormPage({ guestId }: Props) {
   const createMutation = useCreateGuestMutation();
   const updateMutation = useUpdateGuestMutation();
   const guestQuery = useGuestQuery(guestId ?? 0, isEdit);
-  const { data: allGuests = [] } = useGuestsQuery();
-  const { data: userMe, isLoading: roleLoading } = useUserMeQuery();
-  const isAuthorized = userMe?.role === "groom" || userMe?.role === "bride";
+  const guestsResponse = useGuestsQuery({ limit: 1000 });
+  const allGuests = guestsResponse.data?.data ?? [];
+  const { data: userMe } = useUserMeQuery();
 
   // Family group autocomplete state
   const [familySearch, setFamilySearch] = useState("");
@@ -91,7 +88,6 @@ export function GuestFormPage({ guestId }: Props) {
     reset({
       firstName: guestQuery.data.first_name,
       lastName: guestQuery.data.last_name,
-      phone: guestQuery.data.phone ?? "",
       relationship: guestQuery.data.relationship,
       familyGroup: guestQuery.data.family_group,
       confirmed: guestQuery.data.confirmed,
@@ -164,13 +160,6 @@ export function GuestFormPage({ guestId }: Props) {
   async function onSubmit(values: GuestFormValues) {
     clearErrors("root");
 
-    if (!getUserRacf()) {
-      setError("root", {
-        message: "Configure sua identificação (RACF) na página de Lista de Presença antes de salvar.",
-      });
-      return;
-    }
-
     try {
       if (isEdit && guestId !== undefined) {
         await updateMutation.mutateAsync({
@@ -178,7 +167,6 @@ export function GuestFormPage({ guestId }: Props) {
           input: {
             first_name: values.firstName.trim(),
             last_name: values.lastName.trim(),
-            phone: values.phone.trim() || undefined,
             relationship: values.relationship,
             family_group: values.familyGroup,
             confirmed: values.confirmed,
@@ -188,23 +176,18 @@ export function GuestFormPage({ guestId }: Props) {
         await createMutation.mutateAsync({
           first_name: values.firstName.trim(),
           last_name: values.lastName.trim(),
-          phone: values.phone.trim(),
           relationship: values.relationship,
           family_group: values.familyGroup,
+          phone: values.phone.trim() || undefined,
         });
       }
 
-      await navigate({ to: "/dashboard" });
+      await navigate({ to: "/admin" });
     } catch (submitError) {
       setError("root", {
         message: submitError instanceof Error ? submitError.message : "Erro ao salvar",
       });
     }
-  }
-
-  // Unauthorized guard
-  if (getUserRacf() && !roleLoading && userMe && !isAuthorized) {
-    return <UnauthorizedPage />;
   }
 
   const inputClass =
@@ -218,12 +201,9 @@ export function GuestFormPage({ guestId }: Props) {
   const errorMessage = errors.root?.message ?? mutationError;
 
   return (
-    <div className="min-h-dvh bg-parchment">
-      <Header />
-
-      <main className="mx-auto max-w-[640px] px-6 pt-24 pb-16">
-        <Link
-          to="/dashboard"
+    <div className="mx-auto max-w-[640px]">
+      <Link
+          to="/admin"
           className="inline-flex items-center gap-1.5 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase text-hint no-underline mb-6 transition-colors hover:text-burgundy"
         >
           <ArrowLeft size={15} />
@@ -268,29 +248,31 @@ export function GuestFormPage({ guestId }: Props) {
               </div>
             </div>
 
-            <div className="mb-5">
-              <label className={labelClass}>Telefone</label>
-              <Controller
-                name="phone"
-                control={control}
-                render={({ field }) => (
-                  <input
-                    type="text"
-                    value={formatPhoneDisplay(field.value ?? "")}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
-                      field.onChange(digits);
-                    }}
-                    onBlur={field.onBlur}
-                    placeholder="(11) 99999-9999"
-                    maxLength={15}
-                    className={`${inputClass} font-mono tracking-wider`}
-                  />
-                )}
-              />
-              <p className="text-[0.72rem] text-hint/60 mt-1">DDD + número (11 dígitos). Opcional.</p>
-              {errors.phone?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.phone.message}</p>}
-            </div>
+            {!isEdit && (
+              <div className="mb-5">
+                <label className={labelClass}>Telefone</label>
+                <Controller
+                  name="phone"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      value={formatPhoneDisplay(field.value ?? "")}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+                        field.onChange(digits);
+                      }}
+                      onBlur={field.onBlur}
+                      placeholder="(11) 99999-9999"
+                      maxLength={15}
+                      className={`${inputClass} font-mono tracking-wider`}
+                    />
+                  )}
+                />
+                <p className="text-[0.72rem] text-hint/60 mt-1">DDD + número (11 dígitos). Opcional — usado para criar o acesso do convidado.</p>
+                {errors.phone?.message && <p className="text-[0.72rem] text-[#c25550] mt-1">{errors.phone.message}</p>}
+              </div>
+            )}
 
             <div className="mb-5">
               <label className={labelClass}>Lado</label>
@@ -434,7 +416,7 @@ export function GuestFormPage({ guestId }: Props) {
 
             <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-4 border-t border-gold-muted/20">
               <Link
-                to="/dashboard"
+                to="/admin"
                 className="inline-flex items-center justify-center font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-gold-muted/50 text-hint bg-transparent transition-all duration-200 hover:border-burgundy hover:text-burgundy no-underline cursor-pointer"
               >
                 Cancelar
@@ -450,7 +432,6 @@ export function GuestFormPage({ guestId }: Props) {
             </div>
           </form>
         )}
-      </main>
     </div>
   );
 }

@@ -3,4 +3,8 @@ export type {
   CreateGuestInput,
   UpdateGuestInput,
   ImportResult,
+  PagedGuestResponse,
+  MyFamilyResponse,
+  BatchConfirmInput,
+  MeResponse,
 } from "../schemas/guest";

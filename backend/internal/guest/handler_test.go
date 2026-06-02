@@ -10,50 +10,74 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/ferjunior7/parasempre/backend/internal/apperror"
+	"github.com/ferjunior7/parasempre/backend/internal/auth"
+	"github.com/ferjunior7/parasempre/backend/internal/middleware"
 )
 
+func registerTestRoutes(mux *http.ServeMux, h *Handler) {
+	mux.HandleFunc("GET /api/guests", h.HandleList)
+	mux.HandleFunc("POST /api/guests", h.HandleCreate)
+	mux.HandleFunc("GET /api/guests/{id}", h.HandleGet)
+	mux.HandleFunc("PUT /api/guests/{id}", h.HandleUpdate)
+	mux.HandleFunc("DELETE /api/guests/{id}", h.HandleDelete)
+	mux.HandleFunc("POST /api/guests/import", h.HandleImport)
+}
+
 func newTestHandler() (*Handler, *mockRepository) {
-	repo := &mockRepository{
-		getByPhone: func(ctx context.Context, phone string) (*Guest, error) {
-			return nil, nil
-		},
-	}
-	svc := NewService(repo, alwaysExistsChecker())
+	repo := &mockRepository{}
+	svc := newTestService(repo, defaultUserBridge())
 	return NewHandler(svc), repo
+}
+
+func withTestClaims(req *http.Request, uracf string) *http.Request {
+	claims := &auth.Claims{
+		UserID: 1,
+		URACF:  uracf,
+		Role:   "groom",
+	}
+	ctx := middleware.WithClaims(req.Context(), claims)
+	return req.WithContext(ctx)
 }
 
 func TestHandlerListGuests(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context) ([]Guest, error) {
-		return []Guest{sampleGuest()}, nil
+	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+		return []Guest{sampleGuest()}, 1, nil
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/guests", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/guests?page=1&limit=20", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleList(w, req)
+	h.HandleList(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var guests []Guest
-	if err := json.NewDecoder(w.Body).Decode(&guests); err != nil {
+	var result PagedResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
-	if len(guests) != 1 {
-		t.Fatalf("expected 1 guest, got %d", len(guests))
+	if len(result.Data) != 1 {
+		t.Fatalf("expected 1 guest, got %d", len(result.Data))
+	}
+	if result.Total != 1 {
+		t.Fatalf("expected total 1, got %d", result.Total)
 	}
 }
 
 func TestHandlerListGuestsError(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context) ([]Guest, error) {
-		return nil, errors.New("db error")
+	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+		return nil, 0, errors.New("db error")
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleList(w, req)
+	h.HandleList(w, req)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", w.Code)
@@ -62,15 +86,16 @@ func TestHandlerListGuestsError(t *testing.T) {
 
 func TestHandlerGetGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
 		g := sampleGuest()
 		return &g, nil
 	}
 
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests/1", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -81,14 +106,15 @@ func TestHandlerGetGuest(t *testing.T) {
 
 func TestHandlerGetGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64) (*Guest, error) {
-		return nil, ErrNotFound
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		return nil, apperror.NotFound("guest not found")
 	}
 
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests/999", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -101,7 +127,7 @@ func TestHandlerGetGuestInvalidID(t *testing.T) {
 	h, _ := newTestHandler()
 
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/guests/abc", nil)
 	w := httptest.NewRecorder()
@@ -115,12 +141,10 @@ func TestHandlerGetGuestInvalidID(t *testing.T) {
 func TestHandlerCreateGuest(t *testing.T) {
 	h, repo := newTestHandler()
 	repo.createFn = func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
-		phone := input.Phone
 		return &Guest{
 			ID:           1,
 			FirstName:    input.FirstName,
 			LastName:     input.LastName,
-			Phone:        &phone,
 			Relationship: input.Relationship,
 			FamilyGroup:  *input.FamilyGroup,
 			CreatedBy:    userRACF,
@@ -130,56 +154,27 @@ func TestHandlerCreateGuest(t *testing.T) {
 		}, nil
 	}
 
-	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
+	body := `{"first_name":"Maria","last_name":"Santos","relationship":"R","family_group":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("user-racf", "TST01")
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleCreate(w, req)
+	h.HandleCreate(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
-func TestHandlerCreateGuestMissingRACF(t *testing.T) {
-	h, _ := newTestHandler()
-
-	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
-	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	h.handleCreate(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestHandlerCreateGuestInvalidRACF(t *testing.T) {
-	h, _ := newTestHandler()
-
-	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
-	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("user-racf", "toolong1")
-	w := httptest.NewRecorder()
-	h.handleCreate(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
 func TestHandlerCreateGuestValidationError(t *testing.T) {
 	h, _ := newTestHandler()
 
-	body := `{"first_name":"","last_name":"Santos","phone":"11988888888","relationship":"R","family_group":1}`
+	body := `{"first_name":"","last_name":"Santos","relationship":"R","family_group":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("user-racf", "TST01")
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleCreate(w, req)
+	h.HandleCreate(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
@@ -197,12 +192,12 @@ func TestHandlerCreateGuestMissingFamilyGroup(t *testing.T) {
 		return &g, nil
 	}
 
-	body := `{"first_name":"Maria","last_name":"Santos","phone":"11988888888","relationship":"R"}`
+	body := `{"first_name":"Maria","last_name":"Santos","relationship":"R"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/guests", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("user-racf", "TST01")
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleCreate(w, req)
+	h.HandleCreate(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
@@ -218,33 +213,16 @@ func TestHandlerUpdateGuest(t *testing.T) {
 
 	body := `{"confirmed":true}`
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/guests/1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("user-racf", "TST01")
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestHandlerUpdateGuestMissingRACF(t *testing.T) {
-	h, _ := newTestHandler()
-
-	body := `{"confirmed":true}`
-	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
-
-	req := httptest.NewRequest(http.MethodPut, "/api/guests/1", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -255,10 +233,9 @@ func TestHandlerDeleteGuest(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/guests/1", nil)
-	req.Header.Set("user-racf", "TST01")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -267,32 +244,113 @@ func TestHandlerDeleteGuest(t *testing.T) {
 	}
 }
 
-func TestHandlerDeleteGuestMissingRACF(t *testing.T) {
-	h, _ := newTestHandler()
-
-	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/guests/1", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
 func TestHandlerDeleteGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
 	repo.deleteFn = func(ctx context.Context, id int64) error {
-		return ErrNotFound
+		return apperror.NotFound("guest not found")
 	}
 
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	registerTestRoutes(mux, h)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/guests/999", nil)
-	req.Header.Set("user-racf", "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandlerConfirmGuest(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		g := sampleGuest()
+		return &g, nil
+	}
+	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+		g := sampleGuest()
+		g.Confirmed = true
+		return &g, nil
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/confirm", h.HandleConfirm)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/1/confirm", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var guest Guest
+	if err := json.NewDecoder(w.Body).Decode(&guest); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if !guest.Confirmed {
+		t.Fatal("expected confirmed to be true")
+	}
+}
+
+func TestHandlerConfirmGuestNotFound(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		return nil, apperror.NotFound("guest not found")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/confirm", h.HandleConfirm)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/999/confirm", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandlerCancelGuest(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		g := sampleGuest()
+		g.Confirmed = true
+		return &g, nil
+	}
+	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+		g := sampleGuest()
+		g.Confirmed = false
+		return &g, nil
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/cancel", h.HandleCancel)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/1/cancel", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandlerCancelGuestNotFound(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		return nil, apperror.NotFound("guest not found")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /api/guests/{id}/cancel", h.HandleCancel)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/999/cancel", nil)
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -313,14 +371,14 @@ func TestHandlerImportCSV(t *testing.T) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, _ := writer.CreateFormFile("file", "guests.csv")
-	part.Write([]byte("first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\nMaria,Santos,11988888888,R,2\n"))
+	part.Write([]byte("first_name,last_name,relationship,family_group\nJoão,Silva,P,1\nMaria,Santos,R,2\n"))
 	writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("user-racf", "TST01")
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleImport(w, req)
+	h.HandleImport(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -328,9 +386,17 @@ func TestHandlerImportCSV(t *testing.T) {
 	if created != 2 {
 		t.Fatalf("expected 2 guests created, got %d", created)
 	}
+
+	var resp ImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if resp.SuccessCount != 2 || resp.ErrorCount != 0 {
+		t.Fatalf("expected 2 success, 0 errors, got %+v", resp)
+	}
 }
 
-func TestHandlerImportCSVWithErrors(t *testing.T) {
+func TestHandlerImportCSVAllErrors(t *testing.T) {
 	h, repo := newTestHandler()
 	repo.createFn = func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
 		return nil, errors.New("duplicate name")
@@ -339,36 +405,62 @@ func TestHandlerImportCSVWithErrors(t *testing.T) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, _ := writer.CreateFormFile("file", "guests.csv")
-	part.Write([]byte("first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\n"))
+	part.Write([]byte("first_name,last_name,relationship,family_group\nJoão,Silva,P,1\n"))
 	writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("user-racf", "TST01")
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleImport(w, req)
+	h.HandleImport(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
+
+	var resp ImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if resp.ErrorCount != 1 || resp.Errors[0].Row != 2 {
+		t.Fatalf("expected 1 error on row 2, got %+v", resp)
+	}
 }
 
-func TestHandlerImportMissingRACF(t *testing.T) {
-	h, _ := newTestHandler()
+func TestHandlerImportCSVPartialSuccess(t *testing.T) {
+	h, repo := newTestHandler()
+	callCount := 0
+	repo.createFn = func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error) {
+		callCount++
+		if callCount == 2 {
+			return nil, errors.New("duplicate name")
+		}
+		g := sampleGuest()
+		return &g, nil
+	}
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, _ := writer.CreateFormFile("file", "guests.csv")
-	part.Write([]byte("first_name,last_name,phone,relationship,family_group\nJoão,Silva,11999999999,P,1\n"))
+	part.Write([]byte("first_name,last_name,relationship,family_group\nJoão,Silva,P,1\nMaria,Santos,R,2\n"))
 	writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleImport(w, req)
+	h.HandleImport(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusMultiStatus {
+		t.Fatalf("expected 207, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp ImportResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if resp.SuccessCount != 1 || resp.ErrorCount != 1 {
+		t.Fatalf("expected 1 success + 1 error, got %+v", resp)
 	}
 }
 
@@ -377,9 +469,9 @@ func TestHandlerImportNoFile(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/guests/import", nil)
 	req.Header.Set("Content-Type", "multipart/form-data")
-	req.Header.Set("user-racf", "TST01")
+	req = withTestClaims(req, "TST01")
 	w := httptest.NewRecorder()
-	h.handleImport(w, req)
+	h.HandleImport(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
