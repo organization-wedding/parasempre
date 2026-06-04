@@ -109,7 +109,7 @@ Ordem de prioridade definida com o casal. (Sem datas fixas — preenchemos confo
 ### Detalhe por sprint
 
 #### Sprint 1 — Recados/mensagens dos presentes (`giftmessage`)
-- **Objetivo:** evoluir o recado que o convidado deixa após comprar (texto + mídia: imagem/áudio/vídeo).
+- **Objetivo:** o modulo de recados atualmente está com um problema, quando um convidado compra um presente e tenta anexar algum arquivo ao clicar em salvar o recado da erro e fala que não foi possível encontrar a midia e por isso falha. vamos precisar identificar a causa raiz e corrigir.
 - **Módulos:** `giftmessage` (backend + Supabase Storage), frontend (`GiftMessageForm`, `GiftMessageView`, `AdminGiftMessagesPage`).
 - **Critérios de pronto:** a definir na spec (`po-analyst`).
 

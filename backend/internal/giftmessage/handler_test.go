@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -221,6 +222,73 @@ func TestHandleGetMine_Returns404WhenAbsent(t *testing.T) {
 	}
 }
 
+func TestHandleCreate_BodyAt50MB_Passes(t *testing.T) {
+	repo := &mockRepo{
+		createFn: func(_ context.Context, in CreateRow) (*GiftMessage, error) {
+			return &GiftMessage{
+				ID: 1, GiftID: in.GiftID, GiftTransactionID: in.GiftTransactionID,
+				UserID: in.UserID, AuthorName: in.AuthorName, Content: in.Content,
+				MediaObjectKey: in.MediaObjectKey, MediaKind: in.MediaKind,
+				MediaSizeBytes: in.MediaSizeBytes, MediaMimeType: in.MediaMimeType,
+				CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+	}
+	txns := &mockTxFinder{
+		getFn: func(_ context.Context, _ int64) (*TransactionSnapshot, error) { return approvedTx(), nil },
+	}
+	storage := &mockStorage{}
+	h := newTestHandler(repo, txns, storage)
+
+	mp4Magic := []byte{0, 0, 0, 20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm',
+		0, 0, 0, 0, 'i', 's', 'o', 'm'}
+	videoSize := int64(50 * 1024 * 1024)
+	padding := make([]byte, videoSize-int64(len(mp4Magic)))
+	videoBytes := append(mp4Magic, padding...)
+
+	ct, body := buildMultipart(t,
+		map[string]string{"author_name": "Maria", "content": "video test"},
+		&multipartFile{filename: "clip.mp4", contentType: "video/mp4", body: videoBytes},
+	)
+	r := authedRequest(http.MethodPost, "/api/transactions/100/message", body, 42, ct, "100")
+	w := httptest.NewRecorder()
+	h.HandleCreate(w, r)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("50 MB video should be accepted, got %d (body=%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleCreate_BodyAboveLimit_Returns400WithSizeError(t *testing.T) {
+	h := newTestHandler(&mockRepo{}, &mockTxFinder{
+		getFn: func(_ context.Context, _ int64) (*TransactionSnapshot, error) { return approvedTx(), nil },
+	}, &mockStorage{})
+
+	oversizeBytes := make([]byte, 56*1024*1024)
+	ct, body := buildMultipart(t,
+		map[string]string{"author_name": "X", "content": "y"},
+		&multipartFile{filename: "big.mp4", contentType: "video/mp4", body: oversizeBytes},
+	)
+	r := authedRequest(http.MethodPost, "/api/transactions/100/message", body, 42, ct, "100")
+	w := httptest.NewRecorder()
+	h.HandleCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("oversized body should return 400, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	errMsg, ok := resp["error"]
+	if !ok {
+		t.Fatalf("expected 'error' field in response, got %v", resp)
+	}
+	if strings.Contains(errMsg, "multipart") {
+		t.Errorf("error message should not mention 'multipart' for a size rejection, got %q", errMsg)
+	}
+}
+
 func TestHandleAdminDelete_Returns204(t *testing.T) {
 	repo := &mockRepo{
 		softDeleteFn: func(_ context.Context, _, _ int64) error { return nil },
@@ -233,4 +301,3 @@ func TestHandleAdminDelete_Returns204(t *testing.T) {
 		t.Fatalf("expected 204, got %d", w.Code)
 	}
 }
-

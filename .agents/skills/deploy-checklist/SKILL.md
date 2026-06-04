@@ -13,6 +13,12 @@ cd backend && make migrate   # contra o DB alvo (teste)
 ```
 - Toda migration com `CREATE TABLE` tem `ENABLE ROW LEVEL SECURITY` (o job `migration-rls-check` do CI valida).
 
+### 1.5. Supabase Storage (se a feature usa mídia)
+- Ao **criar/recriar** um projeto Supabase, rodar os scripts de `scripts/supabase/` no SQL Editor (ex.: `001_storage_bucket.sql` cria o bucket `gift-messages`).
+- Conferir o **limite global de upload** do projeto (Storage → Settings) ≥ 50 MB (maior vídeo aceito).
+- Conferir que `SUPABASE_URL` **e** `SUPABASE_SERVICE_ROLE_KEY` (as duas) estão setadas no ambiente — sem ambas, o upload de mídia fica desabilitado.
+- No boot do backend, o log deve mostrar `supabase storage: enabled bucket=...` e **não** o ERROR de bucket inacessível.
+
 ### 2. Backend — Build + Testes
 ```bash
 cd backend && go build ./cmd/server && make test
@@ -53,6 +59,7 @@ gh run list --limit 5
 ```
 ## Deploy Checklist — [branch]
 - [x/!] Migrations + RLS: OK / pendente
+- [x/!] Supabase Storage (bucket + limite + env): OK / N/A
 - [x/!] Backend build+test: OK / falhou
 - [x/!] Integration tests: OK / N/A
 - [x/!] Frontend typecheck+build: OK / falhou

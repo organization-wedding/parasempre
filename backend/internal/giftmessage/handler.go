@@ -1,6 +1,7 @@
 package giftmessage
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -10,7 +11,7 @@ import (
 )
 
 const (
-	maxMessageBodyBytes = 26 << 20
+	maxMessageBodyBytes = 55 << 20
 	multipartInMemory   = 1 << 20
 )
 
@@ -38,6 +39,11 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxMessageBodyBytes)
 
 	if err := r.ParseMultipartForm(multipartInMemory); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			httputil.WriteError(w, r, apperror.Validation("arquivo excede o tamanho máximo permitido"))
+			return
+		}
 		httputil.WriteError(w, r, apperror.Validation("formato multipart inválido"))
 		return
 	}
