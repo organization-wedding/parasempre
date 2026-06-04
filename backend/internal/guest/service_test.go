@@ -14,29 +14,24 @@ import (
 )
 
 type mockRepository struct {
-	listFn                       func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error)
-	listByFamilyGroupFn          func(ctx context.Context, familyGroup int64) ([]Guest, error)
-	getByID                      func(ctx context.Context, id int64, userRACF string) (*Guest, error)
-	getByIDAnyFn                 func(ctx context.Context, id int64) (*Guest, error)
-	getByIDsFn                   func(ctx context.Context, ids []int64) ([]Guest, error)
-	getByNameFn                  func(ctx context.Context, firstName, lastName string) (*Guest, error)
-	familyGroupExistsFn          func(ctx context.Context, familyGroup int64) (bool, error)
-	getNextFamilyGroupFn         func(ctx context.Context) (int64, error)
-	createFn                     func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
-	updateFn                     func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
-	deleteFn                     func(ctx context.Context, id int64) error
-	setConfirmedFn               func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
-	setConfirmedByFamilyGroupFn  func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error)
-	setConfirmedByIDsFn          func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error)
-	getFamilyGroupByPhoneFn      func(ctx context.Context, phone string) (*int64, error)
+	listFn                      func(ctx context.Context, limit, offset int) ([]Guest, int, error)
+	listByFamilyGroupFn         func(ctx context.Context, familyGroup int64) ([]Guest, error)
+	getByIDAnyFn                func(ctx context.Context, id int64) (*Guest, error)
+	getByIDsFn                  func(ctx context.Context, ids []int64) ([]Guest, error)
+	getByNameFn                 func(ctx context.Context, firstName, lastName string) (*Guest, error)
+	familyGroupExistsFn         func(ctx context.Context, familyGroup int64) (bool, error)
+	getNextFamilyGroupFn        func(ctx context.Context) (int64, error)
+	createFn                    func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
+	updateFn                    func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
+	deleteFn                    func(ctx context.Context, id int64) error
+	setConfirmedFn              func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
+	setConfirmedByFamilyGroupFn func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error)
+	setConfirmedByIDsFn         func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error)
+	getFamilyGroupByPhoneFn     func(ctx context.Context, phone string) (*int64, error)
 }
 
-func (m *mockRepository) List(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
-	return m.listFn(ctx, limit, offset, userRACF)
-}
-
-func (m *mockRepository) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
-	return m.getByID(ctx, id, userRACF)
+func (m *mockRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+	return m.listFn(ctx, limit, offset)
 }
 
 func (m *mockRepository) ListByFamilyGroup(ctx context.Context, familyGroup int64) ([]Guest, error) {
@@ -49,9 +44,6 @@ func (m *mockRepository) ListByFamilyGroup(ctx context.Context, familyGroup int6
 func (m *mockRepository) GetByIDAny(ctx context.Context, id int64) (*Guest, error) {
 	if m.getByIDAnyFn != nil {
 		return m.getByIDAnyFn(ctx, id)
-	}
-	if m.getByID != nil {
-		return m.getByID(ctx, id, "")
 	}
 	return nil, nil
 }
@@ -238,7 +230,7 @@ func assertAppError(t *testing.T, err error, wantCode int, wantMsg string) {
 func TestServiceList(t *testing.T) {
 	tests := []struct {
 		name      string
-		mockFn    func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error)
+		mockFn    func(ctx context.Context, limit, offset int) ([]Guest, int, error)
 		page      int
 		limit     int
 		wantLen   int
@@ -247,7 +239,7 @@ func TestServiceList(t *testing.T) {
 	}{
 		{
 			name: "returns guests with pagination",
-			mockFn: func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 				return []Guest{sampleGuest()}, 5, nil
 			},
 			page:      1,
@@ -257,7 +249,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "returns empty list",
-			mockFn: func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 				return []Guest{}, 0, nil
 			},
 			page:    1,
@@ -266,7 +258,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "defaults for invalid page/limit",
-			mockFn: func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 				if limit != 20 || offset != 0 {
 					return nil, 0, errors.New("expected default limit=20, offset=0")
 				}
@@ -277,7 +269,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "caps limit at 100",
-			mockFn: func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 				if limit != 100 {
 					return nil, 0, errors.New("expected limit capped at 100")
 				}
@@ -288,7 +280,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "propagates error",
-			mockFn: func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 				return nil, 0, errors.New("db error")
 			},
 			page:    1,
@@ -300,7 +292,7 @@ func TestServiceList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newTestService(&mockRepository{listFn: tt.mockFn}, defaultUserBridge())
-			result, err := svc.List(context.Background(), tt.page, tt.limit, "TST01")
+			result, err := svc.List(context.Background(), tt.page, tt.limit)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -324,13 +316,13 @@ func TestServiceGetByID(t *testing.T) {
 	tests := []struct {
 		name    string
 		id      int64
-		mockFn  func(ctx context.Context, id int64, userRACF string) (*Guest, error)
+		mockFn  func(ctx context.Context, id int64) (*Guest, error)
 		wantErr bool
 	}{
 		{
 			name: "returns guest",
 			id:   1,
-			mockFn: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			mockFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
 				return &g, nil
 			},
@@ -338,7 +330,7 @@ func TestServiceGetByID(t *testing.T) {
 		{
 			name: "not found",
 			id:   999,
-			mockFn: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			mockFn: func(ctx context.Context, id int64) (*Guest, error) {
 				return nil, apperror.NotFound("guest not found")
 			},
 			wantErr: true,
@@ -347,8 +339,8 @@ func TestServiceGetByID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := newTestService(&mockRepository{getByID: tt.mockFn}, defaultUserBridge())
-			guest, err := svc.GetByID(context.Background(), tt.id, "TST01")
+			svc := newTestService(&mockRepository{getByIDAnyFn: tt.mockFn}, defaultUserBridge())
+			guest, err := svc.GetByID(context.Background(), tt.id)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -678,7 +670,7 @@ func TestServiceUpdate(t *testing.T) {
 					g := sampleGuest()
 					return &g, nil
 				},
-				getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+				getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 					g := sampleGuest()
 					return &g, nil
 				},
@@ -712,14 +704,14 @@ func TestServiceUpdateUserRACFNotFound(t *testing.T) {
 func TestServiceConfirm(t *testing.T) {
 	tests := []struct {
 		name           string
-		getByIDFn      func(ctx context.Context, id int64, userRACF string) (*Guest, error)
+		getByIDFn      func(ctx context.Context, id int64) (*Guest, error)
 		setConfirmedFn func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
 		userExists     bool
 		wantErr        bool
 	}{
 		{
 			name: "success",
-			getByIDFn: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			getByIDFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
 				return &g, nil
 			},
@@ -732,7 +724,7 @@ func TestServiceConfirm(t *testing.T) {
 		},
 		{
 			name: "guest not found",
-			getByIDFn: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			getByIDFn: func(ctx context.Context, id int64) (*Guest, error) {
 				return nil, apperror.NotFound("guest not found")
 			},
 			userExists: true,
@@ -747,7 +739,7 @@ func TestServiceConfirm(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &mockRepository{getByID: tt.getByIDFn, setConfirmedFn: tt.setConfirmedFn}
+			repo := &mockRepository{getByIDAnyFn: tt.getByIDFn, setConfirmedFn: tt.setConfirmedFn}
 			users := &mockUserBridge{getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
 				if tt.userExists {
 					guestID := int64(1)
@@ -776,7 +768,7 @@ func TestServiceConfirm(t *testing.T) {
 func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
 	setConfirmedCalled := false
 	repo := &mockRepository{
-		getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
 			g.Confirmed = true
 			return &g, nil
@@ -805,7 +797,7 @@ func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
 
 func TestServiceCancel(t *testing.T) {
 	repo := &mockRepository{
-		getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
 			g.Confirmed = true
 			return &g, nil
@@ -833,7 +825,7 @@ func TestServiceCancel(t *testing.T) {
 func TestServiceCancelAlreadyCancelled(t *testing.T) {
 	setConfirmedCalled := false
 	repo := &mockRepository{
-		getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
 			return &g, nil
 		},
@@ -896,7 +888,7 @@ func TestServiceConfirmByPhone(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockRepository{
-				getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+				getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 					g := sampleGuest()
 					return &g, nil
 				},
@@ -929,7 +921,7 @@ func TestServiceConfirmByPhone(t *testing.T) {
 
 func TestServiceCancelByPhone(t *testing.T) {
 	repo := &mockRepository{
-		getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
 			g.Confirmed = true
 			return &g, nil
@@ -963,7 +955,7 @@ func TestServiceCancelByPhone(t *testing.T) {
 
 func TestServiceConfirmRejectsCrossFamily(t *testing.T) {
 	repo := &mockRepository{
-		getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
 			if id == 1 {
 				g.ID = 1
@@ -1006,7 +998,7 @@ func TestServiceListMyFamily(t *testing.T) {
 
 	t.Run("returns family roster", func(t *testing.T) {
 		repo := &mockRepository{
-			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
 				return &g, nil
 			},
@@ -1041,7 +1033,7 @@ func TestServiceSetConfirmedBatch(t *testing.T) {
 		var updatedIDs []int64
 		var updatedConfirmed bool
 		repo := &mockRepository{
-			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
 				return &g, nil
 			},
@@ -1091,7 +1083,7 @@ func TestServiceSetConfirmedBatch(t *testing.T) {
 
 	t.Run("rejects cross-family", func(t *testing.T) {
 		repo := &mockRepository{
-			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
 				return &g, nil
 			},
@@ -1118,7 +1110,7 @@ func TestServiceSetConfirmedBatch(t *testing.T) {
 
 	t.Run("rejects missing guests", func(t *testing.T) {
 		repo := &mockRepository{
-			getByID: func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+			getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
 				return &g, nil
 			},

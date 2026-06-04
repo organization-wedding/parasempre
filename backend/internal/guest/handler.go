@@ -21,11 +21,10 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
-	userRACF := middleware.UserRACFFromContext(r.Context())
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-	result, err := h.svc.List(r.Context(), page, limit, userRACF)
+	result, err := h.svc.List(r.Context(), page, limit)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to list guests", err))
 		return
@@ -70,14 +69,13 @@ func (h *Handler) HandleBatchConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
-	userRACF := middleware.UserRACFFromContext(r.Context())
 	id, err := httputil.PathID(r)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("invalid guest id", err))
 		return
 	}
 
-	guest, err := h.svc.GetByID(r.Context(), id, userRACF)
+	guest, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to get guest", err))
 		return

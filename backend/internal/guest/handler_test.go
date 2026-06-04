@@ -43,7 +43,7 @@ func withTestClaims(req *http.Request, uracf string) *http.Request {
 
 func TestHandlerListGuests(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 		return []Guest{sampleGuest()}, 1, nil
 	}
 
@@ -70,7 +70,7 @@ func TestHandlerListGuests(t *testing.T) {
 
 func TestHandlerListGuestsError(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 		return nil, 0, errors.New("db error")
 	}
 
@@ -86,7 +86,7 @@ func TestHandlerListGuestsError(t *testing.T) {
 
 func TestHandlerGetGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		g := sampleGuest()
 		return &g, nil
 	}
@@ -106,7 +106,7 @@ func TestHandlerGetGuest(t *testing.T) {
 
 func TestHandlerGetGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
@@ -264,7 +264,7 @@ func TestHandlerDeleteGuestNotFound(t *testing.T) {
 
 func TestHandlerConfirmGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		g := sampleGuest()
 		return &g, nil
 	}
@@ -297,7 +297,7 @@ func TestHandlerConfirmGuest(t *testing.T) {
 
 func TestHandlerConfirmGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
@@ -316,7 +316,7 @@ func TestHandlerConfirmGuestNotFound(t *testing.T) {
 
 func TestHandlerCancelGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		g := sampleGuest()
 		g.Confirmed = true
 		return &g, nil
@@ -342,7 +342,7 @@ func TestHandlerCancelGuest(t *testing.T) {
 
 func TestHandlerCancelGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
