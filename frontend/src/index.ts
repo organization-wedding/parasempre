@@ -14,13 +14,13 @@ function securityHeaders(): Record<string, string> {
   const apiBase = process.env.API_BASE || "";
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' https://sdk.mercadopago.com",
-    "script-src-elem 'self' https://sdk.mercadopago.com",
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://sdk.mercadopago.com https://*.mlstatic.com",
+    "script-src-elem 'self' 'unsafe-inline' https://sdk.mercadopago.com https://*.mlstatic.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https:",
-    `connect-src 'self' https://api.mercadopago.com${apiBase ? " " + apiBase : ""}`,
-    "frame-src https://*.mercadopago.com.br https://*.mercadopago.com https://www.google.com https://maps.google.com",
+    `connect-src 'self' https://*.mercadopago.com https://*.mercadolibre.com https://*.mlstatic.com${apiBase ? " " + apiBase : ""}`,
+    "frame-src https://*.mercadopago.com.br https://*.mercadopago.com https://*.mercadolibre.com https://www.google.com https://maps.google.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
