@@ -9,7 +9,8 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 ARG API_BASE=http://localhost:8080
-RUN API_BASE=${API_BASE} bun run build
+ARG MERCADO_PAGO_PUBLIC_KEY=
+RUN API_BASE=${API_BASE} MERCADO_PAGO_PUBLIC_KEY=${MERCADO_PAGO_PUBLIC_KEY} bun run build
 
 # Production stage: serve pre-built dist/ as static files
 FROM oven/bun:latest AS runner
