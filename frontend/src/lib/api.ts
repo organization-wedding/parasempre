@@ -228,10 +228,18 @@ export async function importGuests(file: File): Promise<ImportResult> {
 export async function listGifts(params?: {
   page?: number;
   limit?: number;
+  search?: string;
+  price_min?: number;
+  price_max?: number;
+  sort?: string;
 }): Promise<PagedGiftResponse> {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.search) query.set("search", params.search);
+  if (params?.price_min !== undefined) query.set("price_min", String(params.price_min));
+  if (params?.price_max !== undefined) query.set("price_max", String(params.price_max));
+  if (params?.sort) query.set("sort", params.sort);
   const url = query.toString()
     ? `${API_BASE}/api/gifts?${query.toString()}`
     : `${API_BASE}/api/gifts`;

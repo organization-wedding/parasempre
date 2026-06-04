@@ -75,7 +75,9 @@ jobs:
         with:
           context: ./frontend
           push: true
-          build-args: API_BASE=${{ needs.resolve-env.outputs.api_base }}
+          build-args: |
+            API_BASE=${{ needs.resolve-env.outputs.api_base }}
+            MERCADO_PAGO_PUBLIC_KEY=${{ secrets.MERCADO_PAGO_PUBLIC_KEY }}
           cache-from: type=gha,scope=frontend-${{ needs.resolve-env.outputs.environment }}
           cache-to: type=gha,mode=max,scope=frontend-${{ needs.resolve-env.outputs.environment }}
           tags: |
