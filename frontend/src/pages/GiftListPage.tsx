@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import Gift from "lucide-react/dist/esm/icons/gift";
 import Package from "lucide-react/dist/esm/icons/package";
@@ -5,8 +6,10 @@ import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { Header } from "../components/Header";
-import { useGiftsQuery } from "../lib/gift-queries";
-import { formatBRL } from "../lib/format";
+import { GiftFilters } from "../components/GiftFilters";
+import { useGiftsQuery, type GiftSort } from "../lib/gift-queries";
+import { useDebounce } from "../lib/useDebounce";
+import { formatBRL, reaisToCents } from "../lib/format";
 import type { PublicGift } from "../types/gift";
 
 const PAGE_SIZE = 20;
@@ -17,7 +20,30 @@ interface Props {
 
 export function GiftListPage({ page }: Props) {
   const navigate = useNavigate();
-  const { data, isLoading, error } = useGiftsQuery({ page, limit: PAGE_SIZE });
+
+  const [search, setSearch] = useState("");
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [sort, setSort] = useState<"" | GiftSort>("");
+
+  const debouncedSearch = useDebounce(search, 300);
+  const debouncedMin = useDebounce(priceMin, 300);
+  const debouncedMax = useDebounce(priceMax, 300);
+
+  const { data, isLoading, error } = useGiftsQuery({
+    page,
+    limit: PAGE_SIZE,
+    search: debouncedSearch.trim() || undefined,
+    price_min: reaisToCents(debouncedMin),
+    price_max: reaisToCents(debouncedMax),
+    sort: sort || undefined,
+  });
+
+  const hasActiveFilter =
+    debouncedSearch.trim() !== "" ||
+    reaisToCents(debouncedMin) !== undefined ||
+    reaisToCents(debouncedMax) !== undefined ||
+    sort !== "";
 
   const gifts = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -28,6 +54,19 @@ export function GiftListPage({ page }: Props) {
       to: "/lista-presentes",
       search: { page: n > 1 ? n : undefined },
     });
+  };
+
+  // Ao alterar qualquer filtro, volta para a primeira página.
+  const resetToFirstPage = () => {
+    if (page > 1) goToPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setPriceMin("");
+    setPriceMax("");
+    setSort("");
+    resetToFirstPage();
   };
 
   return (
@@ -73,6 +112,22 @@ export function GiftListPage({ page }: Props) {
           </div>
         )}
 
+        {!isLoading && (total > 0 || hasActiveFilter) && (
+          <div className="mb-8">
+            <GiftFilters
+              search={search}
+              priceMin={priceMin}
+              priceMax={priceMax}
+              sort={sort}
+              onSearchChange={(v) => { setSearch(v); resetToFirstPage(); }}
+              onPriceMinChange={(v) => { setPriceMin(v); resetToFirstPage(); }}
+              onPriceMaxChange={(v) => { setPriceMax(v); resetToFirstPage(); }}
+              onSortChange={(v) => { setSort(v); resetToFirstPage(); }}
+              onClear={clearFilters}
+            />
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-hint">
             <div
@@ -81,6 +136,23 @@ export function GiftListPage({ page }: Props) {
               aria-label="Carregando"
             />
             <span className="text-[0.85rem]">Carregando presentes...</span>
+          </div>
+        ) : total === 0 && hasActiveFilter ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Gift size={48} className="text-gold-muted/40 mb-4" />
+            <h2 className="font-heading text-[1rem] font-semibold text-dark-warm mb-2">
+              Nenhum presente encontrado
+            </h2>
+            <p className="text-[0.88rem] text-hint max-w-[360px] mb-6">
+              Tente ajustar a busca ou a faixa de preço.
+            </p>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-2 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-[0.6rem] px-5 border border-burgundy text-burgundy hover:bg-burgundy hover:text-gold-light transition-all duration-200 cursor-pointer"
+            >
+              Limpar filtros
+            </button>
           </div>
         ) : total === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">

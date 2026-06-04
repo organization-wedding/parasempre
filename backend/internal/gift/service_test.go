@@ -14,7 +14,7 @@ import (
 )
 
 type mockRepository struct {
-	listFn             func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error)
+	listFn             func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error)
 	getByIDFn          func(ctx context.Context, id int64) (*Gift, error)
 	createFn           func(ctx context.Context, input CreateGiftInput, dedupeKey, userRACF string) (*Gift, error)
 	updateFn           func(ctx context.Context, id int64, input UpdateGiftInput, dedupeKey *string, userRACF string) (*Gift, error)
@@ -22,8 +22,8 @@ type mockRepository struct {
 	findByDedupeKeysFn func(ctx context.Context, keys []string) (map[string]bool, error)
 }
 
-func (m *mockRepository) List(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
-	return m.listFn(ctx, limit, offset, statusFilter)
+func (m *mockRepository) List(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
+	return m.listFn(ctx, filter, limit, offset)
 }
 
 func (m *mockRepository) GetByID(ctx context.Context, id int64) (*Gift, error) {
@@ -126,7 +126,7 @@ func int64Ptr(v int64) *int64 { return &v }
 func TestServiceList(t *testing.T) {
 	tests := []struct {
 		name      string
-		mockFn    func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error)
+		mockFn    func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error)
 		page      int
 		limit     int
 		wantLen   int
@@ -135,7 +135,7 @@ func TestServiceList(t *testing.T) {
 	}{
 		{
 			name: "returns gifts with pagination",
-			mockFn: func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
+			mockFn: func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
 				return []Gift{sampleGift()}, 5, nil
 			},
 			page: 1, limit: 20,
@@ -143,7 +143,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "defaults for invalid page/limit",
-			mockFn: func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
+			mockFn: func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
 				if limit != 20 || offset != 0 {
 					return nil, 0, errors.New("expected default limit=20, offset=0")
 				}
@@ -153,7 +153,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "caps limit at 100",
-			mockFn: func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
+			mockFn: func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
 				if limit != 100 {
 					return nil, 0, errors.New("expected limit capped at 100")
 				}
@@ -163,7 +163,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "propagates error",
-			mockFn: func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
+			mockFn: func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
 				return nil, 0, errors.New("db error")
 			},
 			page: 1, limit: 20, wantErr: true,
@@ -173,7 +173,7 @@ func TestServiceList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewService(&mockRepository{listFn: tt.mockFn}, &mockTxRunner{}, nil)
-			result, err := svc.List(context.Background(), tt.page, tt.limit, nil)
+			result, err := svc.List(context.Background(), tt.page, tt.limit, ListFilter{})
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -193,23 +193,64 @@ func TestServiceList(t *testing.T) {
 	}
 }
 
-func TestServiceListPassesStatusFilter(t *testing.T) {
-	var gotStatus *string
+func TestServiceListPassesFilter(t *testing.T) {
+	var got ListFilter
 	repo := &mockRepository{
-		listFn: func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
-			gotStatus = statusFilter
+		listFn: func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
+			got = filter
 			return []Gift{}, 0, nil
 		},
 	}
 	svc := NewService(repo, &mockTxRunner{}, nil)
 
-	active := "active"
-	_, err := svc.List(context.Background(), 1, 20, &active)
+	_, err := svc.List(context.Background(), 1, 20, ListFilter{
+		Status:   strPtr("active"),
+		Search:   strPtr("  oster  "),
+		PriceMin: int64Ptr(10000),
+		PriceMax: int64Ptr(40000),
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if gotStatus == nil || *gotStatus != "active" {
-		t.Fatalf("expected status filter 'active', got %v", gotStatus)
+	if got.Status == nil || *got.Status != "active" {
+		t.Fatalf("expected status 'active', got %v", got.Status)
+	}
+	// busca deve ser trimada
+	if got.Search == nil || *got.Search != "oster" {
+		t.Fatalf("expected trimmed search 'oster', got %v", got.Search)
+	}
+	if got.PriceMin == nil || *got.PriceMin != 10000 {
+		t.Fatalf("expected price_min 10000, got %v", got.PriceMin)
+	}
+	if got.PriceMax == nil || *got.PriceMax != 40000 {
+		t.Fatalf("expected price_max 40000, got %v", got.PriceMax)
+	}
+}
+
+func TestServiceListNormalizesFilter(t *testing.T) {
+	var got ListFilter
+	repo := &mockRepository{
+		listFn: func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
+			got = filter
+			return []Gift{}, 0, nil
+		},
+	}
+	svc := NewService(repo, &mockTxRunner{}, nil)
+
+	// busca só com espaços vira nil; preços negativos são ignorados
+	_, err := svc.List(context.Background(), 1, 20, ListFilter{
+		Search:   strPtr("   "),
+		PriceMin: int64Ptr(-5),
+		PriceMax: int64Ptr(-1),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Search != nil {
+		t.Fatalf("expected nil search for blank input, got %q", *got.Search)
+	}
+	if got.PriceMin != nil || got.PriceMax != nil {
+		t.Fatalf("expected nil prices for negative input, got min=%v max=%v", got.PriceMin, got.PriceMax)
 	}
 }
 
