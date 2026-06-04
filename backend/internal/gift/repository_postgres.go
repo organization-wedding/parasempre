@@ -35,14 +35,36 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 	return &PostgresRepository{db: tx}
 }
 
-func (r *PostgresRepository) List(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
+func (r *PostgresRepository) List(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
 	query := `SELECT ` + giftColumns + `, COUNT(*) OVER() AS total FROM gifts WHERE deleted_at IS NULL`
 	args := []any{}
-	if statusFilter != nil {
-		query += ` AND status = $1`
-		args = append(args, *statusFilter)
+	if filter.Status != nil {
+		args = append(args, *filter.Status)
+		query += ` AND status = $` + fmt.Sprint(len(args))
 	}
-	query += ` ORDER BY created_at DESC LIMIT $` + fmt.Sprint(len(args)+1) + ` OFFSET $` + fmt.Sprint(len(args)+2)
+	if filter.Search != nil {
+		args = append(args, "%"+*filter.Search+"%")
+		query += ` AND name ILIKE $` + fmt.Sprint(len(args))
+	}
+	if filter.PriceMin != nil {
+		args = append(args, *filter.PriceMin)
+		query += ` AND price_cents >= $` + fmt.Sprint(len(args))
+	}
+	if filter.PriceMax != nil {
+		args = append(args, *filter.PriceMax)
+		query += ` AND price_cents <= $` + fmt.Sprint(len(args))
+	}
+
+	orderBy := "created_at DESC, id DESC"
+	if filter.Sort != nil {
+		switch *filter.Sort {
+		case SortPriceAsc:
+			orderBy = "price_cents ASC, id DESC"
+		case SortPriceDesc:
+			orderBy = "price_cents DESC, id DESC"
+		}
+	}
+	query += ` ORDER BY ` + orderBy + ` LIMIT $` + fmt.Sprint(len(args)+1) + ` OFFSET $` + fmt.Sprint(len(args)+2)
 	args = append(args, limit, offset)
 
 	rows, err := r.db.Query(ctx, query, args...)

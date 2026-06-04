@@ -261,7 +261,7 @@ func TestIntegrationListExcludesDeleted(t *testing.T) {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
-	gifts, total, err := repo.List(ctx, 10, 0, nil)
+	gifts, total, err := repo.List(ctx, ListFilter{}, 10, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestIntegrationListPaginationAndStatusFilter(t *testing.T) {
 		}
 	}
 
-	gifts, total, err := repo.List(ctx, 2, 0, nil)
+	gifts, total, err := repo.List(ctx, ListFilter{}, 2, 0)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestIntegrationListPaginationAndStatusFilter(t *testing.T) {
 		t.Fatalf("expected 2 gifts in page, got %d", len(gifts))
 	}
 
-	inactiveGifts, inactiveTotal, err := repo.List(ctx, 10, 0, &inactive)
+	inactiveGifts, inactiveTotal, err := repo.List(ctx, ListFilter{Status: &inactive}, 10, 0)
 	if err != nil {
 		t.Fatalf("List with status filter failed: %v", err)
 	}
@@ -386,5 +386,68 @@ func TestIntegrationListPaginationAndStatusFilter(t *testing.T) {
 		if g.Status != "inactive" {
 			t.Errorf("expected status inactive, got %q", g.Status)
 		}
+	}
+}
+
+func TestIntegrationListSearchAndPriceFilter(t *testing.T) {
+	repo, ctx := setupRepo(t)
+
+	seed := []struct {
+		name  string
+		price int64
+	}{
+		{"Batedeira Oster", 37300},
+		{"Liquidificador Oster", 15000},
+		{"Jogo de Panelas", 28000},
+	}
+	for _, s := range seed {
+		if _, err := repo.Create(ctx, CreateGiftInput{Name: s.name, PriceCents: s.price}, NormalizeDedupeKey(s.name), "TST01"); err != nil {
+			t.Fatalf("Create %q failed: %v", s.name, err)
+		}
+	}
+
+	search := "oster"
+	gifts, total, err := repo.List(ctx, ListFilter{Search: &search}, 10, 0)
+	if err != nil {
+		t.Fatalf("List search failed: %v", err)
+	}
+	if total != 2 || len(gifts) != 2 {
+		t.Fatalf("expected 2 'oster' gifts, got total=%d len=%d", total, len(gifts))
+	}
+
+	min := int64(20000)
+	max := int64(40000)
+	priced, pricedTotal, err := repo.List(ctx, ListFilter{PriceMin: &min, PriceMax: &max}, 10, 0)
+	if err != nil {
+		t.Fatalf("List price filter failed: %v", err)
+	}
+	if pricedTotal != 2 || len(priced) != 2 {
+		t.Fatalf("expected 2 gifts in price range, got total=%d len=%d", pricedTotal, len(priced))
+	}
+
+	combined, combinedTotal, err := repo.List(ctx, ListFilter{Search: &search, PriceMin: &min}, 10, 0)
+	if err != nil {
+		t.Fatalf("List combined filter failed: %v", err)
+	}
+	if combinedTotal != 1 || len(combined) != 1 || combined[0].Name != "Batedeira Oster" {
+		t.Fatalf("expected only 'Batedeira Oster', got total=%d gifts=%+v", combinedTotal, combined)
+	}
+
+	asc := SortPriceAsc
+	ascGifts, _, err := repo.List(ctx, ListFilter{Sort: &asc}, 10, 0)
+	if err != nil {
+		t.Fatalf("List sort asc failed: %v", err)
+	}
+	if len(ascGifts) != 3 || ascGifts[0].PriceCents != 15000 || ascGifts[2].PriceCents != 37300 {
+		t.Fatalf("expected ascending price order, got %+v", ascGifts)
+	}
+
+	desc := SortPriceDesc
+	descGifts, _, err := repo.List(ctx, ListFilter{Sort: &desc}, 10, 0)
+	if err != nil {
+		t.Fatalf("List sort desc failed: %v", err)
+	}
+	if len(descGifts) != 3 || descGifts[0].PriceCents != 37300 || descGifts[2].PriceCents != 15000 {
+		t.Fatalf("expected descending price order, got %+v", descGifts)
 	}
 }

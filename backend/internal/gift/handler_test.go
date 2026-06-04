@@ -42,8 +42,8 @@ func registerTestRoutes(mux *http.ServeMux, h *Handler) {
 func TestHandlerListGifts(t *testing.T) {
 	h, repo, _ := newTestHandler()
 	var gotStatus *string
-	repo.listFn = func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
-		gotStatus = statusFilter
+	repo.listFn = func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
+		gotStatus = filter.Status
 		return []Gift{sampleGift()}, 1, nil
 	}
 
@@ -72,7 +72,7 @@ func TestHandlerListGifts(t *testing.T) {
 
 func TestHandlerListGiftsDoesNotLeakInternalFields(t *testing.T) {
 	h, repo, _ := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
+	repo.listFn = func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
 		return []Gift{sampleGift()}, 1, nil
 	}
 
@@ -113,8 +113,8 @@ func TestHandlerGetGiftDoesNotLeakInternalFields(t *testing.T) {
 func TestHandlerListGiftsIgnoresUserProvidedStatus(t *testing.T) {
 	h, repo, _ := newTestHandler()
 	var gotStatus *string
-	repo.listFn = func(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error) {
-		gotStatus = statusFilter
+	repo.listFn = func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
+		gotStatus = filter.Status
 		return []Gift{}, 0, nil
 	}
 
@@ -124,6 +124,49 @@ func TestHandlerListGiftsIgnoresUserProvidedStatus(t *testing.T) {
 
 	if gotStatus == nil || *gotStatus != "active" {
 		t.Fatalf("expected forced 'active' filter even when client requests 'inactive', got %v", gotStatus)
+	}
+}
+
+func TestHandlerListGiftsParsesSearchAndPriceFilters(t *testing.T) {
+	h, repo, _ := newTestHandler()
+	var got ListFilter
+	repo.listFn = func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
+		got = filter
+		return []Gift{}, 0, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/gifts?search=oster&price_min=10000&price_max=40000", nil)
+	w := httptest.NewRecorder()
+	h.HandleList(w, req)
+
+	if got.Search == nil || *got.Search != "oster" {
+		t.Fatalf("expected search 'oster', got %v", got.Search)
+	}
+	if got.PriceMin == nil || *got.PriceMin != 10000 {
+		t.Fatalf("expected price_min 10000, got %v", got.PriceMin)
+	}
+	if got.PriceMax == nil || *got.PriceMax != 40000 {
+		t.Fatalf("expected price_max 40000, got %v", got.PriceMax)
+	}
+}
+
+func TestHandlerListGiftsIgnoresInvalidFilters(t *testing.T) {
+	h, repo, _ := newTestHandler()
+	var got ListFilter
+	repo.listFn = func(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error) {
+		got = filter
+		return []Gift{}, 0, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/gifts?search=+++&price_min=abc", nil)
+	w := httptest.NewRecorder()
+	h.HandleList(w, req)
+
+	if got.Search != nil {
+		t.Fatalf("expected nil search for blank input, got %q", *got.Search)
+	}
+	if got.PriceMin != nil {
+		t.Fatalf("expected nil price_min for non-numeric input, got %v", got.PriceMin)
 	}
 }
 

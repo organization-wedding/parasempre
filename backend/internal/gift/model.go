@@ -44,6 +44,19 @@ type PagedResponse struct {
 	Total int    `json:"total"`
 }
 
+type ListFilter struct {
+	Status   *string
+	Search   *string
+	PriceMin *int64
+	PriceMax *int64
+	Sort     *string
+}
+
+const (
+	SortPriceAsc  = "price_asc"
+	SortPriceDesc = "price_desc"
+)
+
 type PublicGift struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
