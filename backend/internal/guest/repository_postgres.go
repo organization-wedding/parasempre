@@ -35,11 +35,14 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 	return &PostgresRepository{db: tx}
 }
 
-func (r *PostgresRepository) List(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+// List returns the wedding's shared guest list. Guests belong to the wedding
+// (co-administered by groom and bride), not to whoever created the row, so the
+// listing is intentionally NOT scoped by created_by.
+func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+guestColumns+`, COUNT(*) OVER() AS total
-		 FROM guests WHERE created_by = $1 ORDER BY created_at DESC
-		 LIMIT $2 OFFSET $3`, userRACF, limit, offset)
+		 FROM guests ORDER BY created_at DESC
+		 LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		slog.Error("guest.repo list: query failed", "error", err)
 		return nil, 0, err
@@ -62,19 +65,6 @@ func (r *PostgresRepository) List(ctx context.Context, limit, offset int, userRA
 	}
 
 	return guests, total, rows.Err()
-}
-
-func (r *PostgresRepository) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
-	g, err := scanGuest(r.db.QueryRow(ctx,
-		`SELECT `+guestColumns+` FROM guests WHERE id = $1 AND created_by = $2`, id, userRACF))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, apperror.NotFound("guest not found")
-		}
-		slog.Error("guest.repo get_by_id: query failed", "id", id, "error", err)
-		return nil, err
-	}
-	return &g, nil
 }
 
 func (r *PostgresRepository) GetByIDAny(ctx context.Context, id int64) (*Guest, error) {

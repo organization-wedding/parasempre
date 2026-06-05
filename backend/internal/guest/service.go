@@ -108,7 +108,7 @@ func (s *Service) SetConfirmedBatch(ctx context.Context, input BatchConfirmInput
 	return updated, nil
 }
 
-func (s *Service) List(ctx context.Context, page, limit int, userRACF string) (*PagedResponse, error) {
+func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -120,7 +120,7 @@ func (s *Service) List(ctx context.Context, page, limit int, userRACF string) (*
 	}
 
 	offset := (page - 1) * limit
-	guests, total, err := s.repo.List(ctx, limit, offset, userRACF)
+	guests, total, err := s.repo.List(ctx, limit, offset)
 	if err != nil {
 		slog.Error("guest.service list: failed", "error", err)
 		return nil, apperror.Internal("failed to list guests", err)
@@ -133,8 +133,8 @@ func (s *Service) List(ctx context.Context, page, limit int, userRACF string) (*
 	}, nil
 }
 
-func (s *Service) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
-	guest, err := s.repo.GetByID(ctx, id, userRACF)
+func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {
+	guest, err := s.repo.GetByIDAny(ctx, id)
 	if err != nil {
 		return nil, apperror.WrapIfNotApp("failed to get guest", err)
 	}
@@ -209,7 +209,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 	}
 
 	if input.FirstName != nil || input.LastName != nil {
-		current, err := s.repo.GetByID(ctx, id, userRACF)
+		current, err := s.repo.GetByIDAny(ctx, id)
 		if err != nil {
 			return nil, err
 		}
