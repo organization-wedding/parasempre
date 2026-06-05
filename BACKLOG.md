@@ -15,7 +15,8 @@ Registre aqui decisões e itens adiados durante o desenvolvimento, para não se 
 - [ ] Avaliar instalar o ecossistema de skills "superpowers" (hoje os skills são autocontidos).
 
 ## Backend
-- (vazio)
+- [ ] **giftmessage `BucketExists` loga corpo do Supabase (até 512 bytes) no boot check** — adiado em 2026-06-04 (review da Sprint 1, risco baixo). Trim pra status code / sanitizar, evitando metadados internos do Supabase em logs agregados. Retomar quando: mexer em `supabase_storage.go` ou hardening de logs.
+- [ ] **giftmessage `resolveMediaMIME`: label de erro pode sair vazio** — adiado em 2026-06-04 (cosmético). Quando o tipo declarado é vazio + bytes perigosos, a mensagem vira "tipo de mídia não suportado: " (sem tipo). Usar o `sniffed` como label nesse caso. Retomar quando: mexer em `media.go`.
 
 ## Frontend
 - (vazio)
