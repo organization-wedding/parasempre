@@ -32,9 +32,6 @@ const (
 	envEvoAPIKey      = "EVO_API_KEY"
 	envEvoAPIInstance = "EVO_API_INSTANCE"
 
-	envEnableTestLogin = "ENABLE_TEST_LOGIN"
-	envTestLoginPhone  = "TEST_LOGIN_PHONE"
-
 	envFirecrawlAPIKey = "FIRECRAWL_API_KEY"
 	envFirecrawlURL    = "FIRECRAWL_URL"
 
@@ -115,9 +112,6 @@ type Config struct {
 	SupabaseServiceRoleKey      string
 	SupabaseStorageBucket       string
 	GiftMessageSignedURLTTLSecs int
-
-	EnableTestLogin bool
-	TestLoginPhone  string
 }
 
 type envField struct {
@@ -183,9 +177,6 @@ func Load() (Config, error) {
 		SupabaseURL:            getEnv(envSupabaseURL),
 		SupabaseServiceRoleKey: getEnv(envSupabaseServiceRoleKey),
 		SupabaseStorageBucket:  getEnvOrDefault(envSupabaseStorageBucket, defaultSupabaseStorageBucket),
-
-		EnableTestLogin: parseBool(getEnv(envEnableTestLogin)),
-		TestLoginPhone:  getEnv(envTestLoginPhone),
 	}
 
 	ttlSecs, err := strconv.Atoi(getEnvOrDefault(envGiftMessageSignedURLTTL, defaultGiftMessageSignedURLTTL))
@@ -238,10 +229,6 @@ func (c Config) validate() error {
 
 	if (c.SupabaseURL != "") != (c.SupabaseServiceRoleKey != "") {
 		issues = append(issues, fmt.Sprintf("%s e %s precisam ser definidas juntas", envSupabaseURL, envSupabaseServiceRoleKey))
-	}
-
-	if c.EnableTestLogin && c.AppEnv == "production" {
-		issues = append(issues, fmt.Sprintf("%s must not be true when %s=production", envEnableTestLogin, envAppEnv))
 	}
 
 	if c.MercadoPagoAccessToken != "" {
@@ -327,12 +314,4 @@ func getEnvOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-func parseBool(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "true", "1", "yes", "on":
-		return true
-	}
-	return false
 }
