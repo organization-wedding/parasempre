@@ -13,6 +13,7 @@ import (
 
 type UserFinder interface {
 	FindOrCreateByPhone(ctx context.Context, phone string) (userID int64, uracf string, role string, err error)
+	FindByURACF(ctx context.Context, uracf string) (int64, string, string, error)
 }
 
 type PhoneChecker interface {
@@ -40,7 +41,6 @@ func NewHandler(otpSvc *OTPService, jwtSvc *JWTService, userFinder UserFinder, p
 		loginRecorder: loginRecorder,
 	}
 }
-
 
 func (h *Handler) HandleSendOTP(w http.ResponseWriter, r *http.Request) {
 	var input SendOTPInput

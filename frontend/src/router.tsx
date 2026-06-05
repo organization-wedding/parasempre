@@ -21,7 +21,9 @@ import { MyGiftsPage } from "./pages/MyGiftsPage";
 import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
 import { AdminGiftMessagesPage } from "./pages/AdminGiftMessagesPage";
 import { AdminLayout } from "./components/AdminLayout";
-import { isAuthenticated } from "./lib/auth";
+import { isAuthenticated, setAuth } from "./lib/auth";
+import { devLogin } from "./lib/api";
+import { IS_DEV } from "./config";
 import "./index.css";
 
 function requireAuth({ location }: { location: { pathname: string } }) {
@@ -39,6 +41,30 @@ function RootLayout() {
 
 const rootRoute = createRootRoute({
   component: RootLayout,
+  validateSearch: (search: Record<string, unknown>) => ({
+    autologin: typeof search.autologin === "string" ? search.autologin : undefined,
+  }),
+  beforeLoad: async ({ location, search }) => {
+    const uracf = (search as { autologin?: string }).autologin;
+    if (!uracf || !IS_DEV) return;
+
+    const withoutAutologin = (() => {
+      const params = new URLSearchParams(location.searchStr);
+      params.delete("autologin");
+      const qs = params.toString();
+      return qs ? `${location.pathname}?${qs}` : location.pathname;
+    })();
+
+    try {
+      const res = await devLogin(uracf);
+      setAuth(res.token, res.role, res.uracf);
+    } catch (err) {
+      console.warn("autologin indisponível:", err);
+      return;
+    }
+
+    throw redirect({ to: withoutAutologin });
+  },
 });
 
 const homeRoute = createRoute({

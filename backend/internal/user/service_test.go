@@ -726,6 +726,75 @@ func TestServiceCreateGuestUserTx(t *testing.T) {
 	})
 }
 
+func TestServiceFindByURACF(t *testing.T) {
+	tests := []struct {
+		name        string
+		uracf       string
+		repoUser    *User
+		repoErr     error
+		wantID      int64
+		wantURACF   string
+		wantRole    string
+		wantErr     bool
+		wantErrCode int
+		wantErrMsg  string
+	}{
+		{
+			name:      "found user returns id uracf role",
+			uracf:     "USR01",
+			repoUser:  &User{ID: 42, URACF: "USR01", Role: "groom"},
+			wantID:    42,
+			wantURACF: "USR01",
+			wantRole:  "groom",
+		},
+		{
+			name:        "not found returns NotFound error",
+			uracf:       "XXXXX",
+			repoUser:    nil,
+			wantErr:     true,
+			wantErrCode: http.StatusNotFound,
+			wantErrMsg:  "no user found with this URACF",
+		},
+		{
+			name:        "repo error is propagated",
+			uracf:       "USR01",
+			repoErr:     errors.New("db failure"),
+			wantErr:     true,
+			wantErrCode: http.StatusInternalServerError,
+			wantErrMsg:  "failed to find user",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userRepo := &mockUserRepo{
+				getByURACF: func(ctx context.Context, uracf string) (*User, error) {
+					return tt.repoUser, tt.repoErr
+				},
+			}
+
+			svc := NewService(userRepo, &mockGuestRepo{})
+			id, uracf, role, err := svc.FindByURACF(context.Background(), tt.uracf)
+			if tt.wantErr {
+				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if id != tt.wantID {
+				t.Fatalf("expected id %d, got %d", tt.wantID, id)
+			}
+			if uracf != tt.wantURACF {
+				t.Fatalf("expected uracf %q, got %q", tt.wantURACF, uracf)
+			}
+			if role != tt.wantRole {
+				t.Fatalf("expected role %q, got %q", tt.wantRole, role)
+			}
+		})
+	}
+}
+
 func TestGenerateURACF(t *testing.T) {
 	uracf, err := GenerateURACF()
 	if err != nil {

@@ -140,13 +140,9 @@ func main() {
 	authHandler := auth.NewHandler(otpSvc, jwtSvc, userSvc, userSvc, userSvc)
 
 	var devLoginHandler *auth.DevLoginHandler
-	if cfg.AppEnv != "production" && cfg.EnableTestLogin {
-		phone := cfg.TestLoginPhone
-		if phone == "" {
-			phone = cfg.Couple.Groom.Phone
-		}
-		devLoginHandler = auth.NewDevLoginHandler(jwtSvc, userSvc, userSvc, phone)
-		slog.Warn("dev-login: ENABLED — never set ENABLE_TEST_LOGIN=true in production", "phone", phone)
+	if cfg.AppEnv != "production" {
+		devLoginHandler = auth.NewDevLoginHandler(jwtSvc, userSvc, userSvc)
+		slog.Warn("dev-login: ENABLED — not available in production")
 	}
 
 	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)

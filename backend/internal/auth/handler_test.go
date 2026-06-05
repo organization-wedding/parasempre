@@ -11,11 +11,19 @@ import (
 )
 
 type mockUserFinder struct {
-	findFn func(ctx context.Context, phone string) (int64, string, string, error)
+	findFn        func(ctx context.Context, phone string) (int64, string, string, error)
+	findByURACFFn func(ctx context.Context, uracf string) (int64, string, string, error)
 }
 
 func (m *mockUserFinder) FindOrCreateByPhone(ctx context.Context, phone string) (int64, string, string, error) {
 	return m.findFn(ctx, phone)
+}
+
+func (m *mockUserFinder) FindByURACF(ctx context.Context, uracf string) (int64, string, string, error) {
+	if m.findByURACFFn != nil {
+		return m.findByURACFFn(ctx, uracf)
+	}
+	return 0, "", "", nil
 }
 
 type mockPhoneChecker struct {
