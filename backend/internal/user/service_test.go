@@ -126,9 +126,9 @@ type mockGuestRepo struct {
 	createFn                    func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
 	updateFn                    func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
 	deleteFn                    func(ctx context.Context, id int64) error
-	setConfirmedFn              func(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error)
-	setConfirmedByFamilyGroupFn func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error)
-	setConfirmedByIDsFn         func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]guest.Guest, error)
+	setAttendingFn              func(ctx context.Context, id int64, attending bool, userRACF string) (*guest.Guest, error)
+	setAttendingByFamilyGroupFn func(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]guest.Guest, error)
+	setAttendingByIDsFn         func(ctx context.Context, ids []int64, attending bool, userRACF string) ([]guest.Guest, error)
 	getFamilyGroupByPhoneFn     func(ctx context.Context, phone string) (*int64, error)
 }
 
@@ -202,20 +202,23 @@ func (m *mockGuestRepo) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (m *mockGuestRepo) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error) {
+func (m *mockGuestRepo) SetAttending(ctx context.Context, id int64, attending bool, userRACF string) (*guest.Guest, error) {
+	if m.setAttendingFn != nil {
+		return m.setAttendingFn(ctx, id, attending, userRACF)
+	}
 	return nil, nil
 }
 
-func (m *mockGuestRepo) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error) {
-	if m.setConfirmedByFamilyGroupFn != nil {
-		return m.setConfirmedByFamilyGroupFn(ctx, familyGroup, confirmed, userRACF)
+func (m *mockGuestRepo) SetAttendingByFamilyGroup(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]guest.Guest, error) {
+	if m.setAttendingByFamilyGroupFn != nil {
+		return m.setAttendingByFamilyGroupFn(ctx, familyGroup, attending, userRACF)
 	}
 	return []guest.Guest{}, nil
 }
 
-func (m *mockGuestRepo) SetConfirmedByIDs(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]guest.Guest, error) {
-	if m.setConfirmedByIDsFn != nil {
-		return m.setConfirmedByIDsFn(ctx, ids, confirmed, userRACF)
+func (m *mockGuestRepo) SetAttendingByIDs(ctx context.Context, ids []int64, attending bool, userRACF string) ([]guest.Guest, error) {
+	if m.setAttendingByIDsFn != nil {
+		return m.setAttendingByIDsFn(ctx, ids, attending, userRACF)
 	}
 	return []guest.Guest{}, nil
 }

@@ -24,9 +24,9 @@ type mockRepository struct {
 	createFn                    func(ctx context.Context, input CreateGuestInput, userRACF string) (*Guest, error)
 	updateFn                    func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error)
 	deleteFn                    func(ctx context.Context, id int64) error
-	setConfirmedFn              func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
-	setConfirmedByFamilyGroupFn func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error)
-	setConfirmedByIDsFn         func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error)
+	setAttendingFn              func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error)
+	setAttendingByFamilyGroupFn func(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]Guest, error)
+	setAttendingByIDsFn         func(ctx context.Context, ids []int64, attending bool, userRACF string) ([]Guest, error)
 	getFamilyGroupByPhoneFn     func(ctx context.Context, phone string) (*int64, error)
 }
 
@@ -88,20 +88,23 @@ func (m *mockRepository) Delete(ctx context.Context, id int64) error {
 	return m.deleteFn(ctx, id)
 }
 
-func (m *mockRepository) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
-	return m.setConfirmedFn(ctx, id, confirmed, userRACF)
+func (m *mockRepository) SetAttending(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
+	if m.setAttendingFn != nil {
+		return m.setAttendingFn(ctx, id, attending, userRACF)
+	}
+	return nil, nil
 }
 
-func (m *mockRepository) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error) {
-	if m.setConfirmedByFamilyGroupFn != nil {
-		return m.setConfirmedByFamilyGroupFn(ctx, familyGroup, confirmed, userRACF)
+func (m *mockRepository) SetAttendingByFamilyGroup(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]Guest, error) {
+	if m.setAttendingByFamilyGroupFn != nil {
+		return m.setAttendingByFamilyGroupFn(ctx, familyGroup, attending, userRACF)
 	}
 	return []Guest{}, nil
 }
 
-func (m *mockRepository) SetConfirmedByIDs(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error) {
-	if m.setConfirmedByIDsFn != nil {
-		return m.setConfirmedByIDsFn(ctx, ids, confirmed, userRACF)
+func (m *mockRepository) SetAttendingByIDs(ctx context.Context, ids []int64, attending bool, userRACF string) ([]Guest, error) {
+	if m.setAttendingByIDsFn != nil {
+		return m.setAttendingByIDsFn(ctx, ids, attending, userRACF)
 	}
 	return []Guest{}, nil
 }
@@ -178,13 +181,15 @@ func strPtr(s string) *string { return &s }
 
 func int64Ptr(v int64) *int64 { return &v }
 
+func boolPtr(b bool) *bool { return &b }
+
 func sampleGuest() Guest {
 	return Guest{
 		ID:           1,
 		FirstName:    "João",
 		LastName:     "Silva",
 		Relationship: "P",
-		Confirmed:    false,
+		Attending:    nil,
 		FamilyGroup:  1,
 		CreatedBy:    "TST01",
 		UpdatedBy:    "TST01",
@@ -703,11 +708,11 @@ func TestServiceUpdateUserRACFNotFound(t *testing.T) {
 
 func TestServiceConfirm(t *testing.T) {
 	tests := []struct {
-		name           string
-		getByIDFn      func(ctx context.Context, id int64) (*Guest, error)
-		setConfirmedFn func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error)
-		userExists     bool
-		wantErr        bool
+		name          string
+		getByIDFn     func(ctx context.Context, id int64) (*Guest, error)
+		setAttendingFn func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error)
+		userExists    bool
+		wantErr       bool
 	}{
 		{
 			name: "success",
@@ -715,9 +720,9 @@ func TestServiceConfirm(t *testing.T) {
 				g := sampleGuest()
 				return &g, nil
 			},
-			setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+			setAttendingFn: func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
 				g := sampleGuest()
-				g.Confirmed = true
+				g.Attending = boolPtr(true)
 				return &g, nil
 			},
 			userExists: true,
@@ -739,7 +744,7 @@ func TestServiceConfirm(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &mockRepository{getByIDAnyFn: tt.getByIDFn, setConfirmedFn: tt.setConfirmedFn}
+			repo := &mockRepository{getByIDAnyFn: tt.getByIDFn, setAttendingFn: tt.setAttendingFn}
 			users := &mockUserBridge{getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
 				if tt.userExists {
 					guestID := int64(1)
@@ -758,23 +763,23 @@ func TestServiceConfirm(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !guest.Confirmed {
-				t.Fatal("expected confirmed to be true")
+			if guest.Attending == nil || !*guest.Attending {
+				t.Fatal("expected attending to be true")
 			}
 		})
 	}
 }
 
 func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
-	setConfirmedCalled := false
+	setAttendingCalled := false
 	repo := &mockRepository{
 		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = true
+			g.Attending = boolPtr(true)
 			return &g, nil
 		},
-		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
-			setConfirmedCalled = true
+		setAttendingFn: func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
+			setAttendingCalled = true
 			return nil, nil
 		},
 	}
@@ -787,11 +792,11 @@ func TestServiceConfirmAlreadyConfirmed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !guest.Confirmed {
-		t.Fatal("expected confirmed to be true")
+	if guest.Attending == nil || !*guest.Attending {
+		t.Fatal("expected attending to be true")
 	}
-	if setConfirmedCalled {
-		t.Fatal("expected SetConfirmed to NOT be called (idempotent skip)")
+	if setAttendingCalled {
+		t.Fatal("expected SetAttending to NOT be called (idempotent skip)")
 	}
 }
 
@@ -799,12 +804,12 @@ func TestServiceCancel(t *testing.T) {
 	repo := &mockRepository{
 		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = true
+			g.Attending = boolPtr(true)
 			return &g, nil
 		},
-		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+		setAttendingFn: func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = false
+			g.Attending = boolPtr(false)
 			return &g, nil
 		},
 	}
@@ -817,20 +822,21 @@ func TestServiceCancel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if guest.Confirmed {
-		t.Fatal("expected confirmed to be false")
+	if guest.Attending == nil || *guest.Attending {
+		t.Fatal("expected attending to be false")
 	}
 }
 
 func TestServiceCancelAlreadyCancelled(t *testing.T) {
-	setConfirmedCalled := false
+	setAttendingCalled := false
 	repo := &mockRepository{
 		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
+			g.Attending = boolPtr(false)
 			return &g, nil
 		},
-		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
-			setConfirmedCalled = true
+		setAttendingFn: func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
+			setAttendingCalled = true
 			return nil, nil
 		},
 	}
@@ -843,11 +849,43 @@ func TestServiceCancelAlreadyCancelled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if guest.Confirmed {
-		t.Fatal("expected confirmed to be false")
+	if guest.Attending == nil || *guest.Attending {
+		t.Fatal("expected attending to be false")
 	}
-	if setConfirmedCalled {
-		t.Fatal("expected SetConfirmed to NOT be called (idempotent skip)")
+	if setAttendingCalled {
+		t.Fatal("expected SetAttending to NOT be called (idempotent skip)")
+	}
+}
+
+func TestServiceCancelWhenNullTriggersUpdate(t *testing.T) {
+	setAttendingCalled := false
+	repo := &mockRepository{
+		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
+			g := sampleGuest()
+			g.Attending = nil
+			return &g, nil
+		},
+		setAttendingFn: func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
+			setAttendingCalled = true
+			g := sampleGuest()
+			g.Attending = boolPtr(false)
+			return &g, nil
+		},
+	}
+	users := &mockUserBridge{getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+		guestID := int64(1)
+		return &guestID, nil
+	}}
+	svc := newTestService(repo, users)
+	guest, err := svc.Cancel(context.Background(), 1, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if guest.Attending == nil || *guest.Attending {
+		t.Fatal("expected attending to be false")
+	}
+	if !setAttendingCalled {
+		t.Fatal("expected SetAttending to be called when attending is NULL")
 	}
 }
 
@@ -892,9 +930,9 @@ func TestServiceConfirmByPhone(t *testing.T) {
 					g := sampleGuest()
 					return &g, nil
 				},
-				setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+				setAttendingFn: func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
 					g := sampleGuest()
-					g.Confirmed = true
+					g.Attending = boolPtr(true)
 					return &g, nil
 				},
 			}
@@ -912,8 +950,8 @@ func TestServiceConfirmByPhone(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !guest.Confirmed {
-				t.Fatal("expected confirmed to be true")
+			if guest.Attending == nil || !*guest.Attending {
+				t.Fatal("expected attending to be true")
 			}
 		})
 	}
@@ -923,12 +961,12 @@ func TestServiceCancelByPhone(t *testing.T) {
 	repo := &mockRepository{
 		getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = true
+			g.Attending = boolPtr(true)
 			return &g, nil
 		},
-		setConfirmedFn: func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+		setAttendingFn: func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
 			g := sampleGuest()
-			g.Confirmed = false
+			g.Attending = boolPtr(false)
 			return &g, nil
 		},
 	}
@@ -948,8 +986,8 @@ func TestServiceCancelByPhone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if guest.Confirmed {
-		t.Fatal("expected confirmed to be false")
+	if guest.Attending == nil || *guest.Attending {
+		t.Fatal("expected attending to be false")
 	}
 }
 
@@ -1029,9 +1067,9 @@ func TestServiceListMyFamily(t *testing.T) {
 }
 
 func TestServiceSetConfirmedBatch(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
+	t.Run("batch attending=true stores true", func(t *testing.T) {
 		var updatedIDs []int64
-		var updatedConfirmed bool
+		var updatedAttending bool
 		repo := &mockRepository{
 			getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
 				g := sampleGuest()
@@ -1046,14 +1084,14 @@ func TestServiceSetConfirmedBatch(t *testing.T) {
 				}
 				return out, nil
 			},
-			setConfirmedByIDsFn: func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error) {
+			setAttendingByIDsFn: func(ctx context.Context, ids []int64, attending bool, userRACF string) ([]Guest, error) {
 				updatedIDs = ids
-				updatedConfirmed = confirmed
+				updatedAttending = attending
 				out := []Guest{}
 				for _, id := range ids {
 					g := sampleGuest()
 					g.ID = id
-					g.Confirmed = confirmed
+					g.Attending = boolPtr(attending)
 					out = append(out, g)
 				}
 				return out, nil
@@ -1066,18 +1104,75 @@ func TestServiceSetConfirmedBatch(t *testing.T) {
 			},
 		}
 		svc := newTestService(repo, users)
-		guests, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Confirmed: true}, 1)
+		guests, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Attending: true}, 1)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(guests) != 2 {
 			t.Fatalf("expected 2 updated guests, got %d", len(guests))
 		}
-		if !updatedConfirmed {
-			t.Fatal("expected updatedConfirmed=true")
+		if !updatedAttending {
+			t.Fatal("expected updatedAttending=true")
 		}
 		if len(updatedIDs) != 2 {
 			t.Fatalf("expected 2 updated IDs, got %d", len(updatedIDs))
+		}
+		for _, g := range guests {
+			if g.Attending == nil || !*g.Attending {
+				t.Fatal("expected each guest attending=true")
+			}
+		}
+	})
+
+	t.Run("batch attending=false stores false (regression: must not become NULL)", func(t *testing.T) {
+		var capturedAttending bool
+		repo := &mockRepository{
+			getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			},
+			getByIDsFn: func(ctx context.Context, ids []int64) ([]Guest, error) {
+				out := []Guest{}
+				for _, id := range ids {
+					g := sampleGuest()
+					g.ID = id
+					out = append(out, g)
+				}
+				return out, nil
+			},
+			setAttendingByIDsFn: func(ctx context.Context, ids []int64, attending bool, userRACF string) ([]Guest, error) {
+				capturedAttending = attending
+				out := []Guest{}
+				for _, id := range ids {
+					g := sampleGuest()
+					g.ID = id
+					g.Attending = boolPtr(attending)
+					out = append(out, g)
+				}
+				return out, nil
+			},
+		}
+		users := &mockUserBridge{
+			getGuestIDByUserIDFn: func(ctx context.Context, userID int64) (*int64, error) {
+				id := int64(1)
+				return &id, nil
+			},
+		}
+		svc := newTestService(repo, users)
+		guests, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Attending: false}, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capturedAttending != false {
+			t.Fatal("expected capturedAttending=false (not NULL)")
+		}
+		for _, g := range guests {
+			if g.Attending == nil {
+				t.Fatal("attending must be false, not NULL — regression check")
+			}
+			if *g.Attending {
+				t.Fatal("expected attending=false, got true")
+			}
 		}
 	})
 
@@ -1104,7 +1199,7 @@ func TestServiceSetConfirmedBatch(t *testing.T) {
 			},
 		}
 		svc := newTestService(repo, users)
-		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Confirmed: true}, 1)
+		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Attending: true}, 1)
 		assertAppError(t, err, http.StatusForbidden, "you can only confirm guests in your own family")
 	})
 
@@ -1126,15 +1221,75 @@ func TestServiceSetConfirmedBatch(t *testing.T) {
 			},
 		}
 		svc := newTestService(repo, users)
-		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Confirmed: true}, 1)
+		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: []int64{1, 2}, Attending: true}, 1)
 		assertAppError(t, err, http.StatusNotFound, "one or more guests not found")
 	})
 
 	t.Run("rejects empty ids", func(t *testing.T) {
 		svc := newTestService(&mockRepository{}, defaultUserBridge())
-		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: nil, Confirmed: true}, 1)
+		_, err := svc.SetConfirmedBatch(context.Background(), BatchConfirmInput{GuestIDs: nil, Attending: true}, 1)
 		assertAppError(t, err, http.StatusBadRequest, "GuestIDs failed on required validation")
 	})
+}
+
+func TestServiceUpdateIndividualTriState(t *testing.T) {
+	tests := []struct {
+		name          string
+		attending     *bool
+		wantAttending *bool
+	}{
+		{
+			name:          "set attending=true",
+			attending:     boolPtr(true),
+			wantAttending: boolPtr(true),
+		},
+		{
+			name:          "set attending=false",
+			attending:     boolPtr(false),
+			wantAttending: boolPtr(false),
+		},
+		{
+			name:          "set attending=nil (no change)",
+			attending:     nil,
+			wantAttending: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedAttending *bool
+			repo := &mockRepository{
+				updateFn: func(ctx context.Context, id int64, input UpdateGuestInput, userRACF string) (*Guest, error) {
+					capturedAttending = input.Attending
+					g := sampleGuest()
+					g.Attending = input.Attending
+					return &g, nil
+				},
+				getByIDAnyFn: func(ctx context.Context, id int64) (*Guest, error) {
+					g := sampleGuest()
+					return &g, nil
+				},
+			}
+			svc := newTestService(repo, defaultUserBridge())
+			g, err := svc.Update(context.Background(), 1, UpdateGuestInput{Attending: tt.attending}, "TST01")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantAttending == nil {
+				if capturedAttending != nil {
+					t.Fatalf("expected nil attending, got %v", *capturedAttending)
+				}
+			} else {
+				if capturedAttending == nil {
+					t.Fatalf("expected attending=%v, got nil", *tt.wantAttending)
+				}
+				if *capturedAttending != *tt.wantAttending {
+					t.Fatalf("expected attending=%v, got %v", *tt.wantAttending, *capturedAttending)
+				}
+			}
+			_ = g
+		})
+	}
 }
 
 func TestServiceDelete(t *testing.T) {

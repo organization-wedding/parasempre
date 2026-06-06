@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	brPhoneRegex = regexp.MustCompile(`^\d{2}9\d{8}$`)
+	BRPhoneRegex = regexp.MustCompile(`^\d{2}9\d{8}$`)
 	uracfRegex   = regexp.MustCompile(`^[A-Z0-9]{5}$`)
 
 	instance *validator.Validate
@@ -24,7 +24,7 @@ func getValidator() *validator.Validate {
 		instance = validator.New()
 
 		instance.RegisterValidation("brphone", func(fl validator.FieldLevel) bool {
-			return brPhoneRegex.MatchString(fl.Field().String())
+			return BRPhoneRegex.MatchString(fl.Field().String())
 		})
 
 		instance.RegisterValidation("uracf", func(fl validator.FieldLevel) bool {

@@ -12,6 +12,13 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
 
+func lastN(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}
+
 type UserBridge interface {
 	UserExistsByURACF(ctx context.Context, uracf string) (bool, error)
 	CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64, phone *string) error
@@ -94,7 +101,7 @@ func (s *Service) SetConfirmedBatch(ctx context.Context, input BatchConfirmInput
 	var updated []Guest
 	if err := s.txRunner.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
-		guests, err := txRepo.SetConfirmedByIDs(ctx, input.GuestIDs, input.Confirmed, updatedByRACF)
+		guests, err := txRepo.SetAttendingByIDs(ctx, input.GuestIDs, input.Attending, updatedByRACF)
 		if err != nil {
 			return err
 		}
@@ -104,7 +111,7 @@ func (s *Service) SetConfirmedBatch(ctx context.Context, input BatchConfirmInput
 		return nil, apperror.WrapIfNotApp("failed to update batch confirmation", err)
 	}
 
-	slog.Info("guest.service set_confirmed_batch: success", "ids", input.GuestIDs, "confirmed", input.Confirmed, "count", len(updated), "user_id", userID)
+	slog.Info("guest.service set_confirmed_batch: success", "ids", input.GuestIDs, "attending", input.Attending, "count", len(updated), "user_id", userID)
 	return updated, nil
 }
 
@@ -240,41 +247,41 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateGuestInput, 
 }
 
 func (s *Service) Confirm(ctx context.Context, id int64, userID int64) (*Guest, error) {
-	return s.setConfirmed(ctx, id, true, userID)
+	return s.setAttending(ctx, id, true, userID)
 }
 
 func (s *Service) Cancel(ctx context.Context, id int64, userID int64) (*Guest, error) {
-	return s.setConfirmed(ctx, id, false, userID)
+	return s.setAttending(ctx, id, false, userID)
 }
 
 func (s *Service) ConfirmByPhone(ctx context.Context, phone string, userID int64) (*Guest, error) {
-	return s.setConfirmedByPhone(ctx, phone, true, userID)
+	return s.setAttendingByPhone(ctx, phone, true, userID)
 }
 
 func (s *Service) CancelByPhone(ctx context.Context, phone string, userID int64) (*Guest, error) {
-	return s.setConfirmedByPhone(ctx, phone, false, userID)
+	return s.setAttendingByPhone(ctx, phone, false, userID)
 }
 
 func (s *Service) ConfirmFamily(ctx context.Context, familyGroup int64, userID int64) ([]Guest, error) {
-	return s.setConfirmedFamily(ctx, familyGroup, true, userID)
+	return s.setAttendingFamily(ctx, familyGroup, true, userID)
 }
 
 func (s *Service) CancelFamily(ctx context.Context, familyGroup int64, userID int64) ([]Guest, error) {
-	return s.setConfirmedFamily(ctx, familyGroup, false, userID)
+	return s.setAttendingFamily(ctx, familyGroup, false, userID)
 }
 
 func (s *Service) ConfirmFamilyByPhone(ctx context.Context, phone string, userID int64) ([]Guest, error) {
-	return s.setConfirmedFamilyByPhone(ctx, phone, true, userID)
+	return s.setAttendingFamilyByPhone(ctx, phone, true, userID)
 }
 
 func (s *Service) CancelFamilyByPhone(ctx context.Context, phone string, userID int64) ([]Guest, error) {
-	return s.setConfirmedFamilyByPhone(ctx, phone, false, userID)
+	return s.setAttendingFamilyByPhone(ctx, phone, false, userID)
 }
 
-func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, userID int64) (*Guest, error) {
+func (s *Service) setAttending(ctx context.Context, id int64, attending bool, userID int64) (*Guest, error) {
 	currentUserGuestID, err := s.users.GetGuestIDByUserID(ctx, userID)
 	if err != nil {
-		slog.Error("guest.service set_confirmed: failed to get current user's guest", "user_id", userID, "error", err)
+		slog.Error("guest.service set_attending: failed to get current user's guest", "user_id", userID, "error", err)
 		return nil, apperror.Internal("failed to verify guest identity", err)
 	}
 	if currentUserGuestID == nil {
@@ -292,12 +299,12 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 	}
 
 	if target.FamilyGroup != currentGuest.FamilyGroup {
-		slog.Warn("guest.service set_confirmed: unauthorized cross-family attempt", "user_id", userID, "requested_guest_id", id, "caller_family", currentGuest.FamilyGroup, "target_family", target.FamilyGroup)
+		slog.Warn("guest.service set_attending: unauthorized cross-family attempt", "user_id", userID, "requested_guest_id", id, "caller_family", currentGuest.FamilyGroup, "target_family", target.FamilyGroup)
 		return nil, apperror.Forbidden("you can only confirm guests in your own family")
 	}
 
-	if target.Confirmed == confirmed {
-		slog.Info("guest.service set_confirmed: already in desired state, skipping update", "id", id, "confirmed", confirmed)
+	if target.Attending != nil && *target.Attending == attending {
+		slog.Info("guest.service set_attending: already in desired state, skipping update", "id", id, "attending", attending)
 		return target, nil
 	}
 
@@ -306,31 +313,31 @@ func (s *Service) setConfirmed(ctx context.Context, id int64, confirmed bool, us
 		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
 	}
 
-	updated, err := s.repo.SetConfirmed(ctx, id, confirmed, updatedByRACF)
+	updated, err := s.repo.SetAttending(ctx, id, attending, updatedByRACF)
 	if err != nil {
-		return nil, apperror.WrapIfNotApp("failed to update confirmation", err)
+		return nil, apperror.WrapIfNotApp("failed to update attending", err)
 	}
-	slog.Info("guest.service set_confirmed: success", "id", updated.ID, "confirmed", confirmed, "user_id", userID)
+	slog.Info("guest.service set_attending: success", "id", updated.ID, "attending", attending, "user_id", userID)
 	return updated, nil
 }
 
-func (s *Service) setConfirmedByPhone(ctx context.Context, phone string, confirmed bool, userID int64) (*Guest, error) {
+func (s *Service) setAttendingByPhone(ctx context.Context, phone string, attending bool, userID int64) (*Guest, error) {
 	guestID, err := s.users.GetGuestIDByPhone(ctx, phone)
 	if err != nil {
-		slog.Error("guest.service set_confirmed_by_phone: phone lookup failed", "phone", phone, "error", err)
+		slog.Error("guest.service set_attending_by_phone: phone lookup failed", "phone_suffix", lastN(phone, 4), "error", err)
 		return nil, apperror.Internal("failed to find guest by phone", err)
 	}
 	if guestID == nil {
 		return nil, apperror.NotFound("no guest found for this phone number")
 	}
 
-	return s.setConfirmed(ctx, *guestID, confirmed, userID)
+	return s.setAttending(ctx, *guestID, attending, userID)
 }
 
-func (s *Service) setConfirmedFamily(ctx context.Context, familyGroup int64, confirmed bool, userID int64) ([]Guest, error) {
+func (s *Service) setAttendingFamily(ctx context.Context, familyGroup int64, attending bool, userID int64) ([]Guest, error) {
 	currentUserGuestID, err := s.users.GetGuestIDByUserID(ctx, userID)
 	if err != nil {
-		slog.Error("guest.service set_confirmed_family: failed to get current user's guest", "user_id", userID, "error", err)
+		slog.Error("guest.service set_attending_family: failed to get current user's guest", "user_id", userID, "error", err)
 		return nil, apperror.Internal("failed to verify guest identity", err)
 	}
 	if currentUserGuestID == nil {
@@ -343,13 +350,13 @@ func (s *Service) setConfirmedFamily(ctx context.Context, familyGroup int64, con
 	}
 
 	if currentGuest.FamilyGroup != familyGroup {
-		slog.Warn("guest.service set_confirmed_family: unauthorized attempt", "user_id", userID, "requested_family", familyGroup, "actual_family", currentGuest.FamilyGroup)
+		slog.Warn("guest.service set_attending_family: unauthorized attempt", "user_id", userID, "requested_family", familyGroup, "actual_family", currentGuest.FamilyGroup)
 		return nil, apperror.Forbidden("you can only confirm your own family's attendance")
 	}
 
 	familyGroupExists, err := s.repo.FamilyGroupExists(ctx, familyGroup)
 	if err != nil {
-		slog.Error("guest.service set_confirmed_family: family group lookup failed", "family_group", familyGroup, "error", err)
+		slog.Error("guest.service set_attending_family: family group lookup failed", "family_group", familyGroup, "error", err)
 		return nil, apperror.Internal("failed to validate family_group", err)
 	}
 	if !familyGroupExists {
@@ -361,26 +368,26 @@ func (s *Service) setConfirmedFamily(ctx context.Context, familyGroup int64, con
 		return nil, apperror.WrapIfNotApp("failed to resolve caller URACF", err)
 	}
 
-	guests, err := s.repo.SetConfirmedByFamilyGroup(ctx, familyGroup, confirmed, updatedByRACF)
+	guests, err := s.repo.SetAttendingByFamilyGroup(ctx, familyGroup, attending, updatedByRACF)
 	if err != nil {
-		return nil, apperror.WrapIfNotApp("failed to update family confirmation", err)
+		return nil, apperror.WrapIfNotApp("failed to update family attending", err)
 	}
 
-	slog.Info("guest.service set_confirmed_family: success", "family_group", familyGroup, "confirmed", confirmed, "count", len(guests), "user_id", userID)
+	slog.Info("guest.service set_attending_family: success", "family_group", familyGroup, "attending", attending, "count", len(guests), "user_id", userID)
 	return guests, nil
 }
 
-func (s *Service) setConfirmedFamilyByPhone(ctx context.Context, phone string, confirmed bool, userID int64) ([]Guest, error) {
+func (s *Service) setAttendingFamilyByPhone(ctx context.Context, phone string, attending bool, userID int64) ([]Guest, error) {
 	familyGroup, err := s.repo.GetFamilyGroupByPhone(ctx, phone)
 	if err != nil {
-		slog.Error("guest.service set_confirmed_family_by_phone: phone lookup failed", "phone", phone, "error", err)
+		slog.Error("guest.service set_attending_family_by_phone: phone lookup failed", "phone_suffix", lastN(phone, 4), "error", err)
 		return nil, apperror.Internal("failed to find family by phone", err)
 	}
 	if familyGroup == nil {
 		return nil, apperror.NotFound("no family found for this phone number")
 	}
 
-	return s.setConfirmedFamily(ctx, *familyGroup, confirmed, userID)
+	return s.setAttendingFamily(ctx, *familyGroup, attending, userID)
 }
 
 func (s *Service) Import(ctx context.Context, guests []CreateGuestInput, userRACF string) ImportResponse {
