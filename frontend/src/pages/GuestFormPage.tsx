@@ -31,7 +31,7 @@ const guestFormSchema = z.object({
     }),
   relationship: z.enum(["P", "R"]),
   familyGroup: z.number().int().min(1).optional(),
-  confirmed: z.boolean(),
+  attending: z.boolean().nullable(),
 });
 
 type GuestFormValues = z.infer<typeof guestFormSchema>;
@@ -78,7 +78,7 @@ export function GuestFormPage({ guestId }: Props) {
       phone: "",
       relationship: "P",
       familyGroup: undefined,
-      confirmed: false,
+      attending: null,
     },
   });
 
@@ -90,7 +90,7 @@ export function GuestFormPage({ guestId }: Props) {
       lastName: guestQuery.data.last_name,
       relationship: guestQuery.data.relationship,
       familyGroup: guestQuery.data.family_group,
-      confirmed: guestQuery.data.confirmed,
+      attending: guestQuery.data.attending,
     });
 
     const fg = guestQuery.data.family_group;
@@ -169,7 +169,7 @@ export function GuestFormPage({ guestId }: Props) {
             last_name: values.lastName.trim(),
             relationship: values.relationship,
             family_group: values.familyGroup,
-            confirmed: values.confirmed,
+            attending: values.attending,
           },
         });
       } else {
@@ -197,7 +197,7 @@ export function GuestFormPage({ guestId }: Props) {
   const loading = isEdit && guestQuery.isLoading;
   const saving = isSubmitting || createMutation.isPending || updateMutation.isPending;
   const relationship = watch("relationship");
-  const confirmed = watch("confirmed");
+  const attending = watch("attending");
   const errorMessage = errors.root?.message ?? mutationError;
 
   return (
@@ -388,29 +388,45 @@ export function GuestFormPage({ guestId }: Props) {
 
             {isEdit && (
               <div className="mb-6">
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <div className="relative">
-                    <input type="checkbox" className="sr-only peer" {...register("confirmed")} />
-                    <div className="w-5 h-5 border border-gold-muted/50 bg-ivory peer-checked:bg-burgundy peer-checked:border-burgundy transition-all duration-200 flex items-center justify-center">
-                      {confirmed && (
-                        <svg
-                          viewBox="0 0 16 16"
-                          className="w-3 h-3 text-gold-light"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="3 8 7 12 13 4" />
-                        </svg>
-                      )}
-                    </div>
-                  </div>
-                  <span className="font-heading text-[0.75rem] font-semibold tracking-[0.06em] uppercase text-dark-warm group-hover:text-burgundy transition-colors">
-                    Presença confirmada
-                  </span>
-                </label>
+                <label id="attending-label" className={labelClass}>Status de presença</label>
+                <div role="group" aria-labelledby="attending-label" className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    aria-pressed={attending === null}
+                    onClick={() => setValue("attending", null)}
+                    className={`font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 px-4 border transition-all duration-200 cursor-pointer ${
+                      attending === null
+                        ? "bg-gold text-dark border-gold"
+                        : "bg-transparent text-hint border-gold-muted/50 hover:border-gold hover:text-gold-dark"
+                    }`}
+                  >
+                    Aguardando
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={attending === true}
+                    onClick={() => setValue("attending", true)}
+                    className={`font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 px-4 border transition-all duration-200 cursor-pointer ${
+                      attending === true
+                        ? "bg-burgundy text-gold-light border-burgundy"
+                        : "bg-transparent text-hint border-gold-muted/50 hover:border-burgundy hover:text-burgundy"
+                    }`}
+                  >
+                    Vai comparecer
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={attending === false}
+                    onClick={() => setValue("attending", false)}
+                    className={`font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 px-4 border transition-all duration-200 cursor-pointer ${
+                      attending === false
+                        ? "bg-[#c25550] text-white border-[#c25550]"
+                        : "bg-transparent text-hint border-gold-muted/50 hover:border-[#c25550] hover:text-[#c25550]"
+                    }`}
+                  >
+                    Não comparecerá
+                  </button>
+                </div>
               </div>
             )}
 

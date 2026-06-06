@@ -25,7 +25,7 @@ import type { Guest, ImportResult } from "../types/guest";
 const PAGE_SIZE = 20;
 
 type RelationshipFilter = "" | "P" | "R";
-type ConfirmedFilter = "" | "yes" | "no";
+type AttendingFilter = "" | "attending" | "pending" | "declined";
 
 export function GuestListPage() {
   const [page, setPage] = useState(1);
@@ -41,7 +41,7 @@ export function GuestListPage() {
   const [uiError, setUiError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterRel, setFilterRel] = useState<RelationshipFilter>("");
-  const [filterConf, setFilterConf] = useState<ConfirmedFilter>("");
+  const [filterConf, setFilterConf] = useState<AttendingFilter>("");
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [deleteTarget, setDeleteTarget] = useState<Guest | null>(null);
@@ -62,7 +62,13 @@ export function GuestListPage() {
         !q ||
         `${g.first_name} ${g.last_name}`.toLowerCase().includes(q);
       const matchesRel = !filterRel || g.relationship === filterRel;
-      const matchesConf = !filterConf || (filterConf === "yes" ? g.confirmed : !g.confirmed);
+      const matchesConf =
+        !filterConf ||
+        (filterConf === "attending"
+          ? g.attending === true
+          : filterConf === "pending"
+            ? g.attending === null
+            : g.attending === false);
       return matchesSearch && matchesRel && matchesConf;
     });
   }, [guests, search, filterRel, filterConf]);
@@ -70,8 +76,9 @@ export function GuestListPage() {
   const stats = useMemo(
     () => ({
       total,
-      confirmed: guests.filter((g) => g.confirmed).length,
-      pending: guests.filter((g) => !g.confirmed).length,
+      confirmed: guests.filter((g) => g.attending === true).length,
+      pending: guests.filter((g) => g.attending === null).length,
+      declined: guests.filter((g) => g.attending === false).length,
     }),
     [guests, total],
   );
@@ -187,7 +194,11 @@ export function GuestListPage() {
               </span>
               <span className="inline-flex items-center gap-1.5 text-[0.82rem] text-gold-dark font-medium">
                 <Clock size={14} />
-                {stats.pending} pendentes
+                {stats.pending} aguardando
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[0.82rem] text-[#9e3d3a] font-medium">
+                <X size={14} />
+                {stats.declined} Não comparecerão
               </span>
             </div>
           </div>
@@ -271,7 +282,7 @@ export function GuestListPage() {
                     Status
                   </p>
                   <div className="flex gap-1.5 flex-wrap">
-                    {(["", "yes", "no"] as ConfirmedFilter[]).map((val) => (
+                    {(["", "attending", "pending", "declined"] as AttendingFilter[]).map((val) => (
                       <button
                         key={val}
                         type="button"
@@ -282,7 +293,13 @@ export function GuestListPage() {
                             : "bg-transparent text-dark-warm border-gold-muted/40 hover:border-burgundy hover:text-burgundy"
                         }`}
                       >
-                        {val === "" ? "Todos" : val === "yes" ? "Confirmados" : "Pendentes"}
+                        {val === ""
+                          ? "Todos"
+                          : val === "attending"
+                            ? "Confirmados"
+                            : val === "pending"
+                              ? "Aguardando"
+                              : "Não comparecerão"}
                       </button>
                     ))}
                   </div>
@@ -435,15 +452,20 @@ export function GuestListPage() {
                       </td>
                       <td className="py-3 px-4 text-center text-[0.84rem] font-semibold text-dark-warm/60">{guest.family_group}</td>
                       <td className="py-3 px-4 text-center">
-                        {guest.confirmed ? (
+                        {guest.attending === true ? (
                           <span className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold text-burgundy bg-burgundy/10 border border-burgundy/20 px-2.5 py-1">
                             <Check size={11} />
                             Confirmado
                           </span>
+                        ) : guest.attending === false ? (
+                          <span className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold text-[#9e3d3a] bg-[#c25550]/10 border border-[#c25550]/20 px-2.5 py-1">
+                            <X size={11} />
+                            Não comparecerá
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold text-gold-dark bg-gold/10 border border-gold/25 px-2.5 py-1">
                             <Clock size={11} />
-                            Pendente
+                            Aguardando
                           </span>
                         )}
                       </td>

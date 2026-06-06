@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Check from "lucide-react/dist/esm/icons/check";
 import Clock from "lucide-react/dist/esm/icons/clock";
+import XIcon from "lucide-react/dist/esm/icons/x";
 import Users from "lucide-react/dist/esm/icons/users";
 import { AlreadyRespondedView } from "./AlreadyRespondedView";
 import type { Guest } from "../../types/guest";
@@ -20,7 +21,7 @@ interface Props {
 export function FamilyRSVPForm({ family, currentGuestID, onSubmit, disabled = false }: Props) {
   const [selected, setSelected] = useState<Record<number, boolean>>(() => {
     const initial: Record<number, boolean> = {};
-    for (const g of family) initial[g.id] = g.confirmed;
+    for (const g of family) initial[g.id] = g.attending === true;
     return initial;
   });
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export function FamilyRSVPForm({ family, currentGuestID, onSubmit, disabled = fa
   );
 
   const allSelected = selectedIds.length === family.length && family.length > 0;
-  const hasAnyConfirmed = family.some((g) => g.confirmed);
+  const hasAnyResponded = family.some((g) => g.attending !== null);
   const standalone = family.length <= 1;
 
   function toggle(id: number) {
@@ -96,7 +97,7 @@ export function FamilyRSVPForm({ family, currentGuestID, onSubmit, disabled = fa
         )}
       </div>
 
-      {hasAnyConfirmed && <AlreadyRespondedView />}
+      {hasAnyResponded && <AlreadyRespondedView />}
 
       <ul className="divide-y divide-gold-muted/25 mb-5">
         {family.map((guest, idx) => {
@@ -121,10 +122,15 @@ export function FamilyRSVPForm({ family, currentGuestID, onSubmit, disabled = fa
                   )}
                 </span>
               </label>
-              {guest.confirmed ? (
+              {guest.attending === true ? (
                 <span className="inline-flex items-center gap-1 text-[0.66rem] font-bold text-burgundy bg-burgundy/10 border border-burgundy/25 px-2 py-0.5 font-heading tracking-wide uppercase">
                   <Check size={10} />
                   Confirmado
+                </span>
+              ) : guest.attending === false ? (
+                <span className="inline-flex items-center gap-1 text-[0.66rem] font-bold text-[#9e3d3a] bg-[#c25550]/10 border border-[#c25550]/25 px-2 py-0.5 font-heading tracking-wide uppercase">
+                  <XIcon size={10} />
+                  Não comparecerá
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 text-[0.66rem] font-bold text-gold-dark bg-gold/10 border border-gold/30 px-2 py-0.5 font-heading tracking-wide uppercase">
@@ -152,7 +158,7 @@ export function FamilyRSVPForm({ family, currentGuestID, onSubmit, disabled = fa
             className="flex-1 inline-flex items-center justify-center gap-2 font-heading text-[0.7rem] font-semibold tracking-[0.1em] uppercase py-[0.7rem] px-4 bg-burgundy text-gold-light border border-burgundy transition-all duration-300 hover:bg-burgundy-deep hover:shadow-[0_4px_16px_rgba(97,106,47,0.35)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check size={14} />
-            Confirmar Todos
+            Toda a família comparecerá
           </button>
         )}
         <button
@@ -166,7 +172,7 @@ export function FamilyRSVPForm({ family, currentGuestID, onSubmit, disabled = fa
           }`}
         >
           <Check size={14} />
-          {standalone ? "Confirmar minha presença" : "Confirmar Selecionados"}
+          {standalone ? "Sim, comparecerei" : "Os selecionados comparecerão"}
         </button>
         <button
           type="button"
@@ -174,7 +180,8 @@ export function FamilyRSVPForm({ family, currentGuestID, onSubmit, disabled = fa
           disabled={disabled}
           className="flex-1 inline-flex items-center justify-center gap-2 font-heading text-[0.7rem] font-semibold tracking-[0.1em] uppercase py-[0.7rem] px-4 bg-transparent text-dark-warm/70 border border-gold-muted/60 transition-all duration-300 hover:border-[#c25550] hover:text-[#c25550] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Recusar Selecionados
+          <XIcon size={14} />
+          Os selecionados não comparecerão
         </button>
       </div>
     </div>

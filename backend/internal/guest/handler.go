@@ -10,7 +10,15 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
 	"github.com/ferjunior7/parasempre/backend/internal/middleware"
+	"github.com/ferjunior7/parasempre/backend/internal/validate"
 )
+
+func validatePathPhone(phone string) error {
+	if !validate.BRPhoneRegex.MatchString(phone) {
+		return apperror.Validation("invalid phone number format")
+	}
+	return nil
+}
 
 type Handler struct {
 	svc *Service
@@ -188,6 +196,10 @@ func (h *Handler) HandleConfirmByPhone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	phone := r.PathValue("phone")
+	if err := validatePathPhone(phone); err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
 	guest, err := h.svc.ConfirmByPhone(r.Context(), phone, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm guest by phone", err))
@@ -204,6 +216,10 @@ func (h *Handler) HandleCancelByPhone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	phone := r.PathValue("phone")
+	if err := validatePathPhone(phone); err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
 	guest, err := h.svc.CancelByPhone(r.Context(), phone, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel guest by phone", err))
@@ -264,6 +280,10 @@ func (h *Handler) HandleConfirmFamilyByPhone(w http.ResponseWriter, r *http.Requ
 	}
 
 	phone := r.PathValue("phone")
+	if err := validatePathPhone(phone); err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
 	guests, err := h.svc.ConfirmFamilyByPhone(r.Context(), phone, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to confirm family by phone", err))
@@ -280,6 +300,10 @@ func (h *Handler) HandleCancelFamilyByPhone(w http.ResponseWriter, r *http.Reque
 	}
 
 	phone := r.PathValue("phone")
+	if err := validatePathPhone(phone); err != nil {
+		httputil.WriteError(w, r, err)
+		return
+	}
 	guests, err := h.svc.CancelFamilyByPhone(r.Context(), phone, userID)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to cancel family by phone", err))

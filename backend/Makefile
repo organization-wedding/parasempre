@@ -29,6 +29,7 @@ migrate:
 	@PGPASSWORD=${DB_PASSWORD} psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/006_create_gifts.sql
 	@PGPASSWORD=${DB_PASSWORD} psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/007_payment_idempotency.sql
 	@PGPASSWORD=${DB_PASSWORD} psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/008_create_gift_messages.sql
+	@PGPASSWORD=${DB_PASSWORD} psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f migrations/009_guest_attending.sql
 
 nuke:
 	@if [ "$(APP_ENV)" != "test" ]; then \
