@@ -104,7 +104,14 @@ func main() {
 	{
 		var storage giftmessage.Storage
 		if cfg.SupabaseURL != "" && cfg.SupabaseServiceRoleKey != "" {
-			storage = giftmessage.NewSupabaseStorage(cfg.SupabaseURL, cfg.SupabaseStorageBucket, cfg.SupabaseServiceRoleKey)
+			ss := giftmessage.NewSupabaseStorage(cfg.SupabaseURL, cfg.SupabaseStorageBucket, cfg.SupabaseServiceRoleKey)
+			bucketCtx, bucketCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := ss.BucketExists(bucketCtx); err != nil {
+				slog.Error("supabase storage: bucket inacessível — uploads de mídia vão falhar",
+					"bucket", cfg.SupabaseStorageBucket, "error", err)
+			}
+			bucketCancel()
+			storage = ss
 			slog.Info("supabase storage: enabled", "bucket", cfg.SupabaseStorageBucket)
 		} else {
 			slog.Warn("supabase storage: disabled (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable media uploads)")
@@ -133,13 +140,9 @@ func main() {
 	authHandler := auth.NewHandler(otpSvc, jwtSvc, userSvc, userSvc, userSvc)
 
 	var devLoginHandler *auth.DevLoginHandler
-	if cfg.AppEnv != "production" && cfg.EnableTestLogin {
-		phone := cfg.TestLoginPhone
-		if phone == "" {
-			phone = cfg.Couple.Groom.Phone
-		}
-		devLoginHandler = auth.NewDevLoginHandler(jwtSvc, userSvc, userSvc, phone)
-		slog.Warn("dev-login: ENABLED — never set ENABLE_TEST_LOGIN=true in production", "phone", phone)
+	if cfg.AppEnv != "production" {
+		devLoginHandler = auth.NewDevLoginHandler(jwtSvc, userSvc, userSvc)
+		slog.Warn("dev-login: ENABLED — not available in production")
 	}
 
 	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -173,11 +176,12 @@ func main() {
 	)
 
 	server := &http.Server{
-		Addr:         ":8080",
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              ":8080",
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       0,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	done := make(chan os.Signal, 1)

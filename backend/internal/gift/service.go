@@ -33,7 +33,7 @@ func NewService(repo TxAwareRepository, txRunner database.TxRunner, scraper Prod
 	return &Service{repo: repo, txRunner: txRunner, scraper: scraper}
 }
 
-func (s *Service) List(ctx context.Context, page, limit int, status *string) (*PagedResponse, error) {
+func (s *Service) List(ctx context.Context, page, limit int, filter ListFilter) (*PagedResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -44,8 +44,26 @@ func (s *Service) List(ctx context.Context, page, limit int, status *string) (*P
 		limit = 100
 	}
 
+	if filter.Search != nil {
+		if q := strings.TrimSpace(*filter.Search); q != "" {
+			filter.Search = &q
+		} else {
+			filter.Search = nil
+		}
+	}
+
+	if filter.PriceMin != nil && *filter.PriceMin < 0 {
+		filter.PriceMin = nil
+	}
+	if filter.PriceMax != nil && *filter.PriceMax < 0 {
+		filter.PriceMax = nil
+	}
+	if filter.Sort != nil && *filter.Sort != SortPriceAsc && *filter.Sort != SortPriceDesc {
+		filter.Sort = nil
+	}
+
 	offset := (page - 1) * limit
-	gifts, total, err := s.repo.List(ctx, limit, offset, status)
+	gifts, total, err := s.repo.List(ctx, filter, limit, offset)
 	if err != nil {
 		slog.Error("gift.service list: failed", "error", err)
 		return nil, apperror.Internal("failed to list gifts", err)

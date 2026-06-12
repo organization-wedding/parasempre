@@ -116,35 +116,27 @@ func (m *mockUserRepo) WithTx(_ pgx.Tx) Repository {
 }
 
 type mockGuestRepo struct {
-	listFn                       func(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error)
-	listByFamilyGroupFn          func(ctx context.Context, familyGroup int64) ([]guest.Guest, error)
-	getByID                      func(ctx context.Context, id int64, userRACF string) (*guest.Guest, error)
-	getByIDAnyFn                 func(ctx context.Context, id int64) (*guest.Guest, error)
-	getByIDsFn                   func(ctx context.Context, ids []int64) ([]guest.Guest, error)
-	getByNameFn                  func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
-	familyGroupExistsFn          func(ctx context.Context, familyGroup int64) (bool, error)
-	getNextFamilyGroupFn         func(ctx context.Context) (int64, error)
-	createFn                     func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
-	updateFn                     func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
-	deleteFn                     func(ctx context.Context, id int64) error
-	setConfirmedFn               func(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error)
-	setConfirmedByFamilyGroupFn  func(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error)
-	setConfirmedByIDsFn          func(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]guest.Guest, error)
-	getFamilyGroupByPhoneFn      func(ctx context.Context, phone string) (*int64, error)
+	listFn                      func(ctx context.Context, limit, offset int) ([]guest.Guest, int, error)
+	listByFamilyGroupFn         func(ctx context.Context, familyGroup int64) ([]guest.Guest, error)
+	getByIDAnyFn                func(ctx context.Context, id int64) (*guest.Guest, error)
+	getByIDsFn                  func(ctx context.Context, ids []int64) ([]guest.Guest, error)
+	getByNameFn                 func(ctx context.Context, firstName, lastName string) (*guest.Guest, error)
+	familyGroupExistsFn         func(ctx context.Context, familyGroup int64) (bool, error)
+	getNextFamilyGroupFn        func(ctx context.Context) (int64, error)
+	createFn                    func(ctx context.Context, input guest.CreateGuestInput, userRACF string) (*guest.Guest, error)
+	updateFn                    func(ctx context.Context, id int64, input guest.UpdateGuestInput, userRACF string) (*guest.Guest, error)
+	deleteFn                    func(ctx context.Context, id int64) error
+	setAttendingFn              func(ctx context.Context, id int64, attending bool, userRACF string) (*guest.Guest, error)
+	setAttendingByFamilyGroupFn func(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]guest.Guest, error)
+	setAttendingByIDsFn         func(ctx context.Context, ids []int64, attending bool, userRACF string) ([]guest.Guest, error)
+	getFamilyGroupByPhoneFn     func(ctx context.Context, phone string) (*int64, error)
 }
 
-func (m *mockGuestRepo) List(ctx context.Context, limit, offset int, userRACF string) ([]guest.Guest, int, error) {
+func (m *mockGuestRepo) List(ctx context.Context, limit, offset int) ([]guest.Guest, int, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, limit, offset, userRACF)
+		return m.listFn(ctx, limit, offset)
 	}
 	return []guest.Guest{}, 0, nil
-}
-
-func (m *mockGuestRepo) GetByID(ctx context.Context, id int64, userRACF string) (*guest.Guest, error) {
-	if m.getByID != nil {
-		return m.getByID(ctx, id, userRACF)
-	}
-	return nil, nil
 }
 
 func (m *mockGuestRepo) ListByFamilyGroup(ctx context.Context, familyGroup int64) ([]guest.Guest, error) {
@@ -157,9 +149,6 @@ func (m *mockGuestRepo) ListByFamilyGroup(ctx context.Context, familyGroup int64
 func (m *mockGuestRepo) GetByIDAny(ctx context.Context, id int64) (*guest.Guest, error) {
 	if m.getByIDAnyFn != nil {
 		return m.getByIDAnyFn(ctx, id)
-	}
-	if m.getByID != nil {
-		return m.getByID(ctx, id, "")
 	}
 	return nil, nil
 }
@@ -213,20 +202,23 @@ func (m *mockGuestRepo) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (m *mockGuestRepo) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*guest.Guest, error) {
+func (m *mockGuestRepo) SetAttending(ctx context.Context, id int64, attending bool, userRACF string) (*guest.Guest, error) {
+	if m.setAttendingFn != nil {
+		return m.setAttendingFn(ctx, id, attending, userRACF)
+	}
 	return nil, nil
 }
 
-func (m *mockGuestRepo) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]guest.Guest, error) {
-	if m.setConfirmedByFamilyGroupFn != nil {
-		return m.setConfirmedByFamilyGroupFn(ctx, familyGroup, confirmed, userRACF)
+func (m *mockGuestRepo) SetAttendingByFamilyGroup(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]guest.Guest, error) {
+	if m.setAttendingByFamilyGroupFn != nil {
+		return m.setAttendingByFamilyGroupFn(ctx, familyGroup, attending, userRACF)
 	}
 	return []guest.Guest{}, nil
 }
 
-func (m *mockGuestRepo) SetConfirmedByIDs(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]guest.Guest, error) {
-	if m.setConfirmedByIDsFn != nil {
-		return m.setConfirmedByIDsFn(ctx, ids, confirmed, userRACF)
+func (m *mockGuestRepo) SetAttendingByIDs(ctx context.Context, ids []int64, attending bool, userRACF string) ([]guest.Guest, error) {
+	if m.setAttendingByIDsFn != nil {
+		return m.setAttendingByIDsFn(ctx, ids, attending, userRACF)
 	}
 	return []guest.Guest{}, nil
 }
@@ -735,6 +727,75 @@ func TestServiceCreateGuestUserTx(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 	})
+}
+
+func TestServiceFindByURACF(t *testing.T) {
+	tests := []struct {
+		name        string
+		uracf       string
+		repoUser    *User
+		repoErr     error
+		wantID      int64
+		wantURACF   string
+		wantRole    string
+		wantErr     bool
+		wantErrCode int
+		wantErrMsg  string
+	}{
+		{
+			name:      "found user returns id uracf role",
+			uracf:     "USR01",
+			repoUser:  &User{ID: 42, URACF: "USR01", Role: "groom"},
+			wantID:    42,
+			wantURACF: "USR01",
+			wantRole:  "groom",
+		},
+		{
+			name:        "not found returns NotFound error",
+			uracf:       "XXXXX",
+			repoUser:    nil,
+			wantErr:     true,
+			wantErrCode: http.StatusNotFound,
+			wantErrMsg:  "no user found with this URACF",
+		},
+		{
+			name:        "repo error is propagated",
+			uracf:       "USR01",
+			repoErr:     errors.New("db failure"),
+			wantErr:     true,
+			wantErrCode: http.StatusInternalServerError,
+			wantErrMsg:  "failed to find user",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userRepo := &mockUserRepo{
+				getByURACF: func(ctx context.Context, uracf string) (*User, error) {
+					return tt.repoUser, tt.repoErr
+				},
+			}
+
+			svc := NewService(userRepo, &mockGuestRepo{})
+			id, uracf, role, err := svc.FindByURACF(context.Background(), tt.uracf)
+			if tt.wantErr {
+				assertAppError(t, err, tt.wantErrCode, tt.wantErrMsg)
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if id != tt.wantID {
+				t.Fatalf("expected id %d, got %d", tt.wantID, id)
+			}
+			if uracf != tt.wantURACF {
+				t.Fatalf("expected uracf %q, got %q", tt.wantURACF, uracf)
+			}
+			if role != tt.wantRole {
+				t.Fatalf("expected role %q, got %q", tt.wantRole, role)
+			}
+		})
+	}
 }
 
 func TestGenerateURACF(t *testing.T) {

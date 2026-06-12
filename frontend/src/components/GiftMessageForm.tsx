@@ -102,8 +102,11 @@ export function GiftMessageForm({
     formData.set("content", values.content.trim());
     if (file) formData.set("media", file);
 
-    const created = await mutation.mutateAsync(formData);
-    onCreated?.(created);
+    try {
+      const created = await mutation.mutateAsync(formData);
+      onCreated?.(created);
+    } catch {
+    }
   }
 
   const contentValue = watch("content") ?? "";

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ferjunior7/parasempre/backend/internal/apperror"
@@ -26,11 +27,26 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
 
 	active := statusActive
-	result, err := h.svc.List(r.Context(), page, limit, &active)
+	filter := ListFilter{Status: &active}
+	if s := strings.TrimSpace(q.Get("search")); s != "" {
+		filter.Search = &s
+	}
+	if v, err := strconv.ParseInt(q.Get("price_min"), 10, 64); err == nil {
+		filter.PriceMin = &v
+	}
+	if v, err := strconv.ParseInt(q.Get("price_max"), 10, 64); err == nil {
+		filter.PriceMax = &v
+	}
+	if s := q.Get("sort"); s != "" {
+		filter.Sort = &s
+	}
+
+	result, err := h.svc.List(r.Context(), page, limit, filter)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to list gifts", err))
 		return

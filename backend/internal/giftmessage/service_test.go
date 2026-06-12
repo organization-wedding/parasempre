@@ -18,12 +18,12 @@ import (
 // --- mocks ---
 
 type mockRepo struct {
-	createFn       func(ctx context.Context, in CreateRow) (*GiftMessage, error)
-	getByIDFn     func(ctx context.Context, id int64) (*GiftMessage, error)
-	getByTxIDFn   func(ctx context.Context, txID int64) (*GiftMessage, error)
-	listByGiftFn  func(ctx context.Context, giftID int64, limit, offset int) ([]GiftMessage, int, error)
-	listAllFn     func(ctx context.Context, limit, offset int) ([]GiftMessage, int, error)
-	softDeleteFn  func(ctx context.Context, id, byUserID int64) error
+	createFn     func(ctx context.Context, in CreateRow) (*GiftMessage, error)
+	getByIDFn    func(ctx context.Context, id int64) (*GiftMessage, error)
+	getByTxIDFn  func(ctx context.Context, txID int64) (*GiftMessage, error)
+	listByGiftFn func(ctx context.Context, giftID int64, limit, offset int) ([]GiftMessage, int, error)
+	listAllFn    func(ctx context.Context, limit, offset int) ([]GiftMessage, int, error)
+	softDeleteFn func(ctx context.Context, id, byUserID int64) error
 }
 
 func (m *mockRepo) Create(ctx context.Context, in CreateRow) (*GiftMessage, error) {
@@ -58,9 +58,9 @@ func (m *mockTxFinder) GetByID(ctx context.Context, id int64) (*TransactionSnaps
 }
 
 type mockStorage struct {
-	uploadFn   func(ctx context.Context, key, mime string, r io.Reader, size int64) error
-	signFn     func(ctx context.Context, keys []string, ttl time.Duration) (map[string]string, error)
-	deleteFn   func(ctx context.Context, key string) error
+	uploadFn    func(ctx context.Context, key, mime string, r io.Reader, size int64) error
+	signFn      func(ctx context.Context, keys []string, ttl time.Duration) (map[string]string, error)
+	deleteFn    func(ctx context.Context, key string) error
 	deleteCalls int
 }
 
@@ -281,11 +281,11 @@ func TestCreate_RejectsUnsupportedMime(t *testing.T) {
 	svc := NewService(&mockRepo{}, &mockTxFinder{
 		getFn: func(_ context.Context, _ int64) (*TransactionSnapshot, error) { return approvedTx(), nil },
 	}, storage, &mockAudit{}, time.Minute)
-	textBody := "this is plain text content not a real media file blah blah"
+	pdfBody := []byte("%PDF-1.4 fake pdf content here")
 	media := &Media{
-		DeclaredMime: "image/jpeg", // mente
-		Size:         int64(len(textBody)),
-		Reader:       strings.NewReader(textBody),
+		DeclaredMime: "application/pdf",
+		Size:         int64(len(pdfBody)),
+		Reader:       bytes.NewReader(pdfBody),
 	}
 	_, err := svc.Create(context.Background(), 100, 42, validInput(), media)
 	assertAppError(t, err, http.StatusBadRequest, "tipo de mídia")
@@ -306,6 +306,79 @@ func TestCreate_DeletesObjectIfRepoCreateFails(t *testing.T) {
 	if storage.deleteCalls != 1 {
 		t.Errorf("expected storage.Delete to be called once for orphan cleanup, got %d", storage.deleteCalls)
 	}
+}
+
+func mp3NoID3Media(size int64) *Media {
+	hdr := []byte{0xFF, 0xFB, 0x90, 0x00}
+	body := make([]byte, size-int64(len(hdr)))
+	return &Media{
+		DeclaredMime: "audio/mpeg",
+		Size:         size,
+		Reader:       io.MultiReader(bytes.NewReader(hdr), bytes.NewReader(body)),
+	}
+}
+
+func TestCreate_HappyPath_MP3NoID3_AcceptedAsAudio(t *testing.T) {
+	var insertedRow CreateRow
+	repo := &mockRepo{
+		createFn: func(_ context.Context, in CreateRow) (*GiftMessage, error) {
+			insertedRow = in
+			return &GiftMessage{
+				ID: 1, GiftTransactionID: in.GiftTransactionID, GiftID: in.GiftID,
+				UserID: in.UserID, AuthorName: in.AuthorName, Content: in.Content,
+				MediaObjectKey: in.MediaObjectKey, MediaKind: in.MediaKind,
+				MediaSizeBytes: in.MediaSizeBytes, MediaMimeType: in.MediaMimeType,
+				CreatedAt: time.Now(), UpdatedAt: time.Now(),
+			}, nil
+		},
+	}
+	storage := &mockStorage{}
+	svc := NewService(repo, &mockTxFinder{
+		getFn: func(_ context.Context, _ int64) (*TransactionSnapshot, error) { return approvedTx(), nil },
+	}, storage, &mockAudit{}, time.Minute)
+
+	msg, err := svc.Create(context.Background(), 100, 42, validInput(), mp3NoID3Media(1024))
+	if err != nil {
+		t.Fatalf("mp3 without ID3 should be accepted, got error: %v", err)
+	}
+	if msg.MediaKind == nil || *msg.MediaKind != MediaKindAudio {
+		t.Errorf("expected media_kind=audio, got %v", msg.MediaKind)
+	}
+	if insertedRow.MediaMimeType == nil || *insertedRow.MediaMimeType != "audio/mpeg" {
+		t.Errorf("expected MediaMimeType=audio/mpeg, got %v", insertedRow.MediaMimeType)
+	}
+}
+
+func TestCreate_Rejects_DeclaredAudioMpeg_BytesAreHTML(t *testing.T) {
+	htmlBody := []byte("<html><body>Not a real audio file</body></html>")
+	media := &Media{
+		DeclaredMime: "audio/mpeg",
+		Size:         int64(len(htmlBody)),
+		Reader:       bytes.NewReader(htmlBody),
+	}
+	storage := &mockStorage{}
+	svc := NewService(&mockRepo{}, &mockTxFinder{
+		getFn: func(_ context.Context, _ int64) (*TransactionSnapshot, error) { return approvedTx(), nil },
+	}, storage, &mockAudit{}, time.Minute)
+
+	_, err := svc.Create(context.Background(), 100, 42, validInput(), media)
+	assertAppError(t, err, http.StatusBadRequest, "tipo de mídia")
+}
+
+func TestCreate_Rejects_PDF(t *testing.T) {
+	pdfBody := []byte("%PDF-1.4 content")
+	media := &Media{
+		DeclaredMime: "application/pdf",
+		Size:         int64(len(pdfBody)),
+		Reader:       bytes.NewReader(pdfBody),
+	}
+	storage := &mockStorage{}
+	svc := NewService(&mockRepo{}, &mockTxFinder{
+		getFn: func(_ context.Context, _ int64) (*TransactionSnapshot, error) { return approvedTx(), nil },
+	}, storage, &mockAudit{}, time.Minute)
+
+	_, err := svc.Create(context.Background(), 100, 42, validInput(), media)
+	assertAppError(t, err, http.StatusBadRequest, "tipo de mídia")
 }
 
 func TestCreate_RejectsUploadFailure(t *testing.T) {
@@ -330,6 +403,29 @@ func TestCreate_RejectsUploadFailure(t *testing.T) {
 	}
 	if createCalled {
 		t.Error("expected repo.Create NOT to be called when upload fails")
+	}
+}
+
+func TestCreate_StorageUploadFails_Returns503WithFriendlyMessage(t *testing.T) {
+	const rawSupabaseErr = "supabase storage: upload status 404: {\"error\":\"Bucket not found\"}"
+	storage := &mockStorage{
+		uploadFn: func(_ context.Context, _, _ string, _ io.Reader, _ int64) error {
+			return errors.New(rawSupabaseErr)
+		},
+	}
+	svc := NewService(&mockRepo{}, &mockTxFinder{
+		getFn: func(_ context.Context, _ int64) (*TransactionSnapshot, error) { return approvedTx(), nil },
+	}, storage, &mockAudit{}, time.Minute)
+
+	_, err := svc.Create(context.Background(), 100, 42, validInput(), jpegMedia(2048))
+
+	assertAppError(t, err, http.StatusServiceUnavailable, "Não foi possível enviar sua mídia")
+	ae, _ := apperror.IsAppError(err)
+	if strings.Contains(ae.Message, "Bucket not found") {
+		t.Errorf("raw storage error must not leak into the response, got: %q", ae.Message)
+	}
+	if strings.Contains(ae.Message, "supabase") {
+		t.Errorf("supabase detail must not leak into the response, got: %q", ae.Message)
 	}
 }
 

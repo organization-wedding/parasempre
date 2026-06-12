@@ -58,9 +58,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	}
 
 	guests := newGroup(mux, authMW)
-	guests.handle("GET /api/guests", d.guest.HandleList)
 	guests.handle("GET /api/guests/my-family", d.guest.HandleListMyFamily)
-	guests.handle("GET /api/guests/{id}", d.guest.HandleGet)
 	guests.handle("PATCH /api/guests/{id}/confirm", d.guest.HandleConfirm)
 	guests.handle("PATCH /api/guests/{id}/cancel", d.guest.HandleCancel)
 	guests.handle("PATCH /api/guests/phone/{phone}/confirm", d.guest.HandleConfirmByPhone)
@@ -72,6 +70,10 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	guests.handle("PATCH /api/guests/family/phone/{phone}/cancel", d.guest.HandleCancelFamilyByPhone)
 
 	guestsAdmin := newGroup(mux, authMW, coupleMW)
+	// The guest list is the wedding's shared roster, managed only by the couple.
+	// created_by used to scope these implicitly; gate them on role explicitly.
+	guestsAdmin.handle("GET /api/guests", d.guest.HandleList)
+	guestsAdmin.handle("GET /api/guests/{id}", d.guest.HandleGet)
 	guestsAdmin.handle("POST /api/guests", d.guest.HandleCreate)
 	guestsAdmin.handle("PUT /api/guests/{id}", d.guest.HandleUpdate)
 	guestsAdmin.handle("DELETE /api/guests/{id}", d.guest.HandleDelete)

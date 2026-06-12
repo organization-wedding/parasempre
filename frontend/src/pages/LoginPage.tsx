@@ -4,11 +4,10 @@ import Phone from "lucide-react/dist/esm/icons/phone";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
 import Loader from "lucide-react/dist/esm/icons/loader-circle";
-import { isAuthenticated, setAuth } from "../lib/auth";
+import { setAuth } from "../lib/auth";
 import { useSendOtpMutation, useVerifyOtpMutation } from "../lib/auth-queries";
-import { devLogin, OtpApiError, OtpRateLimitError } from "../lib/api";
+import { OtpApiError, OtpRateLimitError } from "../lib/api";
 import { Toast } from "../components/Toast";
-import { IS_DEV } from "../config";
 
 function titleForStatus(status: number): string {
   if (status === 400) return "Dados inválidos";
@@ -83,10 +82,8 @@ export function LoginPage() {
   const [code, setCode] = useState("");
   const [toast, setToast] = useState<{ id: number; title: string; message: string } | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [autoLoginPending, setAutoLoginPending] = useState(IS_DEV);
 
   const codeInputRef = useRef<HTMLInputElement>(null);
-  const autoLoginAttemptedRef = useRef(false);
   const sendOtp = useSendOtpMutation();
   const verifyOtp = useVerifyOtpMutation();
 
@@ -101,31 +98,6 @@ export function LoginPage() {
     }
     showToast("Erro", err instanceof Error ? err.message : fallback);
   }
-
-  // Auto-login em dev/teste: bypass do OTP via /api/auth/dev-login.
-  // Dispara em localhost e ambiente de teste — produção segue fluxo normal.
-  useEffect(() => {
-    if (!IS_DEV) return;
-    if (autoLoginAttemptedRef.current) return;
-    autoLoginAttemptedRef.current = true;
-
-    if (isAuthenticated()) {
-      const target = redirectTo.startsWith("/") ? redirectTo : "/admin";
-      void navigate({ to: target });
-      return;
-    }
-
-    devLogin()
-      .then((res) => {
-        setAuth(res.token, res.role, res.uracf);
-        const target = redirectTo.startsWith("/") ? redirectTo : "/admin";
-        void navigate({ to: target });
-      })
-      .catch((err) => {
-        console.warn("dev-login indisponível, fluxo OTP normal:", err);
-        setAutoLoginPending(false);
-      });
-  }, [navigate, redirectTo]);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -195,14 +167,6 @@ export function LoginPage() {
   }
 
   const isLoading = sendOtp.isPending || verifyOtp.isPending;
-
-  if (autoLoginPending) {
-    return (
-      <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-dark p-6">
-        <Loader size={32} className="animate-spin text-gold" />
-      </div>
-    );
-  }
 
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-dark p-6">

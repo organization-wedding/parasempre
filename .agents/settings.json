@@ -1,0 +1,55 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go *)",
+      "Bash(make *)",
+      "Bash(gofmt *)",
+      "Bash(bun *)",
+      "Bash(bunx *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(curl *)",
+      "Bash(echo *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(sort *)",
+      "Bash(diff *)",
+      "Bash(jq *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Edit",
+      "Write",
+      "Read",
+      "Glob",
+      "Grep",
+      "Agent",
+      "TodoWrite",
+      "Skill",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "mcp__context7__*",
+      "mcp__chrome-devtools__*"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read -r FILE; case \"$FILE\" in *.env|*.env.*|*credentials*|*secret*|*/go.sum|go.sum|*bun.lock|*bun.lockb) echo \"BLOCKED: arquivo sensível não pode ser editado por IA: $FILE\" >&2; exit 2;; esac; }"
+          }
+        ]
+      }
+    ]
+  }
+}

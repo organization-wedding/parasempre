@@ -43,7 +43,7 @@ func withTestClaims(req *http.Request, uracf string) *http.Request {
 
 func TestHandlerListGuests(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 		return []Guest{sampleGuest()}, 1, nil
 	}
 
@@ -70,7 +70,7 @@ func TestHandlerListGuests(t *testing.T) {
 
 func TestHandlerListGuestsError(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 		return nil, 0, errors.New("db error")
 	}
 
@@ -86,7 +86,7 @@ func TestHandlerListGuestsError(t *testing.T) {
 
 func TestHandlerGetGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		g := sampleGuest()
 		return &g, nil
 	}
@@ -106,7 +106,7 @@ func TestHandlerGetGuest(t *testing.T) {
 
 func TestHandlerGetGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
@@ -211,7 +211,7 @@ func TestHandlerUpdateGuest(t *testing.T) {
 		return &g, nil
 	}
 
-	body := `{"confirmed":true}`
+	body := `{"attending":true}`
 	mux := http.NewServeMux()
 	registerTestRoutes(mux, h)
 
@@ -264,13 +264,13 @@ func TestHandlerDeleteGuestNotFound(t *testing.T) {
 
 func TestHandlerConfirmGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		g := sampleGuest()
 		return &g, nil
 	}
-	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+	repo.setAttendingFn = func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
 		g := sampleGuest()
-		g.Confirmed = true
+		g.Attending = boolPtr(true)
 		return &g, nil
 	}
 
@@ -290,14 +290,14 @@ func TestHandlerConfirmGuest(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&guest); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
-	if !guest.Confirmed {
-		t.Fatal("expected confirmed to be true")
+	if guest.Attending == nil || !*guest.Attending {
+		t.Fatal("expected attending to be true")
 	}
 }
 
 func TestHandlerConfirmGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
@@ -316,14 +316,14 @@ func TestHandlerConfirmGuestNotFound(t *testing.T) {
 
 func TestHandlerCancelGuest(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		g := sampleGuest()
-		g.Confirmed = true
+		g.Attending = boolPtr(true)
 		return &g, nil
 	}
-	repo.setConfirmedFn = func(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+	repo.setAttendingFn = func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
 		g := sampleGuest()
-		g.Confirmed = false
+		g.Attending = boolPtr(false)
 		return &g, nil
 	}
 
@@ -342,7 +342,7 @@ func TestHandlerCancelGuest(t *testing.T) {
 
 func TestHandlerCancelGuestNotFound(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.getByID = func(ctx context.Context, id int64, userRACF string) (*Guest, error) {
+	repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
 		return nil, apperror.NotFound("guest not found")
 	}
 
@@ -461,6 +461,160 @@ func TestHandlerImportCSVPartialSuccess(t *testing.T) {
 	}
 	if resp.SuccessCount != 1 || resp.ErrorCount != 1 {
 		t.Fatalf("expected 1 success + 1 error, got %+v", resp)
+	}
+}
+
+func TestHandlerPhonePathValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		phone      string
+		wantStatus int
+		callsSvc   bool
+	}{
+		{"valid phone", "11999990000", http.StatusOK, true},
+		{"letters only", "abc", http.StatusBadRequest, false},
+		{"too short", "123", http.StatusBadRequest, false},
+		{"too long", "119999900001", http.StatusBadRequest, false},
+		{"missing ninth digit", "11899990000", http.StatusBadRequest, false},
+		{"empty", "", http.StatusTemporaryRedirect, false},
+	}
+
+	for _, tc := range tests {
+		t.Run("confirm_by_phone/"+tc.name, func(t *testing.T) {
+			h, repo := newTestHandler()
+			svcCalled := false
+			guestID := int64(1)
+			repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			}
+			repo.setAttendingFn = func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
+				svcCalled = true
+				g := sampleGuest()
+				g.Attending = boolPtr(true)
+				return &g, nil
+			}
+			h.svc.users.(*mockUserBridge).getGuestIDByPhoneFn = func(ctx context.Context, phone string) (*int64, error) {
+				return &guestID, nil
+			}
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("PATCH /api/guests/phone/{phone}/confirm", h.HandleConfirmByPhone)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/guests/phone/"+tc.phone+"/confirm", nil)
+			req = withTestClaims(req, "TST01")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tc.wantStatus, w.Code, w.Body.String())
+			}
+			if !tc.callsSvc && svcCalled {
+				t.Fatal("service should not have been called for invalid phone")
+			}
+		})
+
+		t.Run("cancel_by_phone/"+tc.name, func(t *testing.T) {
+			h, repo := newTestHandler()
+			svcCalled := false
+			guestID := int64(1)
+			repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			}
+			repo.setAttendingFn = func(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
+				svcCalled = true
+				g := sampleGuest()
+				g.Attending = boolPtr(false)
+				return &g, nil
+			}
+			h.svc.users.(*mockUserBridge).getGuestIDByPhoneFn = func(ctx context.Context, phone string) (*int64, error) {
+				return &guestID, nil
+			}
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("PATCH /api/guests/phone/{phone}/cancel", h.HandleCancelByPhone)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/guests/phone/"+tc.phone+"/cancel", nil)
+			req = withTestClaims(req, "TST01")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tc.wantStatus, w.Code, w.Body.String())
+			}
+			if !tc.callsSvc && svcCalled {
+				t.Fatal("service should not have been called for invalid phone")
+			}
+		})
+
+		t.Run("confirm_family_by_phone/"+tc.name, func(t *testing.T) {
+			h, repo := newTestHandler()
+			svcCalled := false
+			repo.getFamilyGroupByPhoneFn = func(ctx context.Context, phone string) (*int64, error) {
+				svcCalled = true
+				fg := int64(1)
+				return &fg, nil
+			}
+			repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			}
+			repo.setAttendingByFamilyGroupFn = func(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]Guest, error) {
+				g := sampleGuest()
+				g.Attending = boolPtr(true)
+				return []Guest{g}, nil
+			}
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("PATCH /api/guests/family/phone/{phone}/confirm", h.HandleConfirmFamilyByPhone)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/guests/family/phone/"+tc.phone+"/confirm", nil)
+			req = withTestClaims(req, "TST01")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tc.wantStatus, w.Code, w.Body.String())
+			}
+			if !tc.callsSvc && svcCalled {
+				t.Fatal("service should not have been called for invalid phone")
+			}
+		})
+
+		t.Run("cancel_family_by_phone/"+tc.name, func(t *testing.T) {
+			h, repo := newTestHandler()
+			svcCalled := false
+			repo.getFamilyGroupByPhoneFn = func(ctx context.Context, phone string) (*int64, error) {
+				svcCalled = true
+				fg := int64(1)
+				return &fg, nil
+			}
+			repo.getByIDAnyFn = func(ctx context.Context, id int64) (*Guest, error) {
+				g := sampleGuest()
+				return &g, nil
+			}
+			repo.setAttendingByFamilyGroupFn = func(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]Guest, error) {
+				g := sampleGuest()
+				g.Attending = boolPtr(false)
+				return []Guest{g}, nil
+			}
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("PATCH /api/guests/family/phone/{phone}/cancel", h.HandleCancelFamilyByPhone)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/guests/family/phone/"+tc.phone+"/cancel", nil)
+			req = withTestClaims(req, "TST01")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tc.wantStatus, w.Code, w.Body.String())
+			}
+			if !tc.callsSvc && svcCalled {
+				t.Fatal("service should not have been called for invalid phone")
+			}
+		})
 	}
 }
 

@@ -15,11 +15,11 @@ import (
 	"github.com/ferjunior7/parasempre/backend/internal/database"
 )
 
-const guestColumns = `id, first_name, last_name, relationship, confirmed, family_group, created_by, updated_by, created_at, updated_at`
+const guestColumns = `id, first_name, last_name, relationship, attending, family_group, created_by, updated_by, created_at, updated_at`
 
 func scanGuest(row pgx.Row) (Guest, error) {
 	var g Guest
-	err := row.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
+	err := row.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Attending, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt)
 	return g, err
 }
 
@@ -35,11 +35,14 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 	return &PostgresRepository{db: tx}
 }
 
-func (r *PostgresRepository) List(ctx context.Context, limit, offset int, userRACF string) ([]Guest, int, error) {
+// List returns the wedding's shared guest list. Guests belong to the wedding
+// (co-administered by groom and bride), not to whoever created the row, so the
+// listing is intentionally NOT scoped by created_by.
+func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+guestColumns+`, COUNT(*) OVER() AS total
-		 FROM guests WHERE created_by = $1 ORDER BY created_at DESC
-		 LIMIT $2 OFFSET $3`, userRACF, limit, offset)
+		 FROM guests ORDER BY created_at DESC
+		 LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		slog.Error("guest.repo list: query failed", "error", err)
 		return nil, 0, err
@@ -50,7 +53,7 @@ func (r *PostgresRepository) List(ctx context.Context, limit, offset int, userRA
 	var total int
 	for rows.Next() {
 		var g Guest
-		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt, &total); err != nil {
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Attending, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt, &total); err != nil {
 			slog.Error("guest.repo list: scan failed", "error", err)
 			return nil, 0, err
 		}
@@ -62,19 +65,6 @@ func (r *PostgresRepository) List(ctx context.Context, limit, offset int, userRA
 	}
 
 	return guests, total, rows.Err()
-}
-
-func (r *PostgresRepository) GetByID(ctx context.Context, id int64, userRACF string) (*Guest, error) {
-	g, err := scanGuest(r.db.QueryRow(ctx,
-		`SELECT `+guestColumns+` FROM guests WHERE id = $1 AND created_by = $2`, id, userRACF))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, apperror.NotFound("guest not found")
-		}
-		slog.Error("guest.repo get_by_id: query failed", "id", id, "error", err)
-		return nil, err
-	}
-	return &g, nil
 }
 
 func (r *PostgresRepository) GetByIDAny(ctx context.Context, id int64) (*Guest, error) {
@@ -102,7 +92,7 @@ func (r *PostgresRepository) ListByFamilyGroup(ctx context.Context, familyGroup 
 	guests := []Guest{}
 	for rows.Next() {
 		var g Guest
-		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Attending, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			slog.Error("guest.repo list_by_family_group: scan failed", "error", err)
 			return nil, err
 		}
@@ -126,7 +116,7 @@ func (r *PostgresRepository) GetByIDs(ctx context.Context, ids []int64) ([]Guest
 	guests := []Guest{}
 	for rows.Next() {
 		var g Guest
-		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Attending, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			slog.Error("guest.repo get_by_ids: scan failed", "error", err)
 			return nil, err
 		}
@@ -196,13 +186,13 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 			first_name = COALESCE($1, first_name),
 			last_name = COALESCE($2, last_name),
 			relationship = COALESCE($3, relationship),
-			confirmed = COALESCE($4, confirmed),
+			attending = COALESCE($4, attending),
 			family_group = COALESCE($5, family_group),
 			updated_by = $6,
 			updated_at = now()
 		 WHERE id = $7
 		 RETURNING `+guestColumns,
-		input.FirstName, input.LastName, input.Relationship, input.Confirmed, input.FamilyGroup, userRACF, id))
+		input.FirstName, input.LastName, input.Relationship, input.Attending, input.FamilyGroup, userRACF, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")
@@ -214,34 +204,34 @@ func (r *PostgresRepository) Update(ctx context.Context, id int64, input UpdateG
 	return &g, nil
 }
 
-func (r *PostgresRepository) SetConfirmed(ctx context.Context, id int64, confirmed bool, userRACF string) (*Guest, error) {
+func (r *PostgresRepository) SetAttending(ctx context.Context, id int64, attending bool, userRACF string) (*Guest, error) {
 	g, err := scanGuest(r.db.QueryRow(ctx,
-		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
+		`UPDATE guests SET attending = $1, updated_by = $2, updated_at = now()
 		 WHERE id = $3
 		 RETURNING `+guestColumns,
-		confirmed, userRACF, id))
+		attending, userRACF, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("guest not found")
 		}
-		slog.Error("guest.repo set_confirmed: update failed", "id", id, "error", err)
+		slog.Error("guest.repo set_attending: update failed", "id", id, "error", err)
 		return nil, err
 	}
-	slog.Info("guest.repo set_confirmed: guest updated", "id", g.ID, "confirmed", confirmed)
+	slog.Info("guest.repo set_attending: guest updated", "id", g.ID, "attending", attending)
 	return &g, nil
 }
 
-func (r *PostgresRepository) SetConfirmedByIDs(ctx context.Context, ids []int64, confirmed bool, userRACF string) ([]Guest, error) {
+func (r *PostgresRepository) SetAttendingByIDs(ctx context.Context, ids []int64, attending bool, userRACF string) ([]Guest, error) {
 	if len(ids) == 0 {
 		return []Guest{}, nil
 	}
 	rows, err := r.db.Query(ctx,
-		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
+		`UPDATE guests SET attending = $1, updated_by = $2, updated_at = now()
 		 WHERE id = ANY($3::bigint[])
 		 RETURNING `+guestColumns,
-		confirmed, userRACF, ids)
+		attending, userRACF, ids)
 	if err != nil {
-		slog.Error("guest.repo set_confirmed_by_ids: update failed", "ids", ids, "error", err)
+		slog.Error("guest.repo set_attending_by_ids: update failed", "ids", ids, "error", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -249,24 +239,24 @@ func (r *PostgresRepository) SetConfirmedByIDs(ctx context.Context, ids []int64,
 	guests := []Guest{}
 	for rows.Next() {
 		var g Guest
-		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
-			slog.Error("guest.repo set_confirmed_by_ids: scan failed", "error", err)
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Attending, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			slog.Error("guest.repo set_attending_by_ids: scan failed", "error", err)
 			return nil, err
 		}
 		guests = append(guests, g)
 	}
-	slog.Info("guest.repo set_confirmed_by_ids: guests updated", "ids", ids, "confirmed", confirmed, "count", len(guests))
+	slog.Info("guest.repo set_attending_by_ids: guests updated", "ids", ids, "attending", attending, "count", len(guests))
 	return guests, rows.Err()
 }
 
-func (r *PostgresRepository) SetConfirmedByFamilyGroup(ctx context.Context, familyGroup int64, confirmed bool, userRACF string) ([]Guest, error) {
+func (r *PostgresRepository) SetAttendingByFamilyGroup(ctx context.Context, familyGroup int64, attending bool, userRACF string) ([]Guest, error) {
 	rows, err := r.db.Query(ctx,
-		`UPDATE guests SET confirmed = $1, updated_by = $2, updated_at = now()
+		`UPDATE guests SET attending = $1, updated_by = $2, updated_at = now()
 		 WHERE family_group = $3
 		 RETURNING `+guestColumns,
-		confirmed, userRACF, familyGroup)
+		attending, userRACF, familyGroup)
 	if err != nil {
-		slog.Error("guest.repo set_confirmed_by_family_group: update failed", "family_group", familyGroup, "error", err)
+		slog.Error("guest.repo set_attending_by_family_group: update failed", "family_group", familyGroup, "error", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -274,8 +264,8 @@ func (r *PostgresRepository) SetConfirmedByFamilyGroup(ctx context.Context, fami
 	var guests []Guest
 	for rows.Next() {
 		var g Guest
-		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Confirmed, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
-			slog.Error("guest.repo set_confirmed_by_family_group: scan failed", "error", err)
+		if err := rows.Scan(&g.ID, &g.FirstName, &g.LastName, &g.Relationship, &g.Attending, &g.FamilyGroup, &g.CreatedBy, &g.UpdatedBy, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			slog.Error("guest.repo set_attending_by_family_group: scan failed", "error", err)
 			return nil, err
 		}
 		guests = append(guests, g)
@@ -285,7 +275,7 @@ func (r *PostgresRepository) SetConfirmedByFamilyGroup(ctx context.Context, fami
 		guests = []Guest{}
 	}
 
-	slog.Info("guest.repo set_confirmed_by_family_group: guests updated", "family_group", familyGroup, "confirmed", confirmed, "count", len(guests))
+	slog.Info("guest.repo set_attending_by_family_group: guests updated", "family_group", familyGroup, "attending", attending, "count", len(guests))
 	return guests, rows.Err()
 }
 
