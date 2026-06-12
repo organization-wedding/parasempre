@@ -108,9 +108,9 @@ func (s *Service) Create(ctx context.Context, txID, requesterUserID int64, in Cr
 			return nil, apperror.ServiceUnavailable("Mensagens com mídia indisponíveis neste ambiente.")
 		}
 
-		mime, peeked, err := SniffMIME(media.Reader)
+		mime, peeked, err := resolveMediaMIME(media.DeclaredMime, media.Reader)
 		if err != nil {
-			return nil, apperror.WrapIfNotApp("falha ao processar mídia", err)
+			return nil, err
 		}
 		spec, err := ValidateMedia(mime, media.Size)
 		if err != nil {
@@ -122,7 +122,9 @@ func (s *Service) Create(ctx context.Context, txID, requesterUserID int64, in Cr
 			return nil, apperror.Internal("falha ao gerar chave de mídia", err)
 		}
 		if err := s.storage.Upload(ctx, key, mime, peeked, media.Size); err != nil {
-			return nil, apperror.WrapIfNotApp("falha ao enviar mídia", err)
+			slog.Error("giftmessage.service create: storage upload failed",
+				"key", key, "error", err)
+			return nil, apperror.ServiceUnavailable("Não foi possível enviar sua mídia agora. Tente novamente.")
 		}
 
 		uploadedKey = key

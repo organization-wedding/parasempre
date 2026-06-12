@@ -7,7 +7,7 @@ export const guestSchema = z.object({
   first_name: z.string(),
   last_name: z.string(),
   relationship: relationshipSchema,
-  confirmed: z.boolean(),
+  attending: z.boolean().nullable(),
   family_group: z.number().int(),
   created_by: z.string(),
   updated_by: z.string(),
@@ -30,7 +30,7 @@ export const updateGuestInputSchema = z
     first_name: z.string().trim().min(1).optional(),
     last_name: z.string().trim().min(1).optional(),
     relationship: relationshipSchema.optional(),
-    confirmed: z.boolean().optional(),
+    attending: z.boolean().nullable().optional(),
     family_group: z.number().int().min(1).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
@@ -61,7 +61,7 @@ export const myFamilyResponseSchema = z.array(guestSchema);
 
 export const batchConfirmInputSchema = z.object({
   guest_ids: z.array(z.number().int().positive()).min(1),
-  confirmed: z.boolean(),
+  attending: z.boolean(),
 });
 
 export const meResponseSchema = z.object({

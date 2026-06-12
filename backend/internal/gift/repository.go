@@ -7,7 +7,7 @@ import (
 )
 
 type Repository interface {
-	List(ctx context.Context, limit, offset int, statusFilter *string) ([]Gift, int, error)
+	List(ctx context.Context, filter ListFilter, limit, offset int) ([]Gift, int, error)
 	GetByID(ctx context.Context, id int64) (*Gift, error)
 	Create(ctx context.Context, input CreateGiftInput, dedupeKey, userRACF string) (*Gift, error)
 	Update(ctx context.Context, id int64, input UpdateGiftInput, dedupeKey *string, userRACF string) (*Gift, error)

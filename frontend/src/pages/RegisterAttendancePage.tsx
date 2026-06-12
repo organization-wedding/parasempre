@@ -61,13 +61,13 @@ export function RegisterAttendancePage() {
           if (familyGroup !== null && familyGroup !== undefined && action.ids.length === family.length) {
             await confirmAllMutation.mutateAsync(familyGroup);
           } else {
-            await batchMutation.mutateAsync({ guest_ids: action.ids, confirmed: true });
+            await batchMutation.mutateAsync({ guest_ids: action.ids, attending: true });
           }
         } else {
           if (familyGroup !== null && familyGroup !== undefined && action.ids.length === family.length) {
             await cancelAllMutation.mutateAsync(familyGroup);
           } else {
-            await batchMutation.mutateAsync({ guest_ids: action.ids, confirmed: false });
+            await batchMutation.mutateAsync({ guest_ids: action.ids, attending: false });
           }
         }
         return true;
@@ -88,9 +88,12 @@ export function RegisterAttendancePage() {
         void (async () => {
           const ok = await runMutation(action);
           if (ok) {
+            const isDecline = action.kind === "decline-selected";
             setToast({
-              title: "Presença registrada",
-              message: "Sua resposta foi salva no livro dos convidados.",
+              title: isDecline ? "Resposta registrada" : "Presença registrada",
+              message: isDecline
+                ? "Sua ausência foi registrada no livro dos convidados."
+                : "Sua resposta foi salva no livro dos convidados.",
               variant: "success",
             });
             setStage("done");
@@ -112,9 +115,12 @@ export function RegisterAttendancePage() {
       }
       const ok = await runMutation(action);
       if (ok) {
+        const isDecline = action.kind === "decline-selected";
         setToast({
-          title: "Presença registrada",
-          message: "Sua resposta foi salva no livro dos convidados.",
+          title: isDecline ? "Resposta registrada" : "Presença registrada",
+          message: isDecline
+            ? "Sua ausência foi registrada no livro dos convidados."
+            : "Sua resposta foi salva no livro dos convidados.",
           variant: "success",
         });
         setStage("closing-pages");

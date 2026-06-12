@@ -116,6 +116,18 @@ func (s *Service) CheckByPhone(ctx context.Context, phone string) (*CheckRespons
 	return &CheckResponse{Exists: false}, nil
 }
 
+func (s *Service) FindByURACF(ctx context.Context, uracf string) (int64, string, string, error) {
+	u, err := s.repo.GetByURACF(ctx, uracf)
+	if err != nil {
+		slog.Error("user.service find_by_uracf: lookup failed", "uracf", uracf, "error", err)
+		return 0, "", "", apperror.Internal("failed to find user", err)
+	}
+	if u == nil {
+		return 0, "", "", apperror.NotFound("no user found with this URACF")
+	}
+	return u.ID, u.URACF, u.Role, nil
+}
+
 func (s *Service) FindOrCreateByPhone(ctx context.Context, phone string) (int64, string, string, error) {
 	u, err := s.repo.GetByPhone(ctx, phone)
 	if err != nil {

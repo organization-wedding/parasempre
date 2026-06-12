@@ -7,7 +7,7 @@ type Guest struct {
 	FirstName    string    `json:"first_name"`
 	LastName     string    `json:"last_name"`
 	Relationship string    `json:"relationship"`
-	Confirmed    bool      `json:"confirmed"`
+	Attending    *bool     `json:"attending"`
 	FamilyGroup  int64     `json:"family_group"`
 	CreatedBy    string    `json:"created_by"`
 	UpdatedBy    string    `json:"updated_by"`
@@ -27,7 +27,7 @@ type UpdateGuestInput struct {
 	FirstName    *string `json:"first_name"`
 	LastName     *string `json:"last_name"`
 	Relationship *string `json:"relationship" validate:"omitempty,relationship"`
-	Confirmed    *bool   `json:"confirmed"`
+	Attending    *bool   `json:"attending"`
 	FamilyGroup  *int64  `json:"family_group"`
 }
 
@@ -52,5 +52,5 @@ type ImportResponse struct {
 
 type BatchConfirmInput struct {
 	GuestIDs  []int64 `json:"guest_ids" validate:"required,min=1,max=50,dive,gt=0"`
-	Confirmed bool    `json:"confirmed"`
+	Attending bool    `json:"attending"`
 }

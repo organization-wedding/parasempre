@@ -105,6 +105,40 @@ func TestChain(t *testing.T) {
 	}
 }
 
+func TestMaskPhonePath(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"/api/guests/phone/11999990000/confirm", "/api/guests/phone/<phone>/confirm"},
+		{"/api/guests/family/phone/11999990000/cancel", "/api/guests/family/phone/<phone>/cancel"},
+		{"/api/guests/phone/1199999000/confirm", "/api/guests/phone/<phone>/confirm"},
+		{"/api/guests/1/confirm", "/api/guests/1/confirm"},
+		{"/api/guests", "/api/guests"},
+		{"/api/guests/phone/abc/confirm", "/api/guests/phone/abc/confirm"},
+	}
+	for _, tc := range tests {
+		got := maskPhonePath(tc.input)
+		if got != tc.want {
+			t.Errorf("maskPhonePath(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestLoggerMasksPhoneInPath(t *testing.T) {
+	handler := Logger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/guests/phone/11999990000/confirm", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
 func TestStatusWriterDefaultStatus(t *testing.T) {
 	handler := Logger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))

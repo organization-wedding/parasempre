@@ -21,12 +21,22 @@ type SupabaseStorage struct {
 }
 
 func NewSupabaseStorage(baseURL, bucket, serviceKey string) *SupabaseStorage {
+	base := strings.TrimRight(baseURL, "/")
+	if trimmed := strings.TrimSuffix(base, "/rest/v1"); trimmed != base {
+		slog.Warn("supabase storage: removed /rest/v1 suffix from SUPABASE_URL — use the bare project URL (https://<ref>.supabase.co)")
+		base = strings.TrimRight(trimmed, "/")
+	}
 	return &SupabaseStorage{
-		baseURL:    strings.TrimRight(baseURL, "/"),
+		baseURL:    base,
 		bucket:     bucket,
 		serviceKey: serviceKey,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+func (s *SupabaseStorage) setAuthHeaders(req *http.Request) {
+	req.Header.Set("apikey", s.serviceKey)
+	req.Header.Set("Authorization", "Bearer "+s.serviceKey)
 }
 
 func (s *SupabaseStorage) Upload(ctx context.Context, key, mime string, r io.Reader, size int64) error {
@@ -35,7 +45,7 @@ func (s *SupabaseStorage) Upload(ctx context.Context, key, mime string, r io.Rea
 	if err != nil {
 		return fmt.Errorf("supabase storage: build upload request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.serviceKey)
+	s.setAuthHeaders(req)
 	req.Header.Set("Content-Type", mime)
 	req.Header.Set("x-upsert", "false")
 	if size > 0 {
@@ -70,7 +80,7 @@ func (s *SupabaseStorage) SignURLs(ctx context.Context, keys []string, ttl time.
 	if err != nil {
 		return nil, fmt.Errorf("supabase storage: build sign request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.serviceKey)
+	s.setAuthHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -107,7 +117,7 @@ func (s *SupabaseStorage) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return fmt.Errorf("supabase storage: build delete request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.serviceKey)
+	s.setAuthHeaders(req)
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("supabase storage: delete http error: %w", err)
@@ -116,6 +126,25 @@ func (s *SupabaseStorage) Delete(ctx context.Context, key string) error {
 	if resp.StatusCode >= 300 && resp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return fmt.Errorf("supabase storage: delete status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+func (s *SupabaseStorage) BucketExists(ctx context.Context) error {
+	endpoint := fmt.Sprintf("%s/storage/v1/bucket/%s", s.baseURL, s.bucket)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("supabase storage: build bucket check request: %w", err)
+	}
+	s.setAuthHeaders(req)
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("supabase storage: bucket check http error: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("supabase storage: bucket check status %d: %s", resp.StatusCode, string(body))
 	}
 	return nil
 }

@@ -14,7 +14,7 @@ export const MEDIA_LIMITS: Record<MediaKind, { bytes: number; mimes: readonly st
     mimes: ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/ogg"],
   },
   video: {
-    bytes: 25 * 1024 * 1024,
+    bytes: 50 * 1024 * 1024,
     mimes: ["video/mp4", "video/webm", "video/quicktime"],
   },
 };

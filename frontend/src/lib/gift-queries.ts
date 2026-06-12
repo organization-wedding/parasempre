@@ -12,12 +12,23 @@ import {
 } from "./api";
 import type { CreateGiftInput, UpdateGiftInput } from "../types/gift";
 
+export type GiftSort = "price_asc" | "price_desc";
+
+export type GiftListParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  price_min?: number;
+  price_max?: number;
+  sort?: GiftSort;
+};
+
 export const giftQueryKeys = {
-  all: (params?: { page?: number; limit?: number }) => ["gifts", params] as const,
+  all: (params?: GiftListParams) => ["gifts", params] as const,
   detail: (id: number) => ["gift", id] as const,
 };
 
-export function useGiftsQuery(params?: { page?: number; limit?: number }) {
+export function useGiftsQuery(params?: GiftListParams) {
   return useQuery({
     queryKey: giftQueryKeys.all(params),
     queryFn: () => listGifts(params),

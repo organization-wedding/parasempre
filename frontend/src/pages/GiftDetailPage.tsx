@@ -80,7 +80,7 @@ export function GiftDetailPage({ giftId }: Props) {
                     onError={(e) => {
                       e.currentTarget.style.display = "none";
                     }}
-                    className="relative w-full h-full object-cover"
+                    className="relative w-full h-full object-contain"
                   />
                 ) : null}
               </div>

@@ -4,12 +4,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"runtime/debug"
 	"time"
 
 	"github.com/ferjunior7/parasempre/backend/internal/apperror"
 	"github.com/ferjunior7/parasempre/backend/internal/httputil"
 )
+
+var phoneSegmentRegex = regexp.MustCompile(`\d{10,11}`)
+
+func maskPhonePath(path string) string {
+	return phoneSegmentRegex.ReplaceAllString(path, "<phone>")
+}
 
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -18,7 +25,7 @@ func Logger(next http.Handler) http.Handler {
 		next.ServeHTTP(sw, r)
 		slog.Info("request",
 			"method", r.Method,
-			"path", r.URL.Path,
+			"path", maskPhonePath(r.URL.Path),
 			"status", sw.status,
 			"duration", time.Since(start),
 		)
