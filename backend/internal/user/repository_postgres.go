@@ -158,10 +158,10 @@ func (r *PostgresRepository) Create(ctx context.Context, u *User) (*User, error)
 	return &created, nil
 }
 
-func (r *PostgresRepository) DeleteByGuestID(ctx context.Context, guestID int64) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM users WHERE guest_id = $1`, guestID)
+func (r *PostgresRepository) UnlinkGuestID(ctx context.Context, guestID int64) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET guest_id = NULL, updated_at = now() WHERE guest_id = $1`, guestID)
 	if err != nil {
-		slog.Error("user.repo delete_by_guest_id: delete failed", "guest_id", guestID, "error", err)
+		slog.Error("user.repo unlink_guest_id: update failed", "guest_id", guestID, "error", err)
 	}
 	return err
 }

@@ -100,7 +100,7 @@ func (m *mockUserRepo) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (m *mockUserRepo) DeleteByGuestID(ctx context.Context, guestID int64) error {
+func (m *mockUserRepo) UnlinkGuestID(ctx context.Context, guestID int64) error {
 	return nil
 }
 

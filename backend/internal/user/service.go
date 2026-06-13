@@ -225,11 +225,11 @@ func (s *Service) CreateGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int6
 
 func (s *Service) DeleteGuestUserTx(ctx context.Context, tx pgx.Tx, guestID int64) error {
 	txRepo := s.txRepo.WithTx(tx)
-	if err := txRepo.DeleteByGuestID(ctx, guestID); err != nil {
-		slog.Error("user.service delete_guest_user: delete failed", "guest_id", guestID, "error", err)
-		return apperror.Internal("failed to delete guest user", err)
+	if err := txRepo.UnlinkGuestID(ctx, guestID); err != nil {
+		slog.Error("user.service delete_guest_user: unlink failed", "guest_id", guestID, "error", err)
+		return apperror.Internal("failed to unlink guest user", err)
 	}
-	slog.Info("user.service delete_guest_user: user deleted", "guest_id", guestID)
+	slog.Info("user.service delete_guest_user: user unlinked", "guest_id", guestID)
 	return nil
 }
 
