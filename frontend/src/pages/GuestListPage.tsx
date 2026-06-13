@@ -129,6 +129,7 @@ export function GuestListPage() {
     if (!deleteTarget) return;
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
+      await refetch();
       setDeleteTarget(null);
     } catch (mutationError) {
       setUiError(mutationError instanceof Error ? mutationError.message : "Erro ao excluir convidado");
@@ -139,6 +140,7 @@ export function GuestListPage() {
   async function handleBulkDelete() {
     try {
       await deletesMutation.mutateAsync(Array.from(selectedIds));
+      await refetch();
       setSelectedIds(new Set());
       setBulkDeleteOpen(false);
     } catch (mutationError) {

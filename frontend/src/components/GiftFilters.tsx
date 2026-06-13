@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import ArrowUpDown from "lucide-react/dist/esm/icons/arrow-up-down";
+import Check from "lucide-react/dist/esm/icons/check";
 import Search from "lucide-react/dist/esm/icons/search";
 import X from "lucide-react/dist/esm/icons/x";
 import type { GiftSort } from "../lib/gift-queries";
@@ -22,6 +25,11 @@ const labelClass =
 const noSpinnerClass =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
+const sortOptions: Array<{ value: "" | GiftSort; label: string }> = [
+  { value: "", label: "Mais recentes" },
+  { value: "price_asc", label: "Menor preço" },
+  { value: "price_desc", label: "Maior preço" },
+];
 
 export function GiftFilters({
   search,
@@ -34,8 +42,22 @@ export function GiftFilters({
   onSortChange,
   onClear,
 }: Props) {
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
   const hasFilter =
     search !== "" || priceMin !== "" || priceMax !== "" || sort !== "";
+  const selectedSort = sortOptions.find((option) => option.value === sort) ?? sortOptions[0];
+
+  useEffect(() => {
+    function handler(event: MouseEvent) {
+      if (sortRef.current && !sortRef.current.contains(event.target as Node)) {
+        setSortOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   return (
     <div className="flex flex-wrap gap-3 items-end">
@@ -91,20 +113,59 @@ export function GiftFilters({
         />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label className={labelClass} htmlFor="gift-sort">
+      <div ref={sortRef} className="relative flex flex-col gap-1">
+        <span className={labelClass} id="gift-sort-label">
           Ordenar por
-        </label>
-        <select
-          id="gift-sort"
-          value={sort}
-          onChange={(e) => onSortChange(e.target.value as "" | GiftSort)}
-          className={fieldClass}
+        </span>
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={sortOpen}
+          aria-labelledby="gift-sort-label"
+          onClick={() => setSortOpen((open) => !open)}
+          className={`inline-flex min-w-[150px] items-center justify-between gap-2 font-heading text-[0.7rem] font-semibold tracking-[0.08em] uppercase py-2.5 px-4 border transition-all duration-200 cursor-pointer whitespace-nowrap ${
+            sortOpen || sort !== ""
+              ? "bg-burgundy text-gold-light border-burgundy"
+              : "bg-ivory text-dark-warm border-gold-muted/50 hover:border-burgundy hover:text-burgundy"
+          }`}
         >
-          <option value="">Mais recentes</option>
-          <option value="price_asc">Menor preço</option>
-          <option value="price_desc">Maior preço</option>
-        </select>
+          <span className="inline-flex items-center gap-2">
+            <ArrowUpDown size={14} />
+            {selectedSort.label}
+          </span>
+        </button>
+
+        {sortOpen && (
+          <div
+            role="listbox"
+            aria-labelledby="gift-sort-label"
+            className="absolute top-full right-0 mt-1 z-[60] bg-ivory border border-gold-muted/50 shadow-[0_8px_24px_rgba(28,20,16,0.12)] w-48 p-2"
+          >
+            {sortOptions.map((option) => {
+              const selected = sort === option.value;
+              return (
+                <button
+                  key={option.value || "recent"}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    onSortChange(option.value);
+                    setSortOpen(false);
+                  }}
+                  className={`w-full inline-flex items-center justify-between gap-2 font-heading text-[0.67rem] font-semibold tracking-[0.06em] uppercase py-2 px-3 border transition-all duration-150 cursor-pointer ${
+                    selected
+                      ? "bg-burgundy text-gold-light border-burgundy"
+                      : "bg-transparent text-dark-warm border-transparent hover:border-burgundy hover:text-burgundy"
+                  }`}
+                >
+                  {option.label}
+                  {selected && <Check size={12} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {hasFilter && (

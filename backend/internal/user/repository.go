@@ -12,7 +12,7 @@ type Repository interface {
 	Create(ctx context.Context, u *User) (*User, error)
 	Update(ctx context.Context, id int64, input UpdateInput) (*User, error)
 	Delete(ctx context.Context, id int64) error
-	DeleteByGuestID(ctx context.Context, guestID int64) error
+	UnlinkGuestID(ctx context.Context, guestID int64) error
 	List(ctx context.Context) ([]UserListItem, error)
 	UpdateLastLogin(ctx context.Context, userID int64) error
 	LogAction(ctx context.Context, userID int64, action string, details map[string]any) error
