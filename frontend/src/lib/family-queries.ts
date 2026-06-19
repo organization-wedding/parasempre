@@ -29,7 +29,7 @@ function useInvalidateFamily() {
   const queryClient = useQueryClient();
   return () => {
     queryClient.invalidateQueries({ queryKey: familyQueryKeys.my });
-    queryClient.invalidateQueries({ queryKey: guestQueryKeys.all() });
+    queryClient.invalidateQueries({ queryKey: guestQueryKeys.root });
   };
 }
 

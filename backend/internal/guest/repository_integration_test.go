@@ -106,7 +106,7 @@ func TestIntegrationCoupleSharesGuestList(t *testing.T) {
 
 	// List é a lista compartilhada do casamento e deve incluir o convidado
 	// criado pelo NOIVO, sem filtrar por created_by.
-	guests, _, err := repo.List(ctx, 1000, 0)
+	guests, _, err := repo.List(ctx, 1000, 0, ListFilters{})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestIntegrationListPagination(t *testing.T) {
 	// List is the wedding's shared roster (not scoped by created_by), so total
 	// reflects every guest visible in the transaction — at least the 5 created
 	// here. The assertion stays isolation-safe against pre-existing rows.
-	guests, total, err := repo.List(ctx, 2, 0)
+	guests, total, err := repo.List(ctx, 2, 0, ListFilters{})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -155,5 +155,95 @@ func TestIntegrationListPagination(t *testing.T) {
 	}
 	if len(guests) != 2 {
 		t.Fatalf("expected 2 guests in page (limit=2), got %d", len(guests))
+	}
+}
+
+func TestIntegrationListSearchSpansAllPages(t *testing.T) {
+	pool := database.NewTestPool(t)
+	tx := database.BeginTestTx(t, pool)
+	repo := NewPostgresRepository(pool).WithTx(tx)
+	ctx := context.Background()
+
+	for i := range 25 {
+		fg := int64(70000 + i)
+		if _, err := repo.Create(ctx, CreateGuestInput{
+			FirstName:    "Filler",
+			LastName:     string(rune('A'+i%26)) + string(rune('a'+i)),
+			Relationship: "P",
+			FamilyGroup:  &fg,
+		}, "TST01"); err != nil {
+			t.Fatalf("Create filler %d failed: %v", i, err)
+		}
+	}
+	fgTarget := int64(79999)
+	if _, err := repo.Create(ctx, CreateGuestInput{
+		FirstName:    "Aurelio",
+		LastName:     "Buscavel",
+		Relationship: "R",
+		FamilyGroup:  &fgTarget,
+	}, "TST01"); err != nil {
+		t.Fatalf("Create target failed: %v", err)
+	}
+
+	guests, total, err := repo.List(ctx, 20, 0, ListFilters{Search: "aurelio buscavel"})
+	if err != nil {
+		t.Fatalf("List with search failed: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected filtered total 1, got %d", total)
+	}
+	if len(guests) != 1 || guests[0].FirstName != "Aurelio" {
+		t.Fatalf("expected to find Aurelio across pages, got %+v", guests)
+	}
+}
+
+func TestIntegrationStats(t *testing.T) {
+	pool := database.NewTestPool(t)
+	tx := database.BeginTestTx(t, pool)
+	repo := NewPostgresRepository(pool).WithTx(tx)
+	ctx := context.Background()
+
+	before, err := repo.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats (before) failed: %v", err)
+	}
+
+	mk := func(fg int64, attending *bool) {
+		g, err := repo.Create(ctx, CreateGuestInput{
+			FirstName:    "Stat",
+			LastName:     string(rune('A' + fg%26)),
+			Relationship: "P",
+			FamilyGroup:  &fg,
+		}, "TST01")
+		if err != nil {
+			t.Fatalf("Create stat guest failed: %v", err)
+		}
+		if attending != nil {
+			if _, err := repo.SetAttending(ctx, g.ID, *attending, "TST01"); err != nil {
+				t.Fatalf("SetAttending failed: %v", err)
+			}
+		}
+	}
+	yes, no := true, false
+	mk(60001, &yes)
+	mk(60002, &yes)
+	mk(60003, &no)
+	mk(60004, nil)
+
+	after, err := repo.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats (after) failed: %v", err)
+	}
+	if after.Total-before.Total != 4 {
+		t.Fatalf("expected total +4, got +%d", after.Total-before.Total)
+	}
+	if after.Confirmed-before.Confirmed != 2 {
+		t.Fatalf("expected confirmed +2, got +%d", after.Confirmed-before.Confirmed)
+	}
+	if after.Declined-before.Declined != 1 {
+		t.Fatalf("expected declined +1, got +%d", after.Declined-before.Declined)
+	}
+	if after.Pending-before.Pending != 1 {
+		t.Fatalf("expected pending +1, got +%d", after.Pending-before.Pending)
 	}
 }

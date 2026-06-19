@@ -38,6 +38,19 @@ type PagedResponse struct {
 	Total int     `json:"total"`
 }
 
+type ListFilters struct {
+	Search       string
+	Relationship string
+	Attending    string
+}
+
+type Stats struct {
+	Total     int `json:"total"`
+	Confirmed int `json:"confirmed"`
+	Pending   int `json:"pending"`
+	Declined  int `json:"declined"`
+}
+
 type ImportRowError struct {
 	Row   int    `json:"row"`
 	Error string `json:"error"`

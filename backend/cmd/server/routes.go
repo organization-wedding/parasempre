@@ -73,6 +73,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	// The guest list is the wedding's shared roster, managed only by the couple.
 	// created_by used to scope these implicitly; gate them on role explicitly.
 	guestsAdmin.handle("GET /api/guests", d.guest.HandleList)
+	guestsAdmin.handle("GET /api/guests/stats", d.guest.HandleStats)
 	guestsAdmin.handle("GET /api/guests/{id}", d.guest.HandleGet)
 	guestsAdmin.handle("POST /api/guests", d.guest.HandleCreate)
 	guestsAdmin.handle("PUT /api/guests/{id}", d.guest.HandleUpdate)

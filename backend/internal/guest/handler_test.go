@@ -43,7 +43,7 @@ func withTestClaims(req *http.Request, uracf string) *http.Request {
 
 func TestHandlerListGuests(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
 		return []Guest{sampleGuest()}, 1, nil
 	}
 
@@ -70,7 +70,7 @@ func TestHandlerListGuests(t *testing.T) {
 
 func TestHandlerListGuestsError(t *testing.T) {
 	h, repo := newTestHandler()
-	repo.listFn = func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+	repo.listFn = func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
 		return nil, 0, errors.New("db error")
 	}
 
@@ -81,6 +81,51 @@ func TestHandlerListGuestsError(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestHandlerListGuestsParsesFilters(t *testing.T) {
+	h, repo := newTestHandler()
+	var got ListFilters
+	repo.listFn = func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
+		got = filters
+		return []Guest{}, 0, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/guests?search=%20maria%20&relationship=R&attending=pending", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	h.HandleList(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	want := ListFilters{Search: "maria", Relationship: "R", Attending: "pending"}
+	if got != want {
+		t.Fatalf("expected filters %+v, got %+v", want, got)
+	}
+}
+
+func TestHandlerStats(t *testing.T) {
+	h, repo := newTestHandler()
+	repo.statsFn = func(ctx context.Context) (Stats, error) {
+		return Stats{Total: 23, Confirmed: 3, Pending: 18, Declined: 2}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/guests/stats", nil)
+	req = withTestClaims(req, "TST01")
+	w := httptest.NewRecorder()
+	h.HandleStats(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var result Stats
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if result.Total != 23 || result.Confirmed != 3 || result.Pending != 18 || result.Declined != 2 {
+		t.Fatalf("unexpected stats: %+v", result)
 	}
 }
 

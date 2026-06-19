@@ -115,7 +115,7 @@ func (s *Service) SetConfirmedBatch(ctx context.Context, input BatchConfirmInput
 	return updated, nil
 }
 
-func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, error) {
+func (s *Service) List(ctx context.Context, page, limit int, filters ListFilters) (*PagedResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -127,7 +127,7 @@ func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, er
 	}
 
 	offset := (page - 1) * limit
-	guests, total, err := s.repo.List(ctx, limit, offset)
+	guests, total, err := s.repo.List(ctx, limit, offset, filters)
 	if err != nil {
 		slog.Error("guest.service list: failed", "error", err)
 		return nil, apperror.Internal("failed to list guests", err)
@@ -138,6 +138,15 @@ func (s *Service) List(ctx context.Context, page, limit int) (*PagedResponse, er
 		Limit: limit,
 		Total: total,
 	}, nil
+}
+
+func (s *Service) Stats(ctx context.Context) (*Stats, error) {
+	stats, err := s.repo.Stats(ctx)
+	if err != nil {
+		slog.Error("guest.service stats: failed", "error", err)
+		return nil, apperror.Internal("failed to compute guest stats", err)
+	}
+	return &stats, nil
 }
 
 func (s *Service) GetByID(ctx context.Context, id int64) (*Guest, error) {

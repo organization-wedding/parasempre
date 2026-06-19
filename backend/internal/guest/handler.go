@@ -29,15 +29,31 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
 
-	result, err := h.svc.List(r.Context(), page, limit)
+	filters := ListFilters{
+		Search:       strings.TrimSpace(q.Get("search")),
+		Relationship: q.Get("relationship"),
+		Attending:    q.Get("attending"),
+	}
+
+	result, err := h.svc.List(r.Context(), page, limit, filters)
 	if err != nil {
 		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to list guests", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) HandleStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.svc.Stats(r.Context())
+	if err != nil {
+		httputil.WriteError(w, r, apperror.WrapIfNotApp("failed to compute guest stats", err))
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, stats)
 }
 
 func (h *Handler) HandleListMyFamily(w http.ResponseWriter, r *http.Request) {

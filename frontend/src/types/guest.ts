@@ -4,6 +4,7 @@ export type {
   UpdateGuestInput,
   ImportResult,
   PagedGuestResponse,
+  GuestStats,
   MyFamilyResponse,
   BatchConfirmInput,
   MeResponse,

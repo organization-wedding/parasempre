@@ -116,7 +116,8 @@ func (m *mockUserRepo) WithTx(_ pgx.Tx) Repository {
 }
 
 type mockGuestRepo struct {
-	listFn                      func(ctx context.Context, limit, offset int) ([]guest.Guest, int, error)
+	listFn                      func(ctx context.Context, limit, offset int, filters guest.ListFilters) ([]guest.Guest, int, error)
+	statsFn                     func(ctx context.Context) (guest.Stats, error)
 	listByFamilyGroupFn         func(ctx context.Context, familyGroup int64) ([]guest.Guest, error)
 	getByIDAnyFn                func(ctx context.Context, id int64) (*guest.Guest, error)
 	getByIDsFn                  func(ctx context.Context, ids []int64) ([]guest.Guest, error)
@@ -132,11 +133,18 @@ type mockGuestRepo struct {
 	getFamilyGroupByPhoneFn     func(ctx context.Context, phone string) (*int64, error)
 }
 
-func (m *mockGuestRepo) List(ctx context.Context, limit, offset int) ([]guest.Guest, int, error) {
+func (m *mockGuestRepo) List(ctx context.Context, limit, offset int, filters guest.ListFilters) ([]guest.Guest, int, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, limit, offset)
+		return m.listFn(ctx, limit, offset, filters)
 	}
 	return []guest.Guest{}, 0, nil
+}
+
+func (m *mockGuestRepo) Stats(ctx context.Context) (guest.Stats, error) {
+	if m.statsFn != nil {
+		return m.statsFn(ctx)
+	}
+	return guest.Stats{}, nil
 }
 
 func (m *mockGuestRepo) ListByFamilyGroup(ctx context.Context, familyGroup int64) ([]guest.Guest, error) {
