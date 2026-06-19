@@ -88,6 +88,7 @@ export function GuestFormPage({ guestId }: Props) {
     reset({
       firstName: guestQuery.data.first_name,
       lastName: guestQuery.data.last_name,
+      phone: "",
       relationship: guestQuery.data.relationship,
       familyGroup: guestQuery.data.family_group,
       attending: guestQuery.data.attending,
@@ -279,7 +280,7 @@ export function GuestFormPage({ guestId }: Props) {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setValue("relationship", "P")}
+                  onClick={() => setValue("relationship", "P", { shouldDirty: true, shouldValidate: true })}
                   className={`flex-1 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 border transition-all duration-200 cursor-pointer ${
                     relationship === "P"
                       ? "bg-burgundy text-gold-light border-burgundy"
@@ -290,7 +291,7 @@ export function GuestFormPage({ guestId }: Props) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setValue("relationship", "R")}
+                  onClick={() => setValue("relationship", "R", { shouldDirty: true, shouldValidate: true })}
                   className={`flex-1 font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 border transition-all duration-200 cursor-pointer ${
                     relationship === "R"
                       ? "bg-gold text-dark border-gold"
@@ -393,7 +394,7 @@ export function GuestFormPage({ guestId }: Props) {
                   <button
                     type="button"
                     aria-pressed={attending === null}
-                    onClick={() => setValue("attending", null)}
+                    onClick={() => setValue("attending", null, { shouldDirty: true, shouldValidate: true })}
                     className={`font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 px-4 border transition-all duration-200 cursor-pointer ${
                       attending === null
                         ? "bg-gold text-dark border-gold"
@@ -405,7 +406,7 @@ export function GuestFormPage({ guestId }: Props) {
                   <button
                     type="button"
                     aria-pressed={attending === true}
-                    onClick={() => setValue("attending", true)}
+                    onClick={() => setValue("attending", true, { shouldDirty: true, shouldValidate: true })}
                     className={`font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 px-4 border transition-all duration-200 cursor-pointer ${
                       attending === true
                         ? "bg-burgundy text-gold-light border-burgundy"
@@ -417,7 +418,7 @@ export function GuestFormPage({ guestId }: Props) {
                   <button
                     type="button"
                     aria-pressed={attending === false}
-                    onClick={() => setValue("attending", false)}
+                    onClick={() => setValue("attending", false, { shouldDirty: true, shouldValidate: true })}
                     className={`font-heading text-[0.72rem] font-semibold tracking-[0.08em] uppercase py-2.5 px-4 border transition-all duration-200 cursor-pointer ${
                       attending === false
                         ? "bg-[#c25550] text-white border-[#c25550]"

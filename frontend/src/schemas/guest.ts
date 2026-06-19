@@ -57,6 +57,15 @@ export const paginatedGuestsSchema = z.object({
 
 export type PagedGuestResponse = z.infer<typeof paginatedGuestsSchema>;
 
+export const guestStatsSchema = z.object({
+  total: z.number().int(),
+  confirmed: z.number().int(),
+  pending: z.number().int(),
+  declined: z.number().int(),
+});
+
+export type GuestStats = z.infer<typeof guestStatsSchema>;
+
 export const myFamilyResponseSchema = z.array(guestSchema);
 
 export const batchConfirmInputSchema = z.object({

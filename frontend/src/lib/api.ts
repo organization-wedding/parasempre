@@ -6,6 +6,7 @@ import type {
   UpdateGuestInput,
   ImportResult,
   PagedGuestResponse,
+  GuestStats,
   MyFamilyResponse,
   BatchConfirmInput,
   MeResponse,
@@ -24,6 +25,7 @@ import {
   createGuestInputSchema,
   guestSchema,
   guestsSchema,
+  guestStatsSchema,
   importResultSchema,
   meResponseSchema,
   myFamilyResponseSchema,
@@ -161,15 +163,31 @@ export async function cancelWholeFamily(familyGroup: number): Promise<Guest[]> {
   return handleResponse(res, guestsSchema);
 }
 
-export async function listGuests(params?: { page?: number; limit?: number }): Promise<PagedGuestResponse> {
+export async function listGuests(params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  relationship?: string;
+  attending?: string;
+}): Promise<PagedGuestResponse> {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.search) query.set("search", params.search);
+  if (params?.relationship) query.set("relationship", params.relationship);
+  if (params?.attending) query.set("attending", params.attending);
   const url = query.toString() ? `${API_BASE}/api/guests?${query.toString()}` : `${API_BASE}/api/guests`;
   const res = await fetch(url, {
     headers: authHeaders(),
   });
   return handleResponse(res, paginatedGuestsSchema);
+}
+
+export async function getGuestStats(): Promise<GuestStats> {
+  const res = await fetch(`${API_BASE}/api/guests/stats`, {
+    headers: authHeaders(),
+  });
+  return handleResponse(res, guestStatsSchema);
 }
 
 export async function getGuest(id: number): Promise<Guest> {

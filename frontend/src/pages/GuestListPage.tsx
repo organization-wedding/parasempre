@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import Search from "lucide-react/dist/esm/icons/search";
 import Plus from "lucide-react/dist/esm/icons/plus";
@@ -18,8 +18,11 @@ import {
   useDeleteGuestMutation,
   useDeleteGuestsMutation,
   useGuestsQuery,
+  useGuestStatsQuery,
   useImportGuestsMutation,
 } from "../lib/guest-queries";
+import { useDebounce } from "../lib/useDebounce";
+import { nextPageOnSearchChange } from "../lib/guestListPaging";
 import type { Guest, ImportResult } from "../types/guest";
 
 const PAGE_SIZE = 20;
@@ -29,19 +32,37 @@ type AttendingFilter = "" | "attending" | "pending" | "declined";
 
 export function GuestListPage() {
   const [page, setPage] = useState(1);
-  const { data: pagedData, isLoading, error, refetch } = useGuestsQuery({ page, limit: PAGE_SIZE });
+  const [uiError, setUiError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterRel, setFilterRel] = useState<RelationshipFilter>("");
+  const [filterConf, setFilterConf] = useState<AttendingFilter>("");
+
+  const debouncedSearch = useDebounce(search, 300);
+  const trimmedSearch = debouncedSearch.trim();
+
+  const { data: pagedData, isLoading, error, refetch } = useGuestsQuery({
+    page,
+    limit: PAGE_SIZE,
+    search: trimmedSearch || undefined,
+    relationship: filterRel || undefined,
+    attending: filterConf || undefined,
+  });
   const guests = pagedData?.data ?? [];
   const total = pagedData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const { data: statsData } = useGuestStatsQuery();
+  const stats = {
+    total: statsData?.total ?? 0,
+    confirmed: statsData?.confirmed ?? 0,
+    pending: statsData?.pending ?? 0,
+    declined: statsData?.declined ?? 0,
+  };
 
   const deleteMutation = useDeleteGuestMutation();
   const deletesMutation = useDeleteGuestsMutation();
   const importMutation = useImportGuestsMutation();
 
-  const [uiError, setUiError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [filterRel, setFilterRel] = useState<RelationshipFilter>("");
-  const [filterConf, setFilterConf] = useState<AttendingFilter>("");
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [deleteTarget, setDeleteTarget] = useState<Guest | null>(null);
@@ -52,40 +73,15 @@ export function GuestListPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const prevSearchRef = useRef("");
+  const savedPageRef = useRef<number | null>(null);
 
   const effectiveError = uiError ?? (error instanceof Error ? error.message : null);
 
-  const filtered = useMemo(() => {
-    return guests.filter((g) => {
-      const q = search.toLowerCase();
-      const matchesSearch =
-        !q ||
-        `${g.first_name} ${g.last_name}`.toLowerCase().includes(q);
-      const matchesRel = !filterRel || g.relationship === filterRel;
-      const matchesConf =
-        !filterConf ||
-        (filterConf === "attending"
-          ? g.attending === true
-          : filterConf === "pending"
-            ? g.attending === null
-            : g.attending === false);
-      return matchesSearch && matchesRel && matchesConf;
-    });
-  }, [guests, search, filterRel, filterConf]);
-
-  const stats = useMemo(
-    () => ({
-      total,
-      confirmed: guests.filter((g) => g.attending === true).length,
-      pending: guests.filter((g) => g.attending === null).length,
-      declined: guests.filter((g) => g.attending === false).length,
-    }),
-    [guests, total],
-  );
-
   const activeFilterCount = (filterRel !== "" ? 1 : 0) + (filterConf !== "" ? 1 : 0);
-  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
-  const someSelected = selectedIds.size > 0 && selectedIds.size < filtered.length;
+  const hasActiveQuery = trimmedSearch !== "" || filterRel !== "" || filterConf !== "";
+  const allSelected = guests.length > 0 && selectedIds.size === guests.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < guests.length;
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -95,11 +91,18 @@ export function GuestListPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [search, filterRel, filterConf]);
+  }, [trimmedSearch, filterRel, filterConf]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterRel, filterConf]);
+  }, [filterRel, filterConf]);
+
+  useEffect(() => {
+    const decision = nextPageOnSearchChange(prevSearchRef.current, trimmedSearch, page, savedPageRef.current);
+    prevSearchRef.current = trimmedSearch;
+    savedPageRef.current = decision.savedPage;
+    if (decision.page !== page) setPage(decision.page);
+  }, [trimmedSearch, page]);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -122,13 +125,14 @@ export function GuestListPage() {
 
   function toggleSelectAll() {
     if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map((g) => g.id)));
+    else setSelectedIds(new Set(guests.map((g) => g.id)));
   }
 
   async function handleDelete() {
     if (!deleteTarget) return;
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
+      await refetch();
       setDeleteTarget(null);
     } catch (mutationError) {
       setUiError(mutationError instanceof Error ? mutationError.message : "Erro ao excluir convidado");
@@ -139,6 +143,7 @@ export function GuestListPage() {
   async function handleBulkDelete() {
     try {
       await deletesMutation.mutateAsync(Array.from(selectedIds));
+      await refetch();
       setSelectedIds(new Set());
       setBulkDeleteOpen(false);
     } catch (mutationError) {
@@ -334,7 +339,7 @@ export function GuestListPage() {
             <div className="w-8 h-8 border-2 border-gold-muted/30 border-t-burgundy rounded-full animate-spin mb-4" />
             <span className="text-[0.85rem]">Carregando convidados...</span>
           </div>
-        ) : total === 0 ? (
+        ) : total === 0 && !hasActiveQuery ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Users size={48} className="text-gold-muted/40 mb-4" />
             <h2 className="font-heading text-[1rem] font-semibold text-dark-warm mb-2">Nenhum convidado cadastrado</h2>
@@ -359,7 +364,7 @@ export function GuestListPage() {
               </Link>
             </div>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : guests.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Search size={36} className="text-gold-muted/40 mb-3" />
             <p className="text-[0.88rem] text-hint">Nenhum convidado encontrado com os filtros aplicados.</p>
@@ -368,11 +373,9 @@ export function GuestListPage() {
           <>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[0.75rem] text-dark-warm/60">
-                {filtered.length === guests.length && !search && !filterRel && !filterConf
-                  ? total > PAGE_SIZE
-                    ? `${startRange}–${endRange} de ${total} convidados`
-                    : `${total} convidados`
-                  : `${filtered.length} de ${guests.length} na página`}
+                {total > PAGE_SIZE
+                  ? `${startRange}–${endRange} de ${total} convidados`
+                  : `${total} convidados`}
               </span>
               {selectedIds.size > 0 && (
                 <div className="flex items-center gap-3">
@@ -419,7 +422,7 @@ export function GuestListPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-ivory">
-                  {filtered.map((guest, idx) => (
+                  {guests.map((guest, idx) => (
                     <tr
                       key={guest.id}
                       className={`border-b border-gold-muted/25 transition-colors hover:bg-parchment ${

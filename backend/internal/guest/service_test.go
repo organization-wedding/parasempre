@@ -14,7 +14,8 @@ import (
 )
 
 type mockRepository struct {
-	listFn                      func(ctx context.Context, limit, offset int) ([]Guest, int, error)
+	listFn                      func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error)
+	statsFn                     func(ctx context.Context) (Stats, error)
 	listByFamilyGroupFn         func(ctx context.Context, familyGroup int64) ([]Guest, error)
 	getByIDAnyFn                func(ctx context.Context, id int64) (*Guest, error)
 	getByIDsFn                  func(ctx context.Context, ids []int64) ([]Guest, error)
@@ -30,8 +31,15 @@ type mockRepository struct {
 	getFamilyGroupByPhoneFn     func(ctx context.Context, phone string) (*int64, error)
 }
 
-func (m *mockRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
-	return m.listFn(ctx, limit, offset)
+func (m *mockRepository) List(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
+	return m.listFn(ctx, limit, offset, filters)
+}
+
+func (m *mockRepository) Stats(ctx context.Context) (Stats, error) {
+	if m.statsFn != nil {
+		return m.statsFn(ctx)
+	}
+	return Stats{}, nil
 }
 
 func (m *mockRepository) ListByFamilyGroup(ctx context.Context, familyGroup int64) ([]Guest, error) {
@@ -235,7 +243,7 @@ func assertAppError(t *testing.T, err error, wantCode int, wantMsg string) {
 func TestServiceList(t *testing.T) {
 	tests := []struct {
 		name      string
-		mockFn    func(ctx context.Context, limit, offset int) ([]Guest, int, error)
+		mockFn    func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error)
 		page      int
 		limit     int
 		wantLen   int
@@ -244,7 +252,7 @@ func TestServiceList(t *testing.T) {
 	}{
 		{
 			name: "returns guests with pagination",
-			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
 				return []Guest{sampleGuest()}, 5, nil
 			},
 			page:      1,
@@ -254,7 +262,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "returns empty list",
-			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
 				return []Guest{}, 0, nil
 			},
 			page:    1,
@@ -263,7 +271,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "defaults for invalid page/limit",
-			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
 				if limit != 20 || offset != 0 {
 					return nil, 0, errors.New("expected default limit=20, offset=0")
 				}
@@ -274,7 +282,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "caps limit at 100",
-			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
 				if limit != 100 {
 					return nil, 0, errors.New("expected limit capped at 100")
 				}
@@ -285,7 +293,7 @@ func TestServiceList(t *testing.T) {
 		},
 		{
 			name: "propagates error",
-			mockFn: func(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+			mockFn: func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
 				return nil, 0, errors.New("db error")
 			},
 			page:    1,
@@ -297,7 +305,7 @@ func TestServiceList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newTestService(&mockRepository{listFn: tt.mockFn}, defaultUserBridge())
-			result, err := svc.List(context.Background(), tt.page, tt.limit)
+			result, err := svc.List(context.Background(), tt.page, tt.limit, ListFilters{})
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -314,6 +322,52 @@ func TestServiceList(t *testing.T) {
 				t.Fatalf("expected total %d, got %d", tt.wantTotal, result.Total)
 			}
 		})
+	}
+}
+
+func TestServiceListForwardsFilters(t *testing.T) {
+	var got ListFilters
+	svc := newTestService(&mockRepository{
+		listFn: func(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
+			got = filters
+			return []Guest{}, 0, nil
+		},
+	}, defaultUserBridge())
+
+	want := ListFilters{Search: "maria", Relationship: "R", Attending: "pending"}
+	if _, err := svc.List(context.Background(), 1, 20, want); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != want {
+		t.Fatalf("expected filters %+v forwarded to repo, got %+v", want, got)
+	}
+}
+
+func TestServiceStats(t *testing.T) {
+	svc := newTestService(&mockRepository{
+		statsFn: func(ctx context.Context) (Stats, error) {
+			return Stats{Total: 23, Confirmed: 3, Pending: 18, Declined: 2}, nil
+		},
+	}, defaultUserBridge())
+
+	stats, err := svc.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stats.Total != 23 || stats.Confirmed != 3 || stats.Pending != 18 || stats.Declined != 2 {
+		t.Fatalf("unexpected stats: %+v", stats)
+	}
+}
+
+func TestServiceStatsError(t *testing.T) {
+	svc := newTestService(&mockRepository{
+		statsFn: func(ctx context.Context) (Stats, error) {
+			return Stats{}, errors.New("db error")
+		},
+	}, defaultUserBridge())
+
+	if _, err := svc.Stats(context.Background()); err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
 

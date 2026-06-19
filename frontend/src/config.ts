@@ -39,6 +39,6 @@ export const CONTACT = {
 };
 
 export const NAV_LINKS = [
-  { label: "Registrar Presença", href: "/lista-presenca" },
+  { label: "Registrar Presença", href: "/registrar-presenca" },
   { label: "Lista de Presentes", href: "/lista-presentes" },
 ];
