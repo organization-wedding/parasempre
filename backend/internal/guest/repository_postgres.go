@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -38,11 +40,40 @@ func (r *PostgresRepository) WithTx(tx pgx.Tx) Repository {
 // List returns the wedding's shared guest list. Guests belong to the wedding
 // (co-administered by groom and bride), not to whoever created the row, so the
 // listing is intentionally NOT scoped by created_by.
-func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Guest, int, error) {
+func (r *PostgresRepository) List(ctx context.Context, limit, offset int, filters ListFilters) ([]Guest, int, error) {
+	var conds []string
+	var args []any
+	n := 1
+
+	if filters.Search != "" {
+		conds = append(conds, fmt.Sprintf("(first_name || ' ' || last_name) ILIKE $%d", n))
+		args = append(args, "%"+filters.Search+"%")
+		n++
+	}
+	if filters.Relationship == "P" || filters.Relationship == "R" {
+		conds = append(conds, fmt.Sprintf("relationship = $%d", n))
+		args = append(args, filters.Relationship)
+		n++
+	}
+	switch filters.Attending {
+	case "attending":
+		conds = append(conds, "attending IS TRUE")
+	case "declined":
+		conds = append(conds, "attending IS FALSE")
+	case "pending":
+		conds = append(conds, "attending IS NULL")
+	}
+
+	where := ""
+	if len(conds) > 0 {
+		where = "WHERE " + strings.Join(conds, " AND ") + " "
+	}
+	args = append(args, limit, offset)
+
 	rows, err := r.db.Query(ctx,
 		`SELECT `+guestColumns+`, COUNT(*) OVER() AS total
-		 FROM guests ORDER BY created_at DESC
-		 LIMIT $1 OFFSET $2`, limit, offset)
+		 FROM guests `+where+`ORDER BY created_at DESC
+		 LIMIT $`+strconv.Itoa(n)+` OFFSET $`+strconv.Itoa(n+1), args...)
 	if err != nil {
 		slog.Error("guest.repo list: query failed", "error", err)
 		return nil, 0, err
@@ -65,6 +96,21 @@ func (r *PostgresRepository) List(ctx context.Context, limit, offset int) ([]Gue
 	}
 
 	return guests, total, rows.Err()
+}
+
+func (r *PostgresRepository) Stats(ctx context.Context) (Stats, error) {
+	var s Stats
+	err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*),
+		        COUNT(*) FILTER (WHERE attending IS TRUE),
+		        COUNT(*) FILTER (WHERE attending IS NULL),
+		        COUNT(*) FILTER (WHERE attending IS FALSE)
+		 FROM guests`).Scan(&s.Total, &s.Confirmed, &s.Pending, &s.Declined)
+	if err != nil {
+		slog.Error("guest.repo stats: query failed", "error", err)
+		return Stats{}, err
+	}
+	return s, nil
 }
 
 func (r *PostgresRepository) GetByIDAny(ctx context.Context, id int64) (*Guest, error) {
